@@ -46,4 +46,4 @@ webauthn-rs.workspace = true
 [dev-dependencies]
 # A software authenticator, so the tests can do a whole enrol + sign-in
 # without a phone. Tests only: it is not in the shipped binary.
-webauthn-authenticator-rs = { version = "=0.5.5", default-features = false, features = ["softpasskey"] }
+webauthn-authenticator-rs = { version = "=0.6.2", default-features = false, features = ["softpasskey"] }
