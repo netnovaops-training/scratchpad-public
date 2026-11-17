@@ -1,0 +1,75 @@
+{
+  "_readme": [
+    "An example patch for the admin's 'Mama's knowledge base' slipstream page.",
+    "",
+    "These are problems that are ALREADY SOLVED. When one of them matches what",
+    "she asks, /mama answers straight from this file - instantly, in your words,",
+    "without waking the desktop and without asking a model anything.",
+    "",
+    "THE ONE FIELD TO UNDERSTAND: \"direct\"",
+    "  true   this answer is good enough to send as-is. It becomes the reply.",
+    "  absent this article is only shown to the model as a fix to follow.",
+    "It is opt-in on purpose. An article written in a hurry gets the safe",
+    "behaviour until you have read it back and decided it is right. Set it to",
+    "true once you would be happy for her to read it with nobody checking.",
+    "",
+    "SYMPTOMS IS THE FIELD THAT MAKES IT WORK. Write the phrases SHE would use,",
+    "not the ones a technician would. 'it says offline' and 'nothing comes out",
+    "of the printer' both belong on the printer article; 'print spooler service'",
+    "does not, because she will never say it. Matching is word overlap against",
+    "these lines - no model, no embedding, so it works while the GPU is asleep.",
+    "",
+    "If an article is not matching, the fix is almost always to add the sentence",
+    "she actually typed to its symptoms. /mama's admin has a 'Known fixes' page",
+    "with a Try-a-question box that shows you the score for exactly this.",
+    "",
+    "STEPS are numbered on screen and she follows them with a finger, so one",
+    "action per step and no branching. Keep 'if that did not work' for the end.",
+    "",
+    "Keys starting with _ are ignored by everything that reads this file."
+  ],
+
+  "add": [
+    {
+      "title": "Printer says offline but it is switched on",
+      "category": "printer",
+      "symptoms": [
+        "the printer says offline",
+        "nothing comes out of the printer",
+        "the printer will not print",
+        "it says the printer is not connected"
+      ],
+      "keywords": ["printer", "offline", "not printing"],
+      "answer": "This is nearly always the printer having quietly dropped off the Wi-Fi. It is not anything you did, and it does not mean the printer is broken.",
+      "steps": [
+        "Switch the printer off at the button on the front, and wait while you count slowly to ten.",
+        "Switch it back on, and wait until the lights stop moving about.",
+        "Try printing the same thing again."
+      ],
+      "note": "If it happens most weeks, tell me - the printer is probably too far from the router and that is fixable.",
+      "direct": true,
+      "source": "Written after ticket TH-0042"
+    },
+    {
+      "title": "Tablet will not join the Wi-Fi",
+      "category": "internet",
+      "symptoms": [
+        "the tablet will not join the wifi",
+        "my tablet says no internet",
+        "the ipad will not connect"
+      ],
+      "keywords": ["tablet", "ipad", "wifi", "internet", "connect"],
+      "answer": "Nine times out of ten the tablet is holding on to a connection that has already gone. Turning the Wi-Fi off and on makes it look again.",
+      "steps": [
+        "Open Settings, then tap Wi-Fi.",
+        "Turn the switch at the top off, count to five, and turn it back on.",
+        "Wait for the network name to appear in the list, and tap it.",
+        "If it asks for the password, it is on the sticker on the underside of the internet box."
+      ],
+      "direct": true,
+      "source": "Written after ticket TH-0051"
+    }
+  ],
+
+  "remove": []
+}

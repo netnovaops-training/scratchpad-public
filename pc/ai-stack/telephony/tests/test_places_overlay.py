@@ -111,12 +111,12 @@ def test_the_same_name_corrects_the_researched_entry_instead_of_duplicating_it(t
     existing = base.data["senior_centers"][0]["name"]
 
     p = loaded(tmp_path, {"places": [
-        {"name": existing, "category": "senior_centers", "phone": "555-0165"},
+        {"name": existing, "category": "senior_centers", "phone": "555-0166"},
     ]})
 
     assert names_in(p, "senior_centers").count(existing) == 1
     corrected = next(e for e in p.data["senior_centers"] if e["name"] == existing)
-    assert corrected["phone"] == "555-0165"
+    assert corrected["phone"] == "555-0166"
     assert p.count() == base.count(), "correcting is not adding"
 
 

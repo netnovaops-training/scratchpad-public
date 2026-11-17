@@ -105,7 +105,7 @@ def test_does_not_mangle_phone_numbers_or_money():
     and dollar figure in a transcript turns into [redacted-card] and the
     transcript becomes useless.
     """
-    for keep in ("call me on 555-0164", "it was $1,250.00", "born 1/2/1946",
+    for keep in ("call me on 555-0165", "it was $1,250.00", "born 1/2/1946",
                  "appointment at 2 30 on the 14th"):
         assert "[redacted]" not in redact(keep)
         assert "redacted-card" not in redact(keep), keep

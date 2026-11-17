@@ -65,7 +65,7 @@ CREATE INDEX IF NOT EXISTS idx_call_log_phone ON call_log(phone);
 def normalise(number: str | None) -> str:
     """
     E.164-ish. Twilio hands us '+17025551234'; humans and test tools hand us
-    '555-0164'. Both must land on the same row or memory silently
+    '555-0165'. Both must land on the same row or memory silently
     doesn't work.
     """
     if not number:
