@@ -16,7 +16,7 @@
 # On twelve CPU cores expect a few seconds of compute per sentence — fine for
 # generating clips you will play back later, noticeably slow for answering a
 # live phone call. That is why the GPU copy on SuperNova stays where it is.
-FROM python:3.14-slim-trixie@sha256:35caba83af2fe6da9a5d922f9b0156f21d1246a48278c58a08bd253303ba42e8
+FROM python:3.15-slim-trixie@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928
 
 ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 \
     HF_HOME=/root/.cache/huggingface PORT=8091 \
