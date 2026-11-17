@@ -18,3 +18,5 @@ findings-*.json
 *.jpeg
 *.png
 *.heic
+# Private change records stay on the PC only
+*.private.txt
