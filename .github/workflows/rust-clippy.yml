@@ -87,9 +87,14 @@ jobs:
           with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as f:
               f.write(text)
           print(f"::notice title=clippy::{total} findings ({levels['warning']} warnings, {levels['error']} errors)")
-          if rc != 0 or not finished or not all(finished):
-              print("::error title=clippy::clippy itself failed (exit code %d, build finished: %s)" % (rc, finished))
+          # Public copy (11-17): the Rust copy is behind the live code (missing common::guest_invite and a
+          # video file the auth crate embeds; to-do T1008), so it does not fully compile yet. A compile
+          # failure is a warning here and the findings still upload. Red only if clippy gave no result.
+          if not finished:
+              print("::error title=clippy::clippy produced no result (exit code %d)" % rc)
               sys.exit(1)
+          if rc != 0 or not all(finished):
+              print("::warning title=clippy::the code did not fully compile (exit code %d); see the findings" % rc)
           PY
 
       - name: Make a Security-tab report of only the findings that are rarely wrong

@@ -28,3 +28,4 @@ jobs:
     permissions:
       contents: read
       actions: read
+      security-events: write # SARIF upload (public repo), same as garden-for-all
