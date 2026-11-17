@@ -17,16 +17,16 @@ Set-NetFirewallProfile -Profile Domain,Private,Public `
     -Enabled True -DefaultInboundAction Block -DefaultOutboundAction Allow
 
 # 2. The stack's listeners, reachable from the LAN only.
-#    (The NUC relay forwards internet 48396/45729 here, and the NUC is on the LAN,
+#    (The NUC relay forwards internet 43124/58581 here, and the NUC is on the LAN,
 #    so LAN scope covers the relay too.)
 $lan = "192.168.1.0/24"
 $rules = @(
-    @{Name="ai-stack web 48396";    Port=48396},
-    @{Name="ai-stack web 45729";   Port=45729},
-    @{Name="ai-stack legacy 58806-58808"; Port="58806-58808"},   # LAN-only now
-    @{Name="ai-stack ollama 27324";     Port=27324},
-    @{Name="ai-stack voice 48928";       Port=48928},
-    @{Name="ai-stack litellm 44897";     Port=44897}
+    @{Name="ai-stack web 43124";    Port=43124},
+    @{Name="ai-stack web 58581";   Port=58581},
+    @{Name="ai-stack legacy 25149-25151"; Port="25149-25151"},   # LAN-only now
+    @{Name="ai-stack ollama 25789";     Port=25789},
+    @{Name="ai-stack voice 44839";       Port=44839},
+    @{Name="ai-stack litellm 37539";     Port=37539}
 )
 foreach ($r in $rules) {
     $existing = Get-NetFirewallRule -DisplayName $r.Name -ErrorAction SilentlyContinue
@@ -35,13 +35,13 @@ foreach ($r in $rules) {
         -Protocol TCP -LocalPort $r.Port -RemoteAddress $lan | Out-Null
     Write-Host ("allowed  {0}  from LAN" -f $r.Name)
 }
-# HTTP/3 arrives straight from the router as UDP 45729 (not via the NUC relay),
+# HTTP/3 arrives straight from the router as UDP 58581 (not via the NUC relay),
 # so this one cannot be LAN-scoped.
-$existing = Get-NetFirewallRule -DisplayName "ai-stack quic 45729" -ErrorAction SilentlyContinue
+$existing = Get-NetFirewallRule -DisplayName "ai-stack quic 58581" -ErrorAction SilentlyContinue
 if ($existing) { $existing | Remove-NetFirewallRule }
-New-NetFirewallRule -DisplayName "ai-stack quic 45729" -Direction Inbound -Action Allow `
-    -Protocol UDP -LocalPort 45729 | Out-Null
-Write-Host "allowed  ai-stack quic 45729 (UDP, any source - router forwards it directly)"
+New-NetFirewallRule -DisplayName "ai-stack quic 58581" -Direction Inbound -Action Allow `
+    -Protocol UDP -LocalPort 58581 | Out-Null
+Write-Host "allowed  ai-stack quic 58581 (UDP, any source - router forwards it directly)"
 
 Write-Host ""
 Get-NetFirewallProfile | Select-Object Name, Enabled, DefaultInboundAction | Format-Table
