@@ -1,0 +1,22 @@
+# Normalise text in the repo, but NOT the wrapper scripts.
+* text=auto
+
+# gradlew is a shell script executed by /bin/sh. With CRLF endings the
+# shebang line ends in \r and the kernel looks for an interpreter named
+# "/bin/sh\r", which does not exist -- so the build fails on Linux and macOS
+# with "bad interpreter". Git on Windows would convert it by default, so it
+# has to be pinned.
+gradlew text eol=lf
+gradle/wrapper/gradle-wrapper.properties text eol=lf
+*.sh text eol=lf
+
+# gradlew.bat is the Windows counterpart and wants CRLF.
+gradlew.bat text eol=crlf
+
+# Binary, never convert.
+*.jar binary
+*.png binary
+*.jpg binary
+*.webp binary
+*.keystore binary
+*.jks binary

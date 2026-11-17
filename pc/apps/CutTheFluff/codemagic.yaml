@@ -1,0 +1,126 @@
+# Codemagic build for the iOS app.
+#
+# WHY CODEMAGIC AND NOT GITHUB ACTIONS. This repository lives in the
+# household's own Gitea, not on GitHub, and it should stay there. Codemagic
+# clones from any git URL, so the source of truth stays on hardware in the
+# house and only the BUILD is rented. Its free tier is 500 macOS minutes a
+# month against GitHub's ~200 for a private repo, and a build here is a few
+# minutes.
+#
+# HOW IT REACHES A PRIVATE REPO BEHIND AN SSO GATE. It does not bypass the
+# gate: Caddy already routes git smart-HTTP (info/refs, git-upload-pack)
+# straight to Gitea without forward_auth, and strips the X-Webauth-* headers
+# on the way so a client cannot assert an identity. Gitea's own Basic auth is
+# what authenticates, exactly as it does for a developer cloning by hand. The
+# token configured in Codemagic is READ-ONLY (read:repository), so a leak
+# there cannot write to anything.
+#
+# IT PRODUCES AN UNSIGNED IPA. Signing for a real iPhone needs a certificate
+# and a provisioning profile carrying that device's UDID, both of which need
+# the $99/yr Apple Developer Program this project has deliberately not bought.
+# Unsigned is the correct output for sideloading, where the free Apple ID on
+# the phone signs at install time instead.
+#
+# THIS IS THE ONLY PLACE THE iOS TARGET IS EVER COMPILED. It is authored on a
+# Windows machine where Xcode cannot run, so a red build here is a compile
+# error, not a CI flake -- treat it exactly as you would a local one.
+
+workflows:
+  ios-unsigned:
+    name: iOS (unsigned IPA)
+    # The free tier's machine. Nothing here needs more.
+    instance_type: mac_mini_m2
+    max_build_duration: 30
+
+    environment:
+      xcode: latest
+      vars:
+        XCODE_PROJECT: "CutTheFluff.xcodeproj"
+        XCODE_SCHEME: "CutTheFluff"
+
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: main
+          include: true
+      # Android-only commits must not spend an iOS minute.
+      cancel_previous_builds: true
+
+    scripts:
+      - name: Record the toolchain this ran against
+        # "It built in CI" is only useful if the Xcode and Swift versions
+        # behind it are on record.
+        script: |
+          sw_vers
+          xcodebuild -version
+          swift --version
+
+      - name: Generate the Xcode project
+        # The .xcodeproj is generated from ios/project.yml and gitignored --
+        # see that file for why a pbxproj is not committed from a machine
+        # that cannot open one.
+        script: |
+          brew install xcodegen
+          cd ios
+          xcodegen generate
+          ls -la "$XCODE_PROJECT"
+
+      - name: Resolve Swift packages
+        # Its own step so a dependency failure (bad URL, unreachable tag) is
+        # distinguishable at a glance from a compile error in our own code.
+        script: |
+          cd ios
+          xcodebuild -resolvePackageDependencies \
+            -project "$XCODE_PROJECT" \
+            -scheme "$XCODE_SCHEME"
+
+      - name: Build, unsigned, against the device SDK
+        script: |
+          cd ios
+          set -o pipefail
+          xcodebuild \
+            -project "$XCODE_PROJECT" \
+            -scheme "$XCODE_SCHEME" \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGN_ENTITLEMENTS="" \
+            build
+
+      - name: Package the .app into an .ipa
+        # An .ipa is a zip with the .app inside a top-level Payload/ directory.
+        # xcodebuild -exportArchive is not used because every export method it
+        # accepts wants a signing identity, which is the one thing this build
+        # does not have.
+        script: |
+          cd ios
+          APP="build/Build/Products/Release-iphoneos/CutTheFluff.app"
+          if [ ! -d "$APP" ]; then
+            echo "Expected app bundle not found at $APP"
+            find build/Build/Products -maxdepth 3 -name "*.app" || true
+            exit 1
+          fi
+          mkdir -p Payload
+          cp -R "$APP" Payload/
+          zip -qry CutTheFluff-unsigned.ipa Payload
+          rm -rf Payload
+          ls -lh CutTheFluff-unsigned.ipa
+
+    artifacts:
+      - ios/CutTheFluff-unsigned.ipa
+      # The build log, so a failure can be read without opening the web UI.
+      - /tmp/xcodebuild_logs/*.log
+
+    publishing:
+      email:
+        recipients:
+          - user@example.com
+        # Only failures by default would hide the first green build, which is
+        # the one worth knowing about here.
+        notify:
+          success: true
+          failure: true

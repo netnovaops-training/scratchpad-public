@@ -1,0 +1,121 @@
+name: iOS build (unsigned IPA)
+
+# WHAT THIS IS FOR, and what it deliberately does not do.
+#
+# This project is authored on a Windows machine. Xcode runs only on macOS,
+# so there is no way to compile, or even syntax-check, the iOS app locally.
+# GitHub's macOS runners ship Xcode, so this workflow is the ONLY place the
+# iOS target is ever built. Treat a red run here the way you would treat a
+# local compile error, because that is exactly what it is.
+#
+# IT PRODUCES AN UNSIGNED IPA, ON PURPOSE. Signing an app for a real iPhone
+# needs a certificate and a provisioning profile carrying that device's
+# UDID, and both need the $99/yr Apple Developer Program, which this project
+# has deliberately not bought. Unsigned is not a degraded build: it is the
+# correct output for the sideloading path (AltStore / SideStore /
+# Sideloadly), where the free Apple ID on the phone does the signing at
+# install time. That gives a 7-day signature and a 3-app limit, which is
+# the real cost of not paying, and it is paid in refreshes rather than
+# dollars.
+#
+# COST. macOS runner minutes bill against the free quota at 10x the Linux
+# rate, so a Free-plan private repo has roughly 200 macOS minutes a month.
+# This build is a few minutes, so that is tens of builds -- enough, but not
+# a thing to put on every push to every branch. Hence: manual trigger, plus
+# main only, plus a path filter so Android-only commits never spend an iOS
+# minute.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'ios/**'
+      - '.github/workflows/ios-build.yml'
+  pull_request:
+    paths:
+      - 'ios/**'
+      - '.github/workflows/ios-build.yml'
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show the toolchain this ran against
+        # Recorded every run because "it built in CI" is only a useful
+        # statement if the Xcode and Swift versions behind it are on record.
+        run: |
+          sw_vers
+          xcodebuild -version
+          swift --version
+
+      - name: Install XcodeGen
+        # The .xcodeproj is generated, not committed -- see ios/project.yml
+        # for why. This is the step that turns the YAML into one.
+        run: brew install xcodegen
+
+      - name: Generate the Xcode project
+        working-directory: ios
+        run: |
+          xcodegen generate
+          ls -la CutTheFluff.xcodeproj
+
+      - name: Resolve Swift packages
+        # Done as its own step so a dependency-resolution failure (a bad
+        # package URL, an unreachable tag) is distinguishable at a glance
+        # from an actual compile error in the app's own code.
+        working-directory: ios
+        run: |
+          xcodebuild -resolvePackageDependencies \
+            -project CutTheFluff.xcodeproj \
+            -scheme CutTheFluff
+
+      - name: Build (unsigned, device SDK)
+        working-directory: ios
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project CutTheFluff.xcodeproj \
+            -scheme CutTheFluff \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGN_ENTITLEMENTS="" \
+            build
+
+      - name: Package the .app into an .ipa
+        working-directory: ios
+        # An .ipa is a zip with the .app inside a top-level Payload/
+        # directory and nothing else required. xcodebuild's own
+        # -exportArchive is not used here because every export method it
+        # accepts wants a signing identity, which is the one thing this
+        # build does not have.
+        run: |
+          APP_PATH="build/Build/Products/Release-iphoneos/CutTheFluff.app"
+          if [ ! -d "$APP_PATH" ]; then
+            echo "Expected app bundle not found at $APP_PATH"
+            find build/Build/Products -maxdepth 3 -name "*.app" || true
+            exit 1
+          fi
+          mkdir -p Payload
+          cp -R "$APP_PATH" Payload/
+          zip -qry CutTheFluff-unsigned.ipa Payload
+          rm -rf Payload
+          ls -lh CutTheFluff-unsigned.ipa
+
+      - name: Upload the IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: CutTheFluff-unsigned-ipa
+          path: ios/CutTheFluff-unsigned.ipa
+          # Artifact storage counts against the same free plan (500 MB), and
+          # a stale IPA from six weeks ago has no value next to a fresh one.
+          retention-days: 14
+          if-no-files-found: error

@@ -1,0 +1,96 @@
+# XcodeGen spec. The .xcodeproj is GENERATED from this file, on the CI
+# runner and on any Mac, and is gitignored.
+#
+# WHY NOT COMMIT AN .xcodeproj. Because this project is authored from a
+# Windows machine that cannot open one. A hand-written pbxproj is thousands
+# of lines of generated-looking UUIDs that nothing here can validate before
+# pushing, so a typo in it is discovered only after a CI round trip. This
+# file is forty lines of YAML that a human can read and a diff can show.
+name: CutTheFluff
+options:
+  bundleIdPrefix: org.example
+  deploymentTarget:
+    # RAISED FROM 15.0 TO 16.0 FOR PhotosPicker, which is the SwiftUI photo
+    # picker and is iOS 16 only. The alternative was wrapping the old
+    # UIImagePickerController in a UIViewControllerRepresentable to keep one
+    # more year of devices, and PhotosPicker is the one that needs no
+    # photo-library permission at all -- worth more than the year.
+    #
+    # AppAuth-iOS's own floor is .iOS(.v15), so this is above it, not below.
+    # The cost is iPhone 7 and earlier, which cannot run iOS 16; iPhone 8 and
+    # later are fine.
+    iOS: "16.0"
+  createIntermediateGroups: true
+
+packages:
+  AppAuth:
+    url: https://github.com/openid/AppAuth-iOS
+    # AppAuth-iOS is the OpenID Foundation's own SDK. Pinned from 1.7.0 so
+    # a CI build months from now resolves something close to what was
+    # tested, rather than whatever master happens to be that morning.
+    from: "1.7.0"
+
+targets:
+  CutTheFluff:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources
+      # The asset catalog carries the app icon. It is a single 1024 square
+      # with NO alpha and NO pre-rounded corners -- iOS applies its own
+      # rounding, so art that arrives already rounded gets rounded twice and
+      # shows a sliver of its old background outside the new mask.
+      - path: Resources/Assets.xcassets
+    dependencies:
+      # Product name is "AppAuth" (verified against the package's own
+      # Package.swift, which also exports AppAuthCore and AppAuthTV).
+      - package: AppAuth
+        product: AppAuth
+    info:
+      path: Resources/Info.plist
+      properties:
+        # THE NAME, WITH ITS SPACES, IN BOTH PLACES IT CAN APPEAR.
+        # CFBundleDisplayName is what the home screen shows and was already
+        # right. CFBundleName is the one XcodeGen derives from the TARGET
+        # name, so it was "CutTheFluff" -- it does not reach the home screen,
+        # but it does surface in Settings and in some system alerts, which is
+        # exactly where a stray camel-case version of a product name gets
+        # noticed. Apple's guidance is to keep it to 15 characters or fewer;
+        # "Cut The Fluff" is 13.
+        # iOS KEEPS ITS OWN VERSION LINE, and does not follow Android's. The
+        # two apps are not at parity -- Android has recipes, uploads, vision
+        # and the shelf -- so a matching number would claim they were. It only
+        # ever goes UP: 1.0 is already published in ios.json and altstore.json,
+        # and AltStore compares these strings to decide what is newer.
+        CFBundleDisplayName: Cut The Fluff
+        CFBundleName: Cut The Fluff
+        CFBundleShortVersionString: "1.1"
+        CFBundleVersion: "3"
+        UILaunchScreen: {}
+        # THE REDIRECT SCHEME. Must match, character for character:
+        #   - AuthConfig.swift's REDIRECT_URI
+        #   - the Android app's appAuthRedirectScheme
+        #   - the "cutthefluff" client's registered redirect_uris in
+        #     rust/auth/src/oidc.rs on the server
+        # The server matches redirect_uri by exact string equality, so a
+        # drift here is not a visible error; it is a sign-in that never
+        # comes back.
+        CFBundleURLTypes:
+          - CFBundleURLName: org.example.cutthefluff
+            CFBundleURLSchemes:
+              - cutthefluff
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.example.cutthefluff
+        MARKETING_VERSION: "1.1"
+        CURRENT_PROJECT_VERSION: "3"
+        TARGETED_DEVICE_FAMILY: "1,2"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        SWIFT_VERSION: "5.9"
+        # Signing is left entirely to the build step. CI builds this
+        # UNSIGNED on purpose (see .github/workflows/ios-build.yml) because
+        # signing requires an Apple Developer account this project has
+        # deliberately not bought yet.
+        CODE_SIGNING_REQUIRED: "NO"
+        CODE_SIGNING_ALLOWED: "NO"
+        CODE_SIGN_IDENTITY: ""

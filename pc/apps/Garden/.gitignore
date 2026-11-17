@@ -1,0 +1,44 @@
+# Android / Gradle build output.
+#
+# Worth being explicit about the scale: across the four projects, 1,240 of
+# 1,414 files are build artifacts -- 65.5 MB of 66.0 MB. The actual source is
+# about 0.1 MB per project. Committing the build directory would make every
+# repo 300x larger than it needs to be, and every rebuild would show as a
+# diff of hundreds of regenerated binaries.
+build/
+.gradle/
+.cxx/
+*.apk
+*.aab
+*.ap_
+*.dex
+*.class
+
+# Android Studio / IntelliJ. The IDE rewrites most of these on every open,
+# so they are pure churn -- except the two below, which are kept on purpose
+# because they define the project for anyone else who opens it.
+.idea/
+!.idea/codeStyles/
+!.idea/inspectionProfiles/
+*.iml
+.navigation/
+captures/
+.externalNativeBuild/
+
+# local.properties holds the absolute path to THIS machine's Android SDK.
+# It is regenerated on first open and is wrong for every other machine.
+local.properties
+
+# Signing material. Never commit these -- a keystore plus its password is
+# the ability to publish an update that Android will accept as genuinely
+# yours.
+*.jks
+*.keystore
+keystore.properties
+signing.properties
+
+# OS and editor noise
+.DS_Store
+Thumbs.db
+*~
+*.swp
