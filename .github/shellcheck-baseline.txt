@@ -1,0 +1,15 @@
+# ShellCheck warnings already in the code when the checks were copied from garden-for-all (2026-11-17).
+# One "file CODE" per line. quick-checks.yml fails only on warnings NOT listed here. Remove a line once fixed.
+pc/ai-stack/pi/pi3-usb-mount.sh SC2034
+pc/ai-stack/pi/pi-power-watch.sh SC1090
+pc/ai-stack/pi/vpn-killswitch-test.sh SC2034
+pc/ai-stack/scratchpad/files/find_download.sh SC2148
+pc/ai-stack/scratchpad/files/helpers.sh SC2148
+pc/ai-stack/scratchpad/files/menu.sh SC2148
+pc/ai-stack/scratchpad/files/stop-wiki.sh SC2034
+pc/ai-stack/scratchpad/files/t11.sh SC2148
+pc/ai-stack/scratchpad/files/t6.sh SC2148
+pc/ai-stack/scripts/release-app.sh SC1017
+pc/ai-stack/scripts/release-app.sh SC1044
+pc/ai-stack/scripts/release-app.sh SC1072
+pc/ai-stack/scripts/release-app.sh SC1073

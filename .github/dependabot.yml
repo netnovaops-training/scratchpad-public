@@ -1,0 +1,60 @@
+# Dependabot version updates for the public Scratchpad copy (2026-11-17, modelled on garden-for-all's).
+# Once a week, Monday 05:00 Pacific. Minor and patch updates of one ecosystem arrive together in one pull
+# request; a major update is its own pull request. A 7-day cooldown skips brand-new releases (where bad
+# packages hide). Dependabot SECURITY updates are a repo setting and come on top of these, any day.
+# The code here is a copy of what runs on the PC, NUC and Pi: merge an update here only after the same
+# change works on the real machine (see the to-do item for this repo).
+version: 2
+
+updates:
+  - package-ecosystem: pip
+    directories: ["/pc/ai-stack/colibri", "/.github/requirements"]
+    cooldown: { default-days: 7 }
+    schedule: { interval: weekly, day: monday, time: "05:00", timezone: America/Los_Angeles }
+    open-pull-requests-limit: 5
+    labels: [dependencies, python]
+    groups:
+      pip-minor-and-patch: { update-types: [minor, patch] }
+
+  - package-ecosystem: cargo
+    directory: /pc/ai-stack/rust
+    cooldown: { default-days: 7 }
+    schedule: { interval: weekly, day: monday, time: "05:00", timezone: America/Los_Angeles }
+    open-pull-requests-limit: 5
+    labels: [dependencies, rust]
+    groups:
+      cargo-minor-and-patch: { update-types: [minor, patch] }
+
+  - package-ecosystem: docker
+    directories:
+      - /pc/ai-stack/collage
+      - /pc/ai-stack/dj
+      - /pc/ai-stack/hermes
+      - /pc/ai-stack/metrics
+      - /pc/ai-stack/n8n
+      - /pc/ai-stack/peewee-tools/studio
+      - /pc/ai-stack/pi-digits
+      - /pc/ai-stack/printq
+      - /pc/ai-stack/rust
+      - /pc/ai-stack/stt
+      - /pc/ai-stack/tables
+      - /pc/ai-stack/telegram
+      - /pc/ai-stack/telephony
+      - /pc/ai-stack/voice
+      - /pc/ai-stack/watchdog
+      - /pc/ai-stack/web
+    cooldown: { default-days: 7 }
+    schedule: { interval: weekly, day: monday, time: "05:00", timezone: America/Los_Angeles }
+    open-pull-requests-limit: 5
+    labels: [dependencies, docker]
+    groups:
+      docker-minor-and-patch: { update-types: [minor, patch] }
+
+  - package-ecosystem: github-actions
+    directory: /
+    cooldown: { default-days: 7 }
+    schedule: { interval: weekly, day: monday, time: "05:00", timezone: America/Los_Angeles }
+    open-pull-requests-limit: 3
+    labels: [dependencies, github-actions]
+    groups:
+      actions-minor-and-patch: { update-types: [minor, patch] }

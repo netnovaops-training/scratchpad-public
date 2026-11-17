@@ -1,0 +1,30 @@
+# Whole-repo code health: on every push, every pull request and once a week (Sunday, private repo).
+# Thin caller; the checks live in netnovaops-training/Toolbox (shared-code-health.yml), pinned by commit.
+# It picks tools by what the repo holds: Python (Ruff, Bandit, pip-audit), shell (ShellCheck), PowerShell
+# (PSScriptAnalyzer), Dockerfiles and compose (Hadolint, compose config), workflows (actionlint, zizmor),
+# plus gitleaks, Semgrep, Trivy and OSV-Scanner. Private repo: results are on each run's summary page.
+# Added 2026-11-16 (same file as Projects/.github/workflows/code-health.yml).
+name: code-health
+
+on:
+  push:
+    branches-ignore: ['dependabot/**']
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '23 5 * * *' # runs daily; the shared workflow only does real work on Sundays in private repos
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: code-health-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  health:
+    uses: netnovaops-training/Toolbox/.github/workflows/shared-code-health.yml@8f279258c31976c696b8503efd9d1e2579aece74 # main
+    permissions:
+      contents: read
+      actions: read
