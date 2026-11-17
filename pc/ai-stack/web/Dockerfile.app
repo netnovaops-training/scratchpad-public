@@ -23,7 +23,7 @@
 #    The cost is that changing app code reinstalls ~7 small packages. That is
 #    perhaps thirty seconds. A build that cannot succeed for one of the three
 #    apps costs considerably more.
-FROM python:3.15-slim-trixie@sha256:533b0b2f9b5d46fd097091cf826f27902f1d6c3bca714b6dc74551356aa97a51
+FROM python:3.15-slim-trixie@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
