@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#050a12">
+<meta name="robots" content="noindex, nofollow">
+<title>Items &middot; admin</title>
+<link rel="stylesheet" href="/theme.css">
+<style>
+  body{--accent:#e8c26a}
+  .tabs{display:flex;gap:.5rem;margin-top:.6rem}
+  .tabs a{padding:.35rem .8rem;border-radius:99px;border:1px solid var(--line);
+    color:var(--muted);font-size:.85rem;text-decoration:none}
+  .tabs a.on{border-color:var(--accent);color:var(--accent)}
+  .filterbar{margin:.7rem 0}
+  .filterbar input[type=search]{width:100%;max-width:24rem;font-size:.9rem;padding:.4rem .6rem}
+  .pillrow{display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.6rem;align-items:center}
+  .pillrow .lbl{font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;
+    color:var(--muted);margin-right:.15rem}
+  .pill{padding:.3rem .75rem;border-radius:99px;border:1px solid var(--line);
+    color:var(--muted);font-size:.82rem;background:none;cursor:pointer}
+  .pill.on{border-color:var(--accent);color:var(--accent)}
+  .usedin.unused{color:var(--warn)}
+  .nopic{width:3.6rem;height:3.6rem;flex:none;border-radius:8px;border:1px dashed var(--line);
+    display:flex;align-items:center;justify-content:center;text-align:center;
+    font-size:.62rem;color:var(--muted);line-height:1.1}
+  .itemcard{display:flex;gap:.9rem;padding:.7rem 0;border-top:1px solid var(--line)}
+  .itemcard:first-child{border-top:0}
+  .itemcard img{width:3.6rem;height:3.6rem;object-fit:cover;border-radius:8px;flex:none}
+  .itemcard .main{flex:1;min-width:0}
+  .itemcard h3{margin:0 0 .2rem;font-size:1rem;display:flex;align-items:baseline;gap:.4rem;flex-wrap:wrap}
+  .itemcard .edited{font-size:.68rem;text-transform:uppercase;letter-spacing:.05em;
+    color:var(--accent)}
+  .usedin{font-size:.78rem;color:var(--muted);margin:0 0 .4rem}
+  .rowlinks{font-size:.78rem;margin:0 0 .35rem}
+  .renameform{display:flex;gap:.4rem;margin:0 0 .4rem;max-width:26rem}
+  .renameform input[type=text]{flex:1;font-size:.85rem;padding:.25rem .5rem}
+  details.cardinfo{margin-top:.15rem}
+  details.cardinfo>summary{cursor:pointer;font-size:.78rem;color:var(--muted);
+    list-style:none;user-select:none}
+  details.cardinfo>summary::-webkit-details-marker{display:none}
+  details.cardinfo>summary::before{content:"\25b8 ";display:inline-block}
+  details.cardinfo[open]>summary::before{content:"\25be "}
+  .jsonform{margin-top:.4rem}
+  .jsonform textarea{width:100%;min-height:8rem;font-family:ui-monospace,Consolas,monospace;
+    font-size:.78rem;white-space:pre}
+  .jsonform button{margin-top:.35rem}
+  .jsonform .hint{font-size:.72rem;color:var(--muted);margin:.25rem 0 0}
+  details.bulk{margin:.7rem 0;border:1px solid var(--line);border-radius:8px;padding:.7rem .9rem}
+  details.bulk>summary{cursor:pointer;font-weight:600;font-size:.9rem}
+  details.bulk textarea{width:100%;min-height:14rem;font-family:ui-monospace,Consolas,monospace;
+    font-size:.74rem;white-space:pre;margin-top:.5rem}
+  details.bulk .hint{font-size:.78rem;color:var(--muted);margin:.4rem 0}
+  details.bulk button{margin-top:.3rem}
+  details.mergebox{margin-top:.4rem}
+  details.mergebox>summary{cursor:pointer;font-size:.78rem;color:var(--muted);
+    list-style:none;user-select:none}
+  details.mergebox>summary::-webkit-details-marker{display:none}
+  details.mergebox>summary::before{content:"\25b8 ";display:inline-block}
+  details.mergebox[open]>summary::before{content:"\25be "}
+  .mergesearch{margin-top:.4rem;max-width:26rem}
+  .mergesearch input[type=search]{width:100%;font-size:.85rem;padding:.3rem .5rem}
+  .merge-results{margin-top:.4rem;display:flex;flex-direction:column;gap:.3rem}
+  .merge-row{display:flex;align-items:center;justify-content:space-between;gap:.5rem;
+    font-size:.85rem;border:1px solid var(--line);border-radius:6px;padding:.3rem .6rem}
+  .merge-row button{flex:none}
+  .merge-hint{font-size:.76rem;color:var(--muted)}
+</style>
+</head>
+<body data-base="{{ base }}" data-csrf="{{ csrf }}">
+<div class="wrap">
+  <a class="back" href="{{ base }}/">&larr; all sites</a>
+
+  <h1>Items</h1>
+  <p class="sub">Every food and tool Tandoor knows about. Rename fixes every
+    recipe that uses it automatically. Open a card's JSON to copy it out,
+    hand it to an LLM, and paste the edited result back in &mdash; or use
+    the bulk box below to do many at once.</p>
+
+  <div class="tabs">
+    <a class='{% if kind == "food" %}on{% endif %}' href="{{ base }}/items?kind=food">Foods</a>
+    <a class='{% if kind == "tool" %}on{% endif %}' href="{{ base }}/items?kind=tool">Tools</a>
+  </div>
+
+  {% if !flash.is_empty() %}
+    <p class="note {% if flash_ok %}ok{% else %}bad{% endif %}">{{ flash }}</p>
+  {% endif %}
+
+  <details class="bulk">
+    <summary>Bulk export / import ({{ total }} {{ kind }}{% if total != 1 %}s{% endif %})</summary>
+    <p class="hint">One JSON array, every {{ kind }} below with its id, name and current card.
+      Copy it out, hand it to an LLM to fill in blanks or fix entries, paste the result back
+      in here, and Save all. Rows are matched back by <code>id</code> &mdash; a stray
+      <code>name</code> edit in the pasted JSON is ignored, so rename separately if you need to.</p>
+    <form method="post" action="{{ base }}/items/bulk-save">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <input type="hidden" name="kind" value="{{ kind }}">
+      <textarea name="bulk_json" spellcheck="false">{{ bulk_json }}</textarea>
+      <button type="submit" class="small">Save all</button>
+    </form>
+  </details>
+
+  {% if kind == "food" %}
+  <form method="post" action="{{ base }}/items/portions-import" style="margin:.6rem 0">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <button type="submit" class="small ghost">Import USDA baseline serving sizes</button>
+  </form>
+  {% endif %}
+
+  <div class="filterbar">
+    <input type="search" id="itemfilter" placeholder="Filter {{ kind }}s by name&hellip;" autocomplete="off">
+    <div class="pillrow">
+      <span class="lbl">Picture</span>
+      <button type="button" class="pill on" data-pic="all">All</button>
+      <button type="button" class="pill" data-pic="missing">Missing</button>
+      <button type="button" class="pill" data-pic="has">Has one</button>
+    </div>
+    <div class="pillrow">
+      <span class="lbl">Recipe</span>
+      <button type="button" class="pill on" data-used="all">All</button>
+      <button type="button" class="pill" data-used="used">Used somewhere</button>
+      <button type="button" class="pill" data-used="unused">Not used yet</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2 id="itemcount">{{ total }} {{ kind }}{% if total != 1 %}s{% endif %}</h2>
+    {% if items.is_empty() %}
+      <p class="sub" style="margin:.4rem 0 0">None yet.</p>
+    {% else %}
+    {% for it in items %}
+    <div class="itemcard" data-name="{{ it.name|lower }}"
+         data-haspic="{% if !it.picture.is_empty() %}1{% else %}0{% endif %}"
+         data-used="{% if !it.used_in.is_empty() %}1{% else %}0{% endif %}">
+      {% if !it.picture.is_empty() %}
+        <img src="{{ it.picture }}" alt="">
+      {% else %}
+        <div class="nopic">no picture</div>
+      {% endif %}
+      <div class="main">
+        <h3>{{ it.name }}{% if it.edited %}<span class="edited">edited</span>{% endif %}</h3>
+
+        {% if !it.used_in.is_empty() %}
+        <p class="usedin">Used in: {% for r in it.used_in %}{{ r }}{% if !loop.last %}, {% endif %}{% endfor %}{% if it.used_in_more > 0 %} +{{ it.used_in_more }} more{% endif %}</p>
+        {% else %}
+        <p class="usedin unused">Not used in any recipe yet.</p>
+        {% endif %}
+
+        <p class="rowlinks">
+          <a class="small" href="{{ base }}/pictures/usage/{{ kind }}/{{ it.id }}">where it's used</a>
+          {% if !it.photo_url.is_empty() %}
+          &middot;
+          <!-- Jason's own request (2026-08-25): "I'd like to edit
+               pictures there too to find a better match" -- this used to
+               only appear when a picture was MISSING, and even then went
+               to the whole /pictures backlog instead of straight to this
+               one item. photo_url (from Kitchen's own item-info-list) is
+               already domain-absolute ("/kitchen/foods/{id}/photos"), so
+               it's used as-is, not joined onto {{ base }}. -->
+          <a class="small" href="{{ it.photo_url }}">
+            {% if it.picture.is_empty() %}add a picture{% else %}change picture{% endif %}</a>
+          {% endif %}
+          {% if kind == "food" %}
+          &middot;
+          <a class="small" href="{{ base }}/items/nutrition/{{ it.id }}">nutrition &amp; baseline</a>
+          {% endif %}
+        </p>
+
+        <details class="mergebox">
+          <summary>Merge into&hellip;</summary>
+          <div class="mergesearch" data-kind="{{ kind }}" data-id="{{ it.id }}" data-name="{{ it.name }}">
+            <input type="search" class="merge-q" placeholder="Search for a match&hellip;" autocomplete="off">
+            <div class="merge-results"></div>
+          </div>
+        </details>
+
+        <form method="post" action="{{ base }}/items/rename" class="renameform">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <input type="hidden" name="kind" value="{{ kind }}">
+          <input type="hidden" name="id" value="{{ it.id }}">
+          <input type="text" name="name" value="{{ it.name }}" required>
+          <button type="submit" class="small">Rename</button>
+        </form>
+
+        <details class="cardinfo">
+          <summary>Where-to-find / how-to-use / history / fun-fact card</summary>
+          <form method="post" action="{{ base }}/items/save" class="jsonform">
+            <input type="hidden" name="csrf" value="{{ csrf }}">
+            <input type="hidden" name="kind" value="{{ kind }}">
+            <input type="hidden" name="id" value="{{ it.id }}">
+            <textarea name="info_json" spellcheck="false">{{ it.info_json }}</textarea>
+            <p class="hint">Copy this out, paste into an LLM to fill it in, paste the
+              result back in, then Save. Leave any field blank to hide that section.</p>
+            <button type="submit" class="small">Save</button>
+          </form>
+        </details>
+      </div>
+    </div>
+    {% endfor %}
+    {% endif %}
+  </div>
+
+  <footer>
+    &copy; {{ year }}
+  </footer>
+</div>
+<script>
+// Three filters, combined (name text + picture status + recipe-used
+// status) -- Jason's own request (2026-08-25): "let me sort through
+// what's done and not... know if they also are in a recipe or not," on
+// a page with 1500 items where a plain name search alone can't answer
+// either question. All client-side, no round trip -- the full list is
+// already in the DOM, so a pill click is instant regardless of how many
+// items there are.
+(function(){
+  var box = document.getElementById('itemfilter');
+  var cards = Array.prototype.slice.call(document.querySelectorAll('.itemcard'));
+  var count = document.getElementById('itemcount');
+  var picState = 'all', usedState = 'all';
+  if (!box) return;
+
+  function apply(){
+    var q = box.value.trim().toLowerCase();
+    var shown = 0;
+    cards.forEach(function(card){
+      var hit = !q || (card.dataset.name || '').indexOf(q) !== -1;
+      if (hit && picState !== 'all') {
+        hit = (picState === 'has') === (card.dataset.haspic === '1');
+      }
+      if (hit && usedState !== 'all') {
+        hit = (usedState === 'used') === (card.dataset.used === '1');
+      }
+      card.style.display = hit ? '' : 'none';
+      if (hit) shown++;
+    });
+    if (count) count.textContent = shown + ' of ' + cards.length;
+  }
+
+  box.addEventListener('input', apply);
+
+  function wirePills(selector, onPick){
+    var pills = Array.prototype.slice.call(document.querySelectorAll(selector));
+    pills.forEach(function(pill){
+      pill.addEventListener('click', function(){
+        pills.forEach(function(p){ p.classList.remove('on'); });
+        pill.classList.add('on');
+        onPick(pill);
+        apply();
+      });
+    });
+  }
+  // Scoped to .pill specifically -- every .itemcard also carries its own
+  // data-used ("1"/"0", the item's real status), which a bare
+  // [data-used] selector would match too and wire a click handler onto.
+  wirePills('.pill[data-pic]', function(p){ picState = p.dataset.pic; });
+  wirePills('.pill[data-used]', function(p){ usedState = p.dataset.used; });
+})();
+
+// Merge inline, right on the row -- Jason's own request (2026-08-25):
+// "yes" [to adding this instead of a click-through to /items/match].
+// Searches as you type (debounced), merges via a real form POST to the
+// same /items/match/merge route the old standalone page already used,
+// so the actual merge logic (and its safety -- Tandoor's real merge
+// endpoint, pictures/info carried over) is unchanged, just reached
+// without leaving this page.
+(function(){
+  // Read from data-* attributes, not embedded into the script directly --
+  // no dependency on whether this askama build has a JSON-escaping
+  // filter turned on, and askama's own plain attribute interpolation
+  // already does exactly the escaping an attribute value needs.
+  var BASE = document.body.dataset.base;
+  var CSRF = document.body.dataset.csrf;
+
+  function doSearch(container, q) {
+    var results = container.querySelector('.merge-results');
+    if (!q) { results.innerHTML = ''; return; }
+    results.innerHTML = '<p class="merge-hint">Searching&hellip;</p>';
+    var kind = container.dataset.kind, id = container.dataset.id;
+    fetch(BASE + '/items/search-json/' + kind + '/' + id + '?q=' + encodeURIComponent(q))
+      .then(function (r) { return r.json(); })
+      .then(function (items) {
+        if (!items.length) { results.innerHTML = '<p class="merge-hint">Nothing matches.</p>'; return; }
+        results.innerHTML = '';
+        items.forEach(function (it) {
+          var row = document.createElement('div');
+          row.className = 'merge-row';
+          var name = document.createElement('span');
+          name.textContent = it.name;
+          var btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'small';
+          btn.textContent = 'Merge into this';
+          btn.addEventListener('click', function () {
+            var ownName = container.dataset.name;
+            if (!confirm('Merge "' + ownName + '" into "' + it.name +
+                '"? Every recipe using it moves over, and this cannot be undone.')) return;
+            var form = document.createElement('form');
+            form.method = 'post';
+            form.action = BASE + '/items/match/merge';
+            form.style.display = 'none';
+            [['csrf', CSRF], ['kind', kind], ['item_id', id], ['target_id', String(it.id)]]
+              .forEach(function (pair) {
+                var input = document.createElement('input');
+                input.name = pair[0];
+                input.value = pair[1];
+                form.appendChild(input);
+              });
+            document.body.appendChild(form);
+            form.submit();
+          });
+          row.appendChild(name);
+          row.appendChild(btn);
+          results.appendChild(row);
+        });
+      })
+      .catch(function () { results.innerHTML = '<p class="merge-hint">Search failed.</p>'; });
+  }
+
+  document.querySelectorAll('.mergesearch').forEach(function (container) {
+    var input = container.querySelector('.merge-q');
+    var timer;
+    input.addEventListener('input', function () {
+      clearTimeout(timer);
+      var q = input.value.trim();
+      timer = setTimeout(function () { doSearch(container, q); }, 300);
+    });
+  });
+})();
+</script>
+</body>
+</html>

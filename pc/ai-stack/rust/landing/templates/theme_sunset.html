@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#3a1f4d">
+<meta name="robots" content="noindex">
+<title>{{ who }}&rsquo;s page</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Quicksand:wght@500;600;700&family=Nunito:wght@400;600;700&display=swap">
+<style>
+/* ===========================================================================
+   SUNSET
+
+   THE FIRST DARK THEME, and that is the point of it. Kitchen, sky, garden and
+   beach are all bright daytime pages; somebody who wants their start page to
+   be calm at night had nothing to pick. This one goes deep violet at the top
+   through coral to gold at the horizon, with the cards as warm dark panels
+   rather than white rectangles punched out of the sky.
+
+   READABILITY IS THE WHOLE DIFFICULTY WITH A GRADIENT THIS SATURATED. Text
+   never sits directly on it: everything lives on a panel with its own solid
+   ground, so contrast does not depend on which part of the gradient a card
+   happened to land on. The one exception is the greeting, which sits on the
+   darkest band at the top where there is contrast to spare.
+
+   THE SUN DOES NOT MOVE. A sun that visibly sinks turns a page you glance at
+   into a thing you watch, and it would have to loop -- which means jumping
+   back up the sky every ninety seconds, which is worse than stillness. It
+   breathes very slightly instead, and the clouds drift.
+   =========================================================================== */
+
+:root {
+  --night:    #2b1740;
+  --dusk:     #5b2a5e;
+  --burn:     #b8425c;
+  --ember:    #e8724c;
+  --gold:     #ffb864;
+  --haze:     #ffd9a0;
+
+  --panel:    #33203f;
+  --panel-2:  #3d2749;
+  --edge:     #543761;
+
+  --text:     #fbeee4;
+  --text-2:   #d3b9c4;
+  --text-3:   #a98da0;
+  --ink:      #2b1740;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0; min-height: 100%;
+  background: linear-gradient(180deg,
+    var(--night) 0%, #4a2352 26%, var(--burn) 52%, var(--ember) 74%, var(--gold) 100%);
+  background-attachment: fixed;
+  color: var(--text);
+  font: 17px/1.65 Nunito, ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* --- Sky ------------------------------------------------------------------ */
+.sky-band { position: relative; height: 170px; overflow: hidden; }
+.sky-band svg { width: 100%; height: 100%; display: block; }
+
+@keyframes drift { from { transform: translateX(0); } to { transform: translateX(-620px); } }
+.cloud-a { animation: drift 64s linear infinite; }
+.cloud-b { animation: drift 92s linear infinite; }
+
+/* A slow swell, not a descent. See the header note. */
+@keyframes breathe { 0%,100% { opacity: .82; transform: scale(1); } 50% { opacity: 1; transform: scale(1.035); } }
+.sun { animation: breathe 11s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+
+/* --- Content -------------------------------------------------------------- */
+.content { position: relative; z-index: 1; max-width: 940px; margin: 0 auto; padding: 0 1.25rem 8rem; }
+
+header { text-align: center; margin-bottom: 2rem; }
+h1 {
+  font-family: Quicksand, Nunito, sans-serif; font-weight: 700;
+  font-size: clamp(2rem, 6.5vw, 2.9rem); margin: 0 0 .35rem; letter-spacing: -.01em;
+}
+h1 .name { color: var(--gold); text-transform: capitalize; }
+header p { margin: 0 auto; max-width: 32rem; color: var(--text-2); font-size: 1.02rem; }
+
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(215px, 1fr)); gap: 1rem; }
+
+/* Panels with their own solid ground -- text never sits on the gradient. */
+.card {
+  display: block; text-decoration: none; color: inherit;
+  background: var(--panel);
+  border: 1px solid var(--edge);
+  border-bottom: 5px solid var(--accent, var(--ember));
+  border-radius: 16px; padding: 1.25rem 1.25rem 1.1rem;
+  box-shadow: 0 14px 30px -20px rgba(20,8,30,.85);
+  transition: transform .2s cubic-bezier(.2,.8,.3,1), background .2s ease;
+}
+.card:hover, .card:focus-visible { transform: translateY(-5px); background: var(--panel-2); }
+.card:focus-visible { outline: 3px solid var(--gold); outline-offset: 3px; }
+
+.card .ico {
+  display: inline-flex; width: 44px; height: 44px;
+  align-items: center; justify-content: center;
+  border-radius: 50%; background: var(--accent, var(--ember)); margin-bottom: .7rem;
+}
+.card .ico svg { width: 22px; height: 22px; stroke: #2b1740; fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.card h2 { font-family: Quicksand, sans-serif; font-size: 1.2rem; font-weight: 700; margin: 0 0 .15rem; color: var(--text); }
+.card .sub { margin: 0 0 .45rem; font-size: .74rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--text-3); }
+.card p.desc { margin: 0; color: var(--text-2); font-size: .95rem; line-height: 1.55; }
+.card .go { display: inline-block; margin-top: .8rem; font-weight: 700; color: var(--gold); border-bottom: 3px solid var(--accent, var(--ember)); padding-bottom: 1px; }
+
+.nothing { background: var(--panel); border: 2px dashed var(--edge); border-radius: 16px; padding: 2rem; text-align: center; color: var(--text-2); }
+
+footer { margin-top: 2.4rem; text-align: center; color: var(--ink); font-size: .92rem; font-weight: 600; }
+footer a { color: var(--ink); font-weight: 700; }
+
+@media (prefers-reduced-motion: reduce) {
+  .cloud-a, .cloud-b, .sun { animation: none; }
+  .card { transition: none; }
+}
+{% include "_effects.html" %}
+
+/* --- applying the effects (2026-09-07) -------------------------------------
+   The classes existed and nothing wore them, so the page looked unchanged.
+   These three lines are what make the difference visible. */
+
+/* The entrance, staggered by --i. Capped in the template at 10: past that a
+   stagger stops reading as choreography and starts reading as a slow page. */
+.card.enter { animation-delay: calc(var(--i, 0) * 45ms); }
+
+/* The glow needs somewhere to sit above the card's own background. */
+.card.lit { isolation: isolate; }
+</style>
+</head>
+<body>
+
+<div class="sky-band" aria-hidden="true">
+  <svg viewBox="0 0 900 170" preserveAspectRatio="xMidYMid slice">
+    <defs>
+      <radialGradient id="glow">
+        <stop offset="0"   stop-color="#ffd9a0" stop-opacity=".55"/>
+        <stop offset="1"   stop-color="#ffd9a0" stop-opacity="0"/>
+      </radialGradient>
+    </defs>
+
+    <circle cx="450" cy="168" r="150" fill="url(#glow)"/>
+    <circle class="sun" cx="450" cy="168" r="64" fill="#ffc978"/>
+
+    <g class="cloud-a" fill="#7a4568" opacity=".55">
+      <ellipse cx="170" cy="52" rx="74" ry="12"/>
+      <ellipse cx="250" cy="58" rx="52" ry="9"/>
+      <ellipse cx="820" cy="44" rx="66" ry="11"/>
+    </g>
+    <g class="cloud-b" fill="#9a5570" opacity=".45">
+      <ellipse cx="520" cy="88" rx="96" ry="11"/>
+      <ellipse cx="1140" cy="80" rx="80" ry="10"/>
+    </g>
+  </svg>
+</div>
+
+<div class="content">
+  <header>
+    <h1>Hi <span class="name">{{ who }}</span></h1>
+    <p>Everything of yours, in one place. Pick something and go.</p>
+  </header>
+
+  {% if sections.is_empty() %}
+  <div class="nothing">Nothing has been set up for you yet. Give Jason a nudge.</div>
+  {% else %}
+  {% include "_search.html" %}
+  <div class="grid">
+    {% for s in sections %}
+    <a class="card enter{% if s.href == "/ability/" %} lit{% endif %}" href="{{ s.href }}" style="--accent:{{ s.accent }};--i:{{ loop.index0 }}">
+      <span class="ico"><svg viewBox="0 0 24 24">{{ s.icon|safe }}</svg></span>
+      <p class="sub">{{ s.sub }}</p>
+      <h2>{{ s.name }}</h2>
+      <p class="desc">{{ s.desc }}</p>
+      <span class="go">Open &rarr;</span>
+    </a>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <footer><a href="/looks">Change look</a> &middot; <a href="/auth/logout">Sign out</a> &middot; made for you, {{ year }}</footer>
+</div>
+<script>
+/* Entrance animations run once per device, then stop.
+   Jason, 2026-09-07: "turn off animations after the person logs in."
+
+   localStorage, not a session flag: he means the daily user, and a session
+   flag replays the whole entrance every morning -- the thing being removed.
+
+   Set BEFORE first paint and wrapped in try/catch: a private window throws on
+   storage access, and an exception here would leave the class unset and the
+   animation running forever for that person -- invisible in testing,
+   permanent for them. Animating is the safe default when storage is gone. */
+(function () {
+  try {
+    if (localStorage.getItem('seen-entrance')) {
+      document.documentElement.classList.add('pre-seen');
+    } else { localStorage.setItem('seen-entrance', '1'); }
+  } catch (e) {}
+  document.addEventListener('DOMContentLoaded', function () {
+    var t = document.querySelectorAll('.tally[style*="--n"]');
+    if (!t.length || !window.IntersectionObserver) return;
+    /* Count-ups start only once visible, so a number below the fold has not
+       already finished counting by the time it is scrolled to. */
+    var io = new IntersectionObserver(function (es) {
+      es.forEach(function (e) {
+        if (e.isIntersecting) { e.target.classList.add('run'); io.unobserve(e.target); }
+      });
+    }, { threshold: 0.4 });
+    t.forEach(function (el) { io.observe(el); });
+  });
+})();
+</script>
+</body>
+</html>

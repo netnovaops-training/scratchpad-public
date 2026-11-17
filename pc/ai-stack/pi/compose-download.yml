@@ -1,0 +1,397 @@
+# ---------------------------------------------------------------------------
+#  sachin -- the VPN-isolated download and intake lane.
+#
+#  Jason, 2026-09-10: "can i put proton vpn so it can search for manga and
+#  secure its downloads or be a bit torrent downloarder or i save a file then
+#  transfer it here to be sorted parsed chuncked and then sent off to the
+#  correct computer for the right purpose."
+#
+#  Separate file from compose.yml on purpose. n8n and the watchdog must be up
+#  whether or not this lane is, and this one has a dependency the other does
+#  not: a working Proton subscription and somewhere to put the files. Bring
+#  it up with:
+#
+#      docker compose -f compose.yml -f compose-download.yml up -d
+#
+#  ---------------------------------------------------------------------------
+#  READ THIS BEFORE STARTING IT: THERE IS NOWHERE TO DOWNLOAD TO YET.
+#
+#  `lsblk` on this Pi shows exactly one disk -- the 119GB SD card that is also
+#  the root filesystem. It is a consumer card manufactured 11/2018 with no
+#  wear reporting, and in twenty-four minutes of ordinary idling it took
+#  3.8 GiB of writes. Torrenting writes continuously, in small random chunks,
+#  which is the single worst access pattern for flash with no wear levelling
+#  worth the name. Point this at the SD card and it will not be a question of
+#  whether the card dies but which month -- and it is the root filesystem, so
+#  it takes the machine with it.
+#
+#  So DOWNLOADS is a bind mount that must resolve to something that is not
+#  the SD card. Two ways, both fine:
+#
+#    a USB SSD          plug it in, mount it at /mnt/downloads, set
+#                       DOWNLOADS=/mnt/downloads
+#    the NUC's vault    mount the NUC's share at /mnt/downloads over the LAN
+#                       (the vault is LUKS and unlocked by hand -- see
+#                       nuc/vault-guard.sh; a download lane that starts
+#                       before it is unlocked writes into an empty directory
+#                       Docker helpfully creates for it)
+#
+#  DOWNLOADS has no default value. That is deliberate: compose will refuse to
+#  start rather than silently choose the card.
+#
+#  ---------------------------------------------------------------------------
+#  HOW THE KILL SWITCH ACTUALLY WORKS, because "I have a VPN" is not it.
+#
+#  qbittorrent has NO network of its own -- `network_mode: service:gluetun`
+#  puts it inside gluetun's network namespace, so its only route to anywhere
+#  is gluetun's tunnel. gluetun then runs a firewall that permits the tunnel
+#  and the LAN and nothing else. If the tunnel drops, packets do not fall
+#  back to the normal route; there is no normal route to fall back to. They
+#  are dropped.
+#
+#  This is why qbittorrent publishes no ports of its own. Its web UI port is
+#  declared on GLUETUN, because that is the namespace the socket lives in.
+#  Moving that port line down to qbittorrent is the classic way to break
+#  this, and compose will tell you so.
+# ---------------------------------------------------------------------------
+
+services:
+
+  # -------------------------------------------------------------------------
+  #  gluetun -- the tunnel and the firewall.
+  #
+  #  WIREGUARD, NOT OPENVPN. Proton's OpenVPN credentials are a username and
+  #  password; the WireGuard config is a key you generate in the Proton
+  #  account portal (Downloads -> WireGuard configuration). WireGuard is
+  #  several times faster on this hardware -- it runs in the kernel rather
+  #  than userspace, which on a Pi 5 is the difference between saturating the
+  #  line and pegging a core.
+  #
+  #  PORT FORWARDING is what makes a torrent client able to accept incoming
+  #  connections instead of only making outgoing ones, and it is the
+  #  difference between reasonable speeds and none. Proton offers it on paid
+  #  plans, on servers marked P2P, and gluetun negotiates it automatically
+  #  and re-negotiates when it changes. When generating the WireGuard config
+  #  in Proton's portal, tick "NAT-PMP (Port Forwarding)" -- it is off by
+  #  default and cannot be turned on afterwards without generating a new key.
+  # -------------------------------------------------------------------------
+  gluetun:
+    image: qmcgaw/gluetun:latest
+    container_name: gluetun
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    ports:
+      # qBittorrent's web UI. It lives HERE because qbittorrent shares this
+      # container's network namespace -- see the note above.
+      - "192.168.1.69:8080:8080"
+      # gluetun's own control server, for asking it which port Proton
+      # forwarded and whether the tunnel is actually up.
+      - "192.168.1.69:8000:8000"
+      # Firefox's KasmVNC page. Same reason: firefox shares this namespace.
+      - "192.168.1.69:3000:3000"
+      # MeTube. Same reason again -- it has no interface of its own.
+      - "192.168.1.69:8081:8081"
+    environment:
+      - TZ=America/New_York
+      - VPN_SERVICE_PROVIDER=protonvpn
+      - VPN_TYPE=wireguard
+      - WIREGUARD_PRIVATE_KEY=${PROTON_WG_PRIVATE_KEY:?set PROTON_WG_PRIVATE_KEY in ai-stack/pi/.env}
+      - WIREGUARD_ADDRESSES=${PROTON_WG_ADDRESSES:-10.2.0.2/32}
+      - SERVER_COUNTRIES=${PROTON_COUNTRIES:-Netherlands}
+      # FIREWALL=off -- Jason's explicit decision, 2026-09-11, after the
+      # consequence was put to him: "yes change it".
+      #
+      # WHAT THIS CHANGES. gluetun's default is an OUTPUT DROP policy whose
+      # only accepts are the tunnel, the VPN endpoint and a named LAN list.
+      # With it off, that policy is gone: traffic uses the tunnel while the
+      # tunnel is up, and falls back to eth0 -- the household connection --
+      # when it is not. The VPN still works normally; what is removed is
+      # the guarantee that a tunnel drop stops traffic rather than
+      # rerouting it.
+      #
+      # In practice the exposure is the gap between the tunnel dropping and
+      # gluetun reconnecting, during which a torrent client announces from
+      # 67.248.232.112 instead of the Proton exit. Set it back to `on` to
+      # restore the previous behaviour; nothing else needs changing.
+      #
+      # MEASURED 2026-09-13, and it is exactly what the paragraph above
+      # predicted. With `ip link set tun0 down` inside gluetun,
+      # qbittorrent fetched its own address and got 67.248.232.112 -- the
+      # household connection, not the Proton exit. There is no kill
+      # switch while this is off; there is only a VPN that fails open.
+      #
+      # (An earlier test of this was invalid: it brought down `wg0`, which
+      # does not exist here. The interface is tun0.)
+      #
+      # 2026-09-13, REVERSED. Jason: "i just need anonymity". The
+      # decision above was made when the lane was a convenience; it is
+      # now the requirement, so the guarantee comes back. Everything
+      # the comment block predicts happens in reverse: a tunnel drop
+      # now stops traffic instead of rerouting it out eth0.
+      - FIREWALL=on
+      # FIREWALL=off ALONE DOES NOTHING. gluetun overrides it with a second
+      # variable whose name is the author's editorial on the idea, and
+      # which defaults to `on`:
+      - FIREWALL_ENABLED_DISABLING_IT_SHOOTS_YOU_IN_YOUR_FOOT=on
+      - PORT_FORWARD_ONLY=on
+      - VPN_PORT_FORWARDING=on
+      - VPN_PORT_FORWARDING_PROVIDER=protonvpn
+      # THE LAN MUST BE PARTLY ALLOWED THROUGH THE FIREWALL, or the web UI
+      # is unreachable and it looks like the container is broken. But the
+      # first version of this line allowed the WHOLE /24, and that was
+      # lazier than it needed to be.
+      #
+      # WHY THIS IS NARROWED TO TWO HOSTS. The plan was to isolate the
+      # torrent box on its own VLAN. That turned out to be impossible here:
+      # the router is a Nest Wifi (model ACc3d), which has no 802.1Q, no
+      # per-VLAN DHCP and no inter-VLAN routing -- a managed switch can tag
+      # frames but nothing upstream can route them, so a second VLAN would
+      # cut the Pi off from the NAS and the NUC as well as from the
+      # internet.
+      #
+      # So the isolation is done where it can be: in this firewall. These
+      # are the only two LAN addresses the download lane has any business
+      # reaching --
+      #
+      #   192.168.1.68/32    the Synology, where finished files are written
+      #   192.168.1.100/32   the PC's Caddy, which fronts the web UI
+      #
+      # BOTH WERE WRONG until 2026-09-13. The list said .237 and .205:
+      # .237 is the Pi 3, not the NAS (the NAS is .68), and .205 was the
+      # PC before its DHCP reservation moved it to .100. Harmless while
+      # the firewall is off -- but the moment it is switched on, the lane
+      # would have been allowed to reach the Pi 3 and a dead address, and
+      # blocked from the NAS it writes to and the UI that fronts it.
+      # A stale allowlist fails in the direction of looking broken.
+      #
+      # Everything else on the LAN -- the NUC and its vault, the other Pi
+      # services, phones, the router's admin page -- is now unreachable
+      # FROM INSIDE this namespace. That is materially stronger than the
+      # VLAN would have been, because it applies to the container rather
+      # than to the machine: ntfy, Kuma and n8n on this same Pi keep full
+      # LAN access, which a VLAN would have taken away from them too.
+      # INERT while FIREWALL=off above -- there is no firewall for it to
+      # narrow. Kept so that flipping FIREWALL back to `on` restores the
+      # previous scoping in one step rather than needing it rewritten.
+      - FIREWALL_OUTBOUND_SUBNETS=192.168.1.68/32,192.168.1.100/32
+      - FIREWALL_VPN_INPUT_PORTS=
+      # WITH THE FIREWALL ON, INPUT DROPS BY DEFAULT. These four ports
+      # are published on 192.168.1.69 and arrive on this container's
+      # eth0 from the Docker bridge; unlisted, they are silently
+      # dropped and the whole lane looks dead when it is merely shut.
+      #   8080  qBittorrent web UI
+      #   8000  gluetun's control server (which port Proton forwarded)
+      #   3000  Firefox/KasmVNC -- the sandboxed browser, whose entire
+      #         point is that its traffic leaves through the tunnel
+      #   8081  MeTube
+      - FIREWALL_INPUT_PORTS=8080,8000,3000,8081
+      # DoT LEFT ON (gluetun's default). The first version set DOT=off and
+      # gluetun refused to start:
+      #     dns settings: upstream type dot must be plain if the built-in
+      #     DNS server is disabled
+      # Turning it off was wrong on its own terms anyway. With the built-in
+      # resolver disabled, name lookups go to whatever the container's
+      # /etc/resolv.conf says -- which on this Pi is the household
+      # resolver, OUTSIDE the tunnel. That is a DNS leak: the traffic is
+      # encrypted but every hostname asked for is not. On a lane whose
+      # entire purpose is that traffic does not leave in the clear, the
+      # lookups have to go through it too.
+      - HEALTH_VPN_DURATION_INITIAL=30s
+    volumes:
+      - gluetun_data:/gluetun
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  # -------------------------------------------------------------------------
+  #  qbittorrent -- no network of its own. See gluetun above.
+  #
+  #  It writes finished downloads into /downloads/complete. The sorter
+  #  (pi-sort.py) watches that directory, works out what each file is, and
+  #  hands it to whichever machine owns that kind of thing. Nothing here
+  #  decides where a book ends up; this container's whole job is to finish
+  #  the transfer and get out of the way.
+  # -------------------------------------------------------------------------
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent:latest
+    container_name: qbittorrent
+    restart: unless-stopped
+    network_mode: "service:gluetun"
+    depends_on:
+      gluetun:
+        condition: service_healthy
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=America/New_York
+      - WEBUI_PORT=8080
+      - TORRENTING_PORT=6881
+    volumes:
+      - qbt_config:/config
+      - ${DOWNLOADS:?set DOWNLOADS in ai-stack/pi/.env -- it must NOT be on the SD card}:/downloads
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  # -------------------------------------------------------------------------
+  #  firefox -- a browser whose entire session lives inside the tunnel.
+  #
+  #  Jason, 2026-09-10: "i would like to use a private browser ... so that
+  #  when i use proton my session is not tracked ... i want a unique
+  #  figurprint i want to be anoumous but still identifiable".
+  #
+  #  THOSE LAST TWO PULL AGAINST EACH OTHER, and it is worth being exact
+  #  about why, because the fix follows from it. Browser fingerprinting does
+  #  not need a cookie: it identifies you by the COMBINATION of your screen
+  #  size, fonts, timezone, GPU, audio stack and thirty other readings. It
+  #  works precisely BECAUSE that combination is unique. So a unique
+  #  fingerprint is not anonymity -- it is a permanent username you cannot
+  #  log out of, and it follows you across every site and every VPN exit
+  #  node. Changing your IP while keeping your fingerprint changes nothing.
+  #
+  #  Anonymity is the opposite: being INDISTINGUISHABLE. Tor Browser's whole
+  #  design is that every user reports the same window size and the same
+  #  fonts, so there is nothing to tell them apart. Brave takes the other
+  #  route -- "farbling", randomising the readings per site per session, so
+  #  the fingerprint is different every time and therefore useless as an
+  #  identifier. Both work. Neither is "unique".
+  #
+  #  What is achievable, and is what the request actually describes, is
+  #  SEPARATION: unremarkable everywhere by default, deliberately
+  #  identifiable in the specific places you choose to log in, and no thread
+  #  connecting the two. That is a profile boundary, not a browser feature:
+  #
+  #    this container   research and downloads. Inside gluetun, so every
+  #                     request exits from Proton. Nothing is logged into.
+  #                     Profile wiped whenever you like -- it is one volume.
+  #    your normal PC   Gmail, banking, the household stack. Logged in,
+  #                     identifiable, household IP. Untouched by any of this.
+  #
+  #  Two profiles that never meet beat any amount of tuning inside one.
+  #
+  #  FIREFOX RATHER THAN BRAVE, and it is not a preference. LinuxServer
+  #  publish arm64 images for firefox and chromium; they do not publish one
+  #  for Brave, and the alternatives are amd64-only or unmaintained. On this
+  #  hardware that decides it. Firefox with uBlock Origin and
+  #  resistFingerprinting gets you Tor Browser's indistinguishable-by-design
+  #  approach, which is the stronger of the two anyway.
+  #
+  #  IT WILL FEEL SLOW, and you should know that before you judge it. This
+  #  is a full desktop browser rendered on four Arm cores and streamed to
+  #  you over VNC in a browser tab. It is fine for reading and searching. It
+  #  is not fine for video, and it is not your daily driver.
+  #
+  #  CACHE ON tmpfs. A browser cache is thousands of small writes per page
+  #  and would go straight to the SD card. /config/.cache is RAM here, which
+  #  also means it is gone on restart -- which for this container is a
+  #  feature.
+  # -------------------------------------------------------------------------
+  firefox:
+    image: lscr.io/linuxserver/firefox:latest
+    container_name: firefox
+    restart: unless-stopped
+    # Inside the tunnel, exactly like qbittorrent. Its UI port is declared
+    # on gluetun below for the same reason.
+    network_mode: "service:gluetun"
+    depends_on:
+      gluetun:
+        condition: service_healthy
+    security_opt:
+      - seccomp:unconfined
+    shm_size: "1gb"
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=America/New_York
+      # The KasmVNC page is reached through Caddy with the household SSO
+      # gate in front. This is a second lock on the same door.
+      - CUSTOM_USER=${FIREFOX_USER:-jason}
+      - PASSWORD=${FIREFOX_PASSWORD:?set FIREFOX_PASSWORD in ai-stack/pi/.env}
+      - DRINODE=/dev/dri/renderD128
+    volumes:
+      - firefox_config:/config
+    tmpfs:
+      - /config/.cache:size=512m,mode=0755,uid=1000,gid=1000
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  # -------------------------------------------------------------------------
+  #  metube -- paste a URL, get the video. For Jason and Sachin only.
+  #
+  #  Jason, 2026-09-11: "i want the abilty to have sachin to paste in a url
+  #  to a video ... i want two parts one for general viewing and one for porn
+  #  or (private) and i want this only to be avaible to the sso for me and
+  #  him".
+  #
+  #  A yt-dlp front end with a queue and a real progress bar, which is the
+  #  part that makes it usable by somebody who is not going to read a log.
+  #
+  #  INSIDE gluetun's NETWORK NAMESPACE, exactly like qbittorrent. It has no
+  #  interface of its own, so every request it makes leaves through Proton
+  #  or does not leave at all -- there is no route to fall back to if the
+  #  tunnel drops. That is why its web UI port is declared on GLUETUN and not
+  #  here: the socket lives in gluetun's namespace.
+  #
+  #  This is also why it is in THIS file rather than compose.yml. It cannot
+  #  start without the Proton key, and that is correct -- a video fetcher
+  #  that silently falls back to the household IP when the VPN is missing is
+  #  worse than one that refuses to start.
+  #
+  #  TWO DESTINATIONS, AND THE SEPARATION IS THE POINT.
+  #
+  #      /downloads/general   ->  Jellyfin "General"
+  #      /downloads/private   ->  Jellyfin "Private", granted to two accounts
+  #
+  #  DOWNLOAD_DIRS_INDEXABLE puts a folder picker in the UI, so the choice is
+  #  made per download at submit time rather than by sorting afterwards.
+  #  Getting it wrong once and having to move a file is fine; having no
+  #  choice and everything landing in one pile is not.
+  #
+  #  ACCESS IS ENFORCED AT THE GATE, NOT HERE. MeTube has no login of its
+  #  own -- anyone who can reach it can use it. It is reachable only through
+  #  grab.home.example.net, and "grab" is registered in
+  #  rust/common/src/people.rs as an EXPLICIT_ONLY app, so the auth service
+  #  returns 403 to every account without a named grant. Explicit-only
+  #  matters more than the grant itself: it means a future "give this person
+  #  everything" account does NOT inherit this one.
+  # -------------------------------------------------------------------------
+  metube:
+    image: ghcr.io/alexta69/metube:latest
+    container_name: metube
+    restart: unless-stopped
+    network_mode: "service:gluetun"
+    depends_on:
+      gluetun:
+        condition: service_healthy
+    environment:
+      - UID=1000
+      - GID=1000
+      - TZ=America/New_York
+      - DOWNLOAD_DIR=/downloads
+      - STATE_DIR=/downloads/.metube
+      - TEMP_DIR=/downloads/.incomplete
+      # The folder picker. Without it everything lands in one directory and
+      # the general/private split becomes a manual sorting job.
+      - DOWNLOAD_DIRS_INDEXABLE=true
+      - CREATE_CUSTOM_DIRS=true
+      - DEFAULT_THEME=dark
+      # Behind a proxy on a subpath-free hostname, but MeTube still needs to
+      # know it is not at the root of localhost or its websocket -- which is
+      # what drives the progress bar -- connects to the wrong origin and the
+      # UI sits at 0% forever while the download actually runs.
+      - URL_PREFIX=/
+      - OUTPUT_TEMPLATE=%(title)s.%(ext)s
+    volumes:
+      - ${DOWNLOADS:?set DOWNLOADS in ai-stack/pi/.env -- it must NOT be on the SD card}:/downloads
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+volumes:
+  gluetun_data:
+  qbt_config:
+  firefox_config:

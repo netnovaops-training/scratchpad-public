@@ -1,0 +1,141 @@
+# =============================================================================
+#  Tea Miss Dee — what can be booked, and when.
+#
+#  Copy to  config/services.yaml  and edit. Changes take effect on the next
+#  request; no restart needed. Dee can edit this file herself in Notepad.
+#
+#  Every time here is LOCAL time in the `timezone` below.
+#
+#  THIS IS A COMPANIONSHIP SERVICE. The thing being booked is Dee's time and
+#  her company. Errands and appointments happen DURING a visit -- they're
+#  noted on the booking, not booked separately. That's why the list below is
+#  visit lengths rather than tasks.
+# =============================================================================
+
+# IANA timezone. Not "PST" -- that's ambiguous half the year and gets bookings
+# wrong across daylight saving.
+timezone: America/Los_Angeles          # Nevada
+
+business:
+  name: Tea Miss Dee
+  # Read back to callers on confirmation. Short -- it gets spoken aloud.
+  confirmation_phrase: "You're all set. Miss Dee is looking forward to it."
+
+# When she works. Omit a day entirely to close it.
+hours:
+  monday:    [{ start: "09:00", end: "17:00" }]
+  tuesday:   [{ start: "09:00", end: "17:00" }]
+  wednesday: [{ start: "09:00", end: "17:00" }]
+  thursday:  [{ start: "09:00", end: "17:00" }]
+  friday:    [{ start: "09:00", end: "16:00" }]
+  saturday:  [{ start: "10:00", end: "14:00" }]
+  # sunday intentionally absent = closed
+
+# Days off. YYYY-MM-DD. Also honoured: any all-day event on the Google Calendar,
+# which is the easier way to block a day since both this and the public booking
+# page will see it.
+closed_dates:
+  - "2026-11-26"   # Thanksgiving
+  - "2026-12-25"   # Christmas
+
+rules:
+  # How far ahead someone must book.
+  min_notice_minutes: 240        # 4 hours -- visits need planning, unlike a ride
+
+  # How far into the future bookings are allowed. Longer than an errand service
+  # because regulars book weeks out.
+  max_advance_days: 60
+
+  # Visits start on the hour or half hour. Easy to say, easy to hear.
+  slot_granularity_minutes: 30
+
+  # Travel and reset time around every visit.
+  default_buffer_minutes: 30
+
+  # How many options the agent offers per request. Reading a dozen times aloud
+  # to an elderly caller is worse than useless.
+  max_slots_offered: 3
+
+# -----------------------------------------------------------------------------
+#  THE SERVICES
+#
+#  These are lengths of company, not tasks. A pharmacy stop or a shop happens
+#  during one of these and gets written into the booking notes.
+#
+#  `id` is what the phone agent passes.
+# -----------------------------------------------------------------------------
+services:
+
+  - id: visit_short
+    name: Short visit
+    spoken_name: "a short visit"
+    duration_minutes: 120
+    buffer_minutes: 30
+    # Extra things the agent should ask about for this service.
+    collect:
+      - who_is_it_for
+      - what_theyd_enjoy
+
+  - id: visit_half_day
+    name: Half day
+    spoken_name: "a half day together"
+    duration_minutes: 240
+    buffer_minutes: 30
+    collect:
+      - who_is_it_for
+      - what_theyd_enjoy
+
+  - id: visit_full_day
+    name: Full day
+    spoken_name: "a full day together"
+    duration_minutes: 420
+    buffer_minutes: 45
+    collect:
+      - who_is_it_for
+      - what_theyd_enjoy
+
+  # An appointment they need to be at, with Dee alongside for the whole thing --
+  # the waiting room included, which is usually the part people dread.
+  - id: visit_appointment
+    name: Appointment company
+    spoken_name: "company at an appointment"
+    duration_minutes: 180
+    buffer_minutes: 30
+    collect:
+      - who_is_it_for
+      - appointment_where
+      - appointment_when
+
+# -----------------------------------------------------------------------------
+#  ADD-ONS
+#
+#  Things that can happen during a visit. The agent asks about these and writes
+#  them onto the booking; it does NOT book them as separate appointments.
+#  Purely informational -- they don't affect availability.
+# -----------------------------------------------------------------------------
+addons:
+  - id: pharmacy
+    prompt: "collecting a prescription"
+  - id: shopping
+    prompt: "a stop at the shop"
+  - id: errand
+    prompt: "any other errand while she's out with them"
+
+# -----------------------------------------------------------------------------
+#  What gets written onto the calendar event.
+#  Placeholders: {service_name} {client_name} {client_phone}
+#                {notes} {details} {reference}
+# -----------------------------------------------------------------------------
+calendar:
+  event_title: "{service_name} — {client_name}"
+  event_description: |
+    Booked by phone.
+
+    Client:    {client_name}
+    Phone:     {client_phone}
+    Service:   {service_name}
+    Reference: {reference}
+
+    {details}
+
+    Notes: {notes}

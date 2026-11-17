@@ -1,0 +1,3 @@
+# Keep every file byte-for-byte as it is where it runs (the deploy step copies it back),
+# so git never rewrites line endings.
+* -text

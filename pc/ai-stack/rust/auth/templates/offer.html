@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#070a18">
+<meta name="robots" content="noindex, nofollow">
+<title>Add a passkey?</title>
+<link rel="stylesheet" href="static/auth.css">
+</head>
+<body>
+{% include "sky.html" %}
+<main>
+  <div class="brand"><div class="mark" aria-hidden="true"></div><b>ULTRANOVA</b></div>
+  <div class="card" id="pk-offer" data-next="{{ next }}">
+    <div>
+      <h1>Add a passkey?</h1>
+      <p class="sub">Add a passkey on this device so you can sign in with your
+        fingerprint or face next time. Your password keeps working too.</p>
+    </div>
+
+    <div class="stack" id="pk-offer-buttons">
+      <button class="btn main wide" type="button" id="pk-offer-yes">Add a passkey</button>
+      <button class="btn wide" type="button" id="pk-offer-later">Not now</button>
+      <button class="btn wide" type="button" id="pk-offer-never">Don't ask again</button>
+    </div>
+
+    <form id="pk-add" class="stack" style="display:none">
+      <div>
+        <label for="pk-name">Passkey name</label>
+        <input id="pk-name" name="pk_name" type="text" autocomplete="off"
+               maxlength="32" value="{{ default_name }}"
+               placeholder="e.g. Pixel, Windows Hello"
+               spellcheck="false" autocapitalize="none">
+        <p class="fine" style="margin-top:4px">
+          One symbol allowed, not at the start. No emoji.
+        </p>
+      </div>
+      <div><label for="p">Your password (to show it's you)</label>
+        <input id="p" name="password" type="password" autocomplete="current-password" required></div>
+      <button class="btn main wide" type="submit">Add this device</button>
+    </form>
+
+    <p id="pk-msg" class="note" style="display:none"></p>
+    <p class="fine"><a href="{{ next }}">Skip this time and carry on</a></p>
+  </div>
+</main>
+<script src="passkey/passkey.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,33 @@
+{
+  "_about": "Jobs for Backup-ToNas.ps1 (2026-11-14). Paths are UNC on purpose: a scheduled task does not see mapped drive letters (P:, T:, W:, Z:). mirror=false means nothing is ever deleted on the NAS. Set enabled=false to pause a job. excludeDir/excludeFile are folder/file NAMES matched at any depth.",
+  "nas": "\\\\192.168.1.68",
+  "jobs": [
+    {
+      "name": "www",
+      "enabled": true,
+      "source": "C:\\Jasons New Site\\www",
+      "dest": "\\\\192.168.1.68\\Website backup\\www",
+      "mirror": false,
+      "excludeDir": [".claude", "target", "venv", ".venv", "secrets-review", "env-backups", "secrets-ui-test", "garden-letter", "letter-preview"],
+      "excludeFile": [".env", "*.env", "secrets.txt", "secrets.env"]
+    },
+    {
+      "name": "garden-for-all",
+      "enabled": true,
+      "source": "D:\\Garden for all",
+      "dest": "\\\\192.168.1.68\\Computer backup\\Garden-for-all",
+      "mirror": false,
+      "excludeDir": [".venv", "venv", "target", "work-full", "work-current", "work-gaptest", "work-hosts"],
+      "excludeFile": [".env", "*.env", "photo-keys.env"]
+    },
+    {
+      "name": "pictures-from-M",
+      "enabled": true,
+      "source": "M:\\Pictures",
+      "dest": "\\\\192.168.1.68\\Pictures\\From-PC-M-Pictures",
+      "mirror": false,
+      "excludeDir": ["SynologyDrive", ".SynologyWorkingDirectory"],
+      "excludeFile": ["Thumbs.db", "desktop.ini"]
+    }
+  ]
+}

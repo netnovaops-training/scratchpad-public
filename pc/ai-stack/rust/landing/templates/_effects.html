@@ -1,0 +1,186 @@
+/* === shared card effects, included by every theme ==========================
+   Jason, 2026-09-07: "none of the cards from the Instagram links took" --
+   and they had not, because the CSS went into the Python portal that serves
+   /casey and /ability. This page is the Rust landing app, which is a separate
+   application with fifteen standalone theme templates and no shared
+   stylesheet at all.
+
+   So this file is the shared stylesheet. Every theme includes it as the
+   last thing inside its style element, which means it is edited once here
+   rather than fifteen times.
+
+   NEVER WRITE THE STYLE CLOSING TAG IN THIS FILE, not even inside a CSS
+   comment. The HTML parser does not read CSS; it ends a style element at
+   the first such string it sees, whatever surrounds it. An earlier version
+   of this very paragraph spelled the tag out, which closed the block 90
+   lines early and printed the rest of this stylesheet on the page as
+   visible text, above the header, on every page of the site.
+
+   BUILT FROM THE THEME'S OWN VARIABLES. Each theme defines its palette
+   differently, so the effects below reach for --accent and --line with
+   fallbacks -- a gradient hardcoded to one theme's purple would look wrong
+   in the other fourteen.
+   ========================================================================= */
+
+/* --- a rotating light around a card ---------------------------------------
+   @property is what makes this possible: an angle is only interpolatable
+   once it has a declared type. Without it the gradient would jump rather
+   than turn.
+
+   OPT-IN per card (.card.lit). A page where everything glows has nothing
+   highlighted -- use it on the one card that should pull the eye. */
+/* IN THE CORNER, NOT SWEEPING THE ROOM. Jason, 2026-09-10: "the css effect
+   needs to at the corner of the card not like a light house. like the corner.
+   of the css card."
+
+   It was a conic gradient centred on the card, so the bright arc swung round
+   a point in the middle and threw a visible wedge across the text -- a beam,
+   exactly as he says, and it crossed the words while it turned.
+
+   Now the light SITS in the top-right corner and breathes. A radial gradient
+   anchored at 100% 0% has no centre to rotate about and no edge to sweep, so
+   there is nothing to track across the card; it reads as a highlight on one
+   corner, which is what a highlight is supposed to be.
+
+   Behind the card (z-index: -1) and inset by 1.5px, so it rims the corner
+   rather than washing over the content. */
+@property --glow-size { syntax: "<percentage>"; initial-value: 38%; inherits: false; }
+
+.card.lit, .item.lit { position: relative; isolation: isolate; }
+.card.lit::before, .item.lit::before {
+  content: ""; position: absolute; inset: -1.5px; border-radius: inherit;
+  z-index: -1;
+  background: radial-gradient(circle at 100% 0%,
+              var(--accent, #d97f3e) 0%,
+              color-mix(in srgb, var(--accent, #d97f3e) 45%, transparent) 18%,
+              transparent var(--glow-size));
+  animation: glow-breathe 5s ease-in-out infinite;
+}
+/* A slow swell rather than a rotation. Six seconds of nothing moving reads as
+   a static graphic; a beam reads as an alarm. This is between the two. */
+@keyframes glow-breathe {
+  0%, 100% { --glow-size: 32%; opacity: .75; }
+  50%      { --glow-size: 46%; opacity: 1; }
+}
+
+/* Without @property the size never animates -- which here is fine, because a
+   corner glow that simply sits there is still a corner glow. Only the
+   breathing is lost, so nothing is hidden. */
+@media (prefers-reduced-motion: reduce) {
+  .card.lit::before, .item.lit::before { animation: none; }
+}
+
+/* --- count-up numbers, with the real one kept in the DOM -------------------
+   counter-reset + @property counts up with no JavaScript. On its own that is
+   wrong for anything that matters: generated content cannot be selected or
+   copied and is not reliably read by a screen reader.
+
+   So the true number stays as text and the animation paints over it. With
+   motion off, or @property unsupported, the correct value is simply there.
+       <span class="tally" style="--n:287">287</span>                       */
+/* THE COUNT-UP IS DRIVEN BY SCRIPT, AND THAT IS A CORRECTION.
+   The reel does this with @property and a CSS counter, and that version was
+   built and shipped here first. It could not be shown to work: `--tally`
+   never left its initial value, with a literal keyframe target as well as
+   with var(--n), so the counter had nothing to count.
+
+   The reason it had to change is not that it failed -- it is HOW it fails.
+   That technique needs `color: transparent` on the real number so the
+   generated content can paint over it. When the animation does not run, the
+   true figure is invisible and the pseudo-element paints the initial value:
+   the page shows 0 where it should say 229,375. A decorative effect that
+   silently replaces real numbers with zeroes is not a decoration.
+
+   The script version cannot do that. The real number is ordinary text that
+   is never hidden; the script overwrites it while counting and puts it back
+   at the end. No script, no support, an error anywhere -- the correct figure
+   is simply sitting there, selectable and copyable, which is what these
+   numbers are for. */
+.tally { font-variant-numeric: tabular-nums; }
+
+/* --- :has(), the conditional CSS finally has -------------------------------
+   The things that used to need a class toggled by script. */
+.card:has(.lit-flag), .item:has(.lit-flag) { border-color: var(--accent, #d97f3e); }
+.chips:has(.chip.on) .chip:not(.on) { opacity: .7; }
+label:has(input:checked) { border-color: var(--accent, #d97f3e); }
+
+/* --- loading placeholders --------------------------------------------------
+   The gradient is painted at twice the element's width and slid across, so
+   nothing moves but a paint origin: one compositor property, no layout. */
+.sk {
+  background: linear-gradient(90deg, var(--line, #2a2a2a) 25%,
+              var(--surface, #3a3a3a) 50%, var(--line, #2a2a2a) 75%);
+  background-size: 200% 100%;
+  animation: sk-sweep 1.2s linear infinite;
+  border-radius: 6px; display: block;
+}
+@keyframes sk-sweep { to { background-position: -200% 0; } }
+.sk-line { height: .8rem; margin: .55rem 0; }
+.sk-card { height: 7rem; border-radius: 14px; margin-bottom: 1rem; }
+
+/* --- entrance, once ---------------------------------------------------------
+   Jason: "turn off animations after the person logs in." Distinct from the
+   media query below -- that is an accessibility preference; this is about a
+   page somebody opens every day. An entrance animation that replays on every
+   visit stops being a welcome and becomes a wait.
+
+   The <html> element gets .pre-seen from the inline script on the second
+   visit onward. Hover and feedback animations are untouched: those answer
+   something the person just did, rather than being something to sit through. */
+.enter { animation: enter-fade .45s ease-out both; }
+@keyframes enter-fade {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+html.pre-seen .enter { animation: none; }
+
+/* --- validation, in CSS alone ----------------------------------------------
+   Jason sent this as a reel that used :placeholder-shown to mean "the person
+   has typed something". That only works if EVERY input carries a placeholder
+   attribute -- without one the pseudo-class never matches, so
+   :not(:placeholder-shown) is always true and an empty required field goes red
+   before anybody has typed a character.
+
+   :user-invalid is the standard built for this and needs no placeholder: the
+   browser applies it only once somebody has interacted with the field and left
+   it wrong. It is also less to write than the :not(:has(...)) chain.
+
+   Matched on the ELEMENTS, not on a class, so every form in every theme gets
+   it without being edited -- a rule that needs a hand-added class is a rule
+   that is on half the forms a year from now. */
+input:user-invalid, select:user-invalid, textarea:user-invalid {
+  border-color: var(--bad, #e8695a);
+}
+/* GREEN ONLY WHERE THERE WAS A RULE TO PASS. :user-valid matches any field
+   somebody has touched, including one with no constraints -- so without this
+   guard a plain optional box goes green for being typed in, claiming a check
+   that never happened. A tick that means nothing is worse than no tick: it
+   teaches people to ignore the real ones. */
+input:is(:required, [pattern], [minlength], [type="email"], [type="url"], [type="number"]):user-valid,
+select:required:user-valid,
+textarea:is(:required, [pattern], [minlength]):user-valid {
+  border-color: var(--ok, #5ae8a2);
+}
+form:has(:user-invalid) { border-color: var(--bad, #e8695a); }
+form:has(:user-valid):not(:has(:user-invalid)) { border-color: var(--ok, #5ae8a2); }
+
+/* DIMMED, NOT DISABLED. The reel used pointer-events:none, which stops the
+   click and nothing else -- the browser already refuses to submit an invalid
+   form, and when it does it points at the bad field and says what is wrong.
+   Swallowing the click throws that away and leaves somebody pressing a dead
+   button with no explanation, while a keyboard user can still submit with
+   Enter. Dimming says "not ready"; the browser still says why. */
+form:has(:user-invalid) button[type="submit"] { opacity: .55; }
+
+/* --- the OS setting, respected ---------------------------------------------
+   A 1.2s infinite sweep across every card is the pattern that triggers
+   vestibular symptoms. Everything still renders; only the motion goes. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+    scroll-behavior: auto !important;
+  }
+  .sk { animation: none; background: var(--line, #2a2a2a); }
+}

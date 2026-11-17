@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#20242a">
+<meta name="robots" content="noindex">
+<title>{{ who }}&rsquo;s page</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600&family=Lato:wght@400;700;900&display=swap">
+<style>
+/* ---------------------------------------------------------------------------
+   COOKING -- the working surface, not the sunny room.
+
+   DELIBERATELY NOT "kitchen". That theme is bright, warm and gentle, built
+   for Mom, with big friendly text. This is the other half of the same
+   subject: dark slate worktop, a board, the tools out, service-station
+   lighting. Same world, opposite mood -- which is the only reason it is worth
+   having both rather than two shades of the same page.
+
+   The condensed face is the vernacular: menu boards, specials, the side of a
+   chalkboard. The steam is two blurred plumes on long, offset, easing cycles
+   so they never visibly repeat together.
+--------------------------------------------------------------------------- */
+:root{
+  --slate:#20242a; --slate2:#171a1f; --board:#8a5f38; --board2:#6f4a2a;
+  --steel:#c9ced6; --ink:#eef1f4; --muted:#9aa3ad; --flame:#e2703a; --herb:#7fb069;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  min-height:100vh;
+  background:
+    radial-gradient(120% 70% at 50% -10%,rgba(255,214,170,.10) 0%,transparent 55%),
+    repeating-linear-gradient(115deg,transparent 0 6px,rgba(255,255,255,.012) 6px 7px),
+    linear-gradient(#22262d,#15181c);
+  color:var(--ink);
+  font:400 17px/1.62 Lato,system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased;
+  position:relative;overflow-x:hidden;
+}
+
+/* --- steam ---------------------------------------------------------------- */
+.steam{position:fixed;top:-60px;left:50%;transform:translateX(-50%);z-index:0;pointer-events:none;
+  width:min(560px,88vw);height:280px;opacity:.5}
+.steam span{
+  position:absolute;bottom:0;width:70px;height:170px;border-radius:50%;
+  background:radial-gradient(circle at 50% 80%,rgba(255,255,255,.32),transparent 68%);
+  filter:blur(16px);
+}
+.steam span:nth-child(1){left:26%;animation:rise 11s ease-in-out infinite}
+.steam span:nth-child(2){left:47%;animation:rise 13.5s ease-in-out -4s infinite}
+.steam span:nth-child(3){left:66%;animation:rise 12.5s ease-in-out -8s infinite}
+@keyframes rise{
+  0%,100%{transform:translateY(18px) scaleX(.9);opacity:.30}
+  50%    {transform:translateY(-26px) scaleX(1.12);opacity:.62}
+}
+
+.wrap{position:relative;z-index:1;max-width:1060px;margin:0 auto;padding:clamp(28px,5vw,66px) 22px 40px}
+
+header{text-align:center;margin-bottom:clamp(26px,5vw,50px)}
+.service{
+  display:inline-flex;align-items:center;gap:9px;
+  font:500 11px/1 Oswald,sans-serif;letter-spacing:.24em;text-transform:uppercase;color:var(--flame);
+  border:1px solid rgba(226,112,58,.4);border-radius:2px;padding:8px 14px;margin-bottom:18px;
+  background:rgba(226,112,58,.07);
+}
+.service::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--flame);
+  box-shadow:0 0 9px var(--flame)}
+h1{
+  font:600 clamp(34px,7.4vw,64px)/1.02 Oswald,sans-serif;
+  letter-spacing:.008em;text-transform:uppercase;margin:0 0 10px;color:#fff;text-wrap:balance;
+}
+.lede{margin:0 auto;max-width:52ch;color:var(--muted);font-size:clamp(15px,2vw,18px)}
+/* The knife rule: a thin steel line with a bevel, under the title. */
+.rule{width:132px;height:3px;margin:16px auto 0;border-radius:2px;
+  background:linear-gradient(90deg,transparent,var(--steel),transparent)}
+
+/* --- cards as chopping boards --------------------------------------------- */
+nav{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:16px;margin-top:clamp(24px,4vw,44px)}
+.card{
+  --accent:#e2703a;
+  display:block;text-decoration:none;color:inherit;
+  background:
+    repeating-linear-gradient(97deg,transparent 0 13px,rgba(0,0,0,.055) 13px 14px),
+    linear-gradient(#2a2f36,#1e2228);
+  border:1px solid rgba(201,206,214,.13);
+  border-left:3px solid var(--accent);
+  border-radius:4px;
+  padding:20px 20px 17px;
+  box-shadow:0 10px 24px rgba(0,0,0,.38);
+  transition:transform .16s ease,box-shadow .16s ease,border-color .16s ease;
+}
+.card:hover,.card:focus-visible{transform:translateY(-3px);
+  box-shadow:0 16px 32px rgba(0,0,0,.5);border-color:rgba(201,206,214,.3);outline:none}
+.card:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.ico{display:inline-flex;width:37px;height:37px;align-items:center;justify-content:center;
+  border-radius:3px;background:rgba(201,206,214,.08);border:1px solid rgba(201,206,214,.16);margin-bottom:12px}
+.ico svg{width:20px;height:20px;fill:none;stroke:var(--accent);stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.sub{margin:0 0 4px;font:500 10px/1 Oswald,sans-serif;letter-spacing:.22em;text-transform:uppercase;color:var(--herb)}
+.card h2{margin:0 0 7px;font:500 22px/1.15 Oswald,sans-serif;letter-spacing:.01em;color:#fff}
+.card p{margin:0;color:var(--muted);font-size:14.5px;line-height:1.55}
+.go{display:inline-flex;align-items:center;gap:6px;margin-top:13px;
+  font:500 11px/1 Oswald,sans-serif;letter-spacing:.18em;text-transform:uppercase;color:var(--accent)}
+.go svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;
+  transition:transform .16s ease}
+.card:hover .go svg{transform:translateX(4px)}
+
+footer{margin-top:clamp(34px,6vw,62px);text-align:center;font-size:13px;color:var(--muted);
+  border-top:1px solid rgba(201,206,214,.12);padding-top:20px}
+footer a{color:var(--steel);text-decoration:none;border-bottom:1px solid rgba(201,206,214,.3)}
+footer a:hover{color:#fff}
+
+@media (prefers-reduced-motion:reduce){.steam span{animation:none}.card{transition:none}}
+
+/* Somebody whose account has been created but not yet given anything. A blank
+   page would read as broken; this says the sign-in worked and what to do next.
+   Neutral greys with alpha, so the one rule sits correctly on the light themes
+   and the dark ones alike. */
+.nothing{max-width:56ch;margin:0 auto;padding:20px 22px;border-radius:4px;
+  border:1px solid rgba(128,128,128,.35);background:rgba(128,128,128,.10);
+  font-size:15px;line-height:1.65}
+.nothing strong{display:block;margin-bottom:6px}
+{% include "_effects.html" %}
+
+/* --- applying the effects (2026-09-07) -------------------------------------
+   The classes existed and nothing wore them, so the page looked unchanged.
+   These three lines are what make the difference visible. */
+
+/* The entrance, staggered by --i. Capped in the template at 10: past that a
+   stagger stops reading as choreography and starts reading as a slow page. */
+.card.enter { animation-delay: calc(var(--i, 0) * 45ms); }
+
+/* The glow needs somewhere to sit above the card's own background. */
+.card.lit { isolation: isolate; }
+</style>
+</head>
+<body>
+
+<div class="steam" aria-hidden="true"><span></span><span></span><span></span></div>
+
+<div class="wrap">
+  <header>
+    <span class="service">Service is on</span>
+    <h1>{{ who }}&rsquo;s pass</h1>
+    <p class="lede">Everything of yours, laid out and ready to go.</p>
+    <div class="rule"></div>
+  </header>
+
+  {% if sections.is_empty() %}
+  <div class="nothing">
+    <strong>Nothing has been shared with you yet.</strong>
+    Your sign-in works, so the account is real &mdash; it just has not been
+    given anything to open. Ask Jason to add something to it.
+  </div>
+  {% else %}
+  <nav>
+    {% include "_search.html" %}
+    {% for s in sections %}
+    <a class="card enter{% if s.href == "/ability/" %} lit{% endif %}" href="{{ s.href }}" style="--accent:{{ s.accent }};--i:{{ loop.index0 }}">
+      <span class="ico" aria-hidden="true">
+        <svg viewBox="0 0 24 24">{{ s.icon|safe }}</svg>
+      </span>
+      <p class="sub">{{ s.sub }}</p>
+      <h2>{{ s.name }}</h2>
+      <p>{{ s.desc }}</p>
+      <span class="go">Open
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg>
+      </span>
+    </a>
+    {% endfor %}
+  </nav>
+  {% endif %}
+
+  <footer>
+    <a href="/looks">Change look</a> &middot; <a href="/auth/logout">Sign out</a> &middot; &copy; {{ year }}
+  </footer>
+</div>
+<script>
+/* Entrance animations run once per device, then stop.
+   Jason, 2026-09-07: "turn off animations after the person logs in."
+
+   localStorage, not a session flag: he means the daily user, and a session
+   flag replays the whole entrance every morning -- the thing being removed.
+
+   Set BEFORE first paint and wrapped in try/catch: a private window throws on
+   storage access, and an exception here would leave the class unset and the
+   animation running forever for that person -- invisible in testing,
+   permanent for them. Animating is the safe default when storage is gone. */
+(function () {
+  try {
+    if (localStorage.getItem('seen-entrance')) {
+      document.documentElement.classList.add('pre-seen');
+    } else { localStorage.setItem('seen-entrance', '1'); }
+  } catch (e) {}
+  document.addEventListener('DOMContentLoaded', function () {
+    var t = document.querySelectorAll('.tally[style*="--n"]');
+    if (!t.length || !window.IntersectionObserver) return;
+    /* Count-ups start only once visible, so a number below the fold has not
+       already finished counting by the time it is scrolled to. */
+    var io = new IntersectionObserver(function (es) {
+      es.forEach(function (e) {
+        if (e.isIntersecting) { e.target.classList.add('run'); io.unobserve(e.target); }
+      });
+    }, { threshold: 0.4 });
+    t.forEach(function (el) { io.observe(el); });
+  });
+})();
+</script>
+</body>
+</html>

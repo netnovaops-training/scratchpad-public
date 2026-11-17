@@ -1,0 +1,9 @@
+- resources:
+    label: SuperNova
+    cpu: true
+    memory: true
+    disk: /
+- datetime:
+    format:
+      dateStyle: long
+      timeStyle: short

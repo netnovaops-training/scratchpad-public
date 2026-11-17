@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#070a18">
+<meta name="robots" content="noindex, nofollow">
+<title>Your passkeys</title>
+<link rel="stylesheet" href="static/auth.css">
+</head>
+<body>
+{% include "sky.html" %}
+<main>
+  <div class="brand"><div class="mark" aria-hidden="true"></div><b>ULTRANOVA</b></div>
+  <div class="card">
+    <div>
+      <h1>Your passkeys</h1>
+      <p class="sub">Signed in as <b>{{ email }}</b></p>
+    </div>
+
+    {% if !enabled %}
+      <p class="note bad">Passkeys are switched off on this site. Your password still works.</p>
+    {% else if problem %}
+      <p class="note bad">The passkey list looks damaged, so it can't be shown or changed.
+        Your password still works. Tell Jason.</p>
+    {% else %}
+      <p class="sub">A passkey lets you sign in with your fingerprint or face.
+        {% if !passkey_only %}Your password keeps working too.{% endif %}</p>
+      {% if !guest_note.is_empty() %}<p class="note">{{ guest_note }}</p>{% endif %}
+
+      {% if keys.is_empty() %}
+        <p class="sub">You have no passkeys yet.</p>
+      {% else %}
+      <ul class="list">
+        {% for k in keys %}
+        <li>
+          <div><b>{{ k.name }}</b>{% if !k.loaner.is_empty() %} <span class="pill temp">{{ k.loaner }}</span>{% endif %}
+            <small>Added {{ k.added }} &middot; last used {{ k.last }}</small></div>
+          <div class="row">
+            <button type="button" class="small" data-keep="{{ k.id }}" title="Lost another device? Keep only this passkey and remove the rest.">Keep only this</button>
+            {% if can_remove %}<button type="button" class="small" data-remove="{{ k.id }}">Remove</button>{% endif %}
+          </div>
+        </li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+
+      <form id="pk-add" class="stack">
+        <h2>Add a passkey</h2>
+        <p class="fine">It will be saved as &ldquo;{{ next_name }}&rdquo;.</p>
+        <div><label for="d">How long should it last?</label>
+          <select id="d" name="days">
+            <option value="0" selected>Keep it (my own device)</option>
+            <option value="1">A loaner: 1 day</option>
+            <option value="7">A loaner: 7 days</option>
+            <option value="30">A loaner: 30 days</option>
+          </select></div>
+        <div><label for="p">Your password (to show it's you)</label>
+          <input id="p" name="password" type="password" autocomplete="current-password" required></div>
+        <button class="btn main wide" type="submit">Add a passkey</button>
+      </form>
+
+      <div class="stack">
+        <h2>Passkey-only</h2>
+        {% if passkey_only %}
+          <p class="sub">Password sign-in is <b>off</b> for your account. If you ever lose
+            your passkeys, use &ldquo;Lost your passkey device?&rdquo; on the sign-in page to get a link by email.</p>
+          <button type="button" id="pk-only-off">Turn password sign-in back on</button>
+        {% else %}
+          <p class="sub">Switch the password off for your account once you trust your passkeys.
+            It needs at least two lasting passkeys (loaners don't count).</p>
+          <button type="button" id="pk-only-on" {% if !can_enable_only %}disabled{% endif %}>Turn password sign-in off</button>
+        {% endif %}
+      </div>
+
+      {% if !keys.is_empty() %}
+      <div class="stack">
+        <h2>Lost a device?</h2>
+        <p class="sub">Press &ldquo;Keep only this&rdquo; beside the passkey you are using
+          now to remove all the others, or remove every passkey and add a new one from the
+          emailed link. Everything signed in is signed out either way.</p>
+        <button type="button" id="pk-lost-all">Remove all my passkeys</button>
+      </div>
+      {% endif %}
+    {% endif %}
+
+    <p id="pk-msg" class="note" style="display:none"></p>
+    <p class="fine"><a href="./">Back</a> &middot; <a href="change">Change password</a>
+      {% if is_owner %} &middot; <a href="owner">Owner tools</a>{% endif %}</p>
+  </div>
+</main>
+<script src="passkey/passkey.js" defer></script>
+</body>
+</html>

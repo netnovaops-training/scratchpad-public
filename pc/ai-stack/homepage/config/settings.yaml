@@ -1,0 +1,15 @@
+# The one wall. Everything at a glance; every deep tool one click away.
+title: The House
+headerStyle: boxed
+theme: dark
+color: slate
+layout:
+  Health:
+    style: row
+    columns: 3
+  The stack:
+    style: row
+    columns: 4
+  Deep tools:
+    style: row
+    columns: 4

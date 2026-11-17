@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0e1220">
+<meta name="robots" content="noindex">
+<title>Choose a look</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700&display=swap">
+<style>
+/* ===========================================================================
+   CHOOSE A LOOK — self-service.
+
+   NEUTRAL ON PURPOSE. This page wears none of the themes, because it is where
+   you compare them; dressing it in one would put a thumb on the scale. Each
+   option shows a real swatch of its own colours instead, so the choice is
+   made by looking rather than by reading a name.
+
+   GROUPED, because fifteen options in one list is a list nobody reads to the
+   bottom of.
+
+   THIS CHANGES APPEARANCE ONLY. It is stored in a different file from the
+   permissions, written by a different service, and the page says so -- a
+   control that looks like it might change access, and does not, is a control
+   people are afraid to touch.
+   =========================================================================== */
+
+:root {
+  --bg: #0e1220; --panel: #161c2e; --panel-2: #1c2439;
+  --edge: #26304a; --text: #e8ecf5; --text-2: #a3aec6; --text-3: #6f7c99;
+  --signal: #ffb347; --good: #5fd0a0;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font: 16.5px/1.65 Nunito, ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.wrap { max-width: 900px; margin: 0 auto; padding: clamp(2rem,6vw,3.5rem) 1.25rem 5rem; }
+
+header { margin-bottom: 2rem; }
+h1 { font-size: clamp(1.7rem,5vw,2.3rem); font-weight: 700; margin: 0 0 .5rem; letter-spacing: -.02em; }
+header p { margin: 0; color: var(--text-2); max-width: 46rem; }
+.back { display: inline-block; margin-top: 1rem; color: var(--signal); font-weight: 700; text-decoration: none; }
+.back:hover { text-decoration: underline; }
+
+.flash {
+  margin: 0 0 1.5rem; padding: .8rem 1rem; border-radius: 10px;
+  background: rgba(95,208,160,.1); border: 1px solid rgba(95,208,160,.28);
+  color: var(--good); font-weight: 600;
+}
+
+h2 {
+  font-size: .78rem; font-weight: 700; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--text-3); margin: 2rem 0 .8rem; padding-bottom: .45rem;
+  border-bottom: 1px solid var(--edge);
+}
+h2:first-of-type { margin-top: 0; }
+
+.opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: .8rem; }
+
+.opt { position: relative; }
+.opt input { position: absolute; opacity: 0; width: 0; height: 0; }
+.opt label {
+  display: block; cursor: pointer;
+  background: var(--panel); border: 2px solid var(--edge);
+  border-radius: 13px; overflow: hidden;
+  transition: transform .16s ease, border-color .16s ease;
+}
+.opt label:hover { transform: translateY(-3px); border-color: var(--text-3); }
+.opt input:checked + label { border-color: var(--signal); }
+.opt input:focus-visible + label { outline: 3px solid var(--signal); outline-offset: 3px; }
+
+/* A real swatch of the theme's own colours -- the point of the page. */
+.sw { height: 58px; display: block; }
+
+.opt .meta { padding: .7rem .85rem .8rem; }
+.opt .name { font-weight: 700; font-size: 1rem; display: flex; align-items: center; gap: .4rem; }
+.opt input:checked + label .name::after {
+  content: "current"; font-size: .64rem; font-weight: 700; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--signal);
+  border: 1px solid var(--signal); border-radius: 4px; padding: .05rem .3rem;
+}
+.opt .blurb { color: var(--text-2); font-size: .85rem; line-height: 1.45; margin-top: .2rem; }
+
+.actions { margin-top: 2rem; display: flex; gap: .8rem; align-items: center; flex-wrap: wrap; }
+button {
+  background: var(--signal); color: #23180a; border: 0;
+  padding: .7rem 1.5rem; border-radius: 9px; font: inherit; font-weight: 700; cursor: pointer;
+}
+button:hover { filter: brightness(1.08); }
+button:focus-visible { outline: 3px solid var(--text); outline-offset: 3px; }
+.note { color: var(--text-3); font-size: .88rem; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Choose a look</h1>
+    <p>
+      This changes how your own start page looks and nothing else. It does not
+      affect what you can open, and nobody else sees your choice.
+    </p>
+    <a class="back" href="/home">&larr; Back to your page</a>
+  </header>
+
+  {% if saved %}
+  <div class="flash">Saved. Your page looks like that now.</div>
+  {% endif %}
+
+  <form method="post" action="/looks">
+    {% for group in groups %}
+    <h2>{{ group.name }}</h2>
+    <div class="opts">
+      {% for t in group.themes %}
+      <div class="opt">
+        <input type="radio" name="theme" id="t-{{ t.id }}" value="{{ t.key }}"
+               {% if t.current %}checked{% endif %}>
+        <label for="t-{{ t.id }}">
+          <span class="sw" style="background:{{ t.swatch }}"></span>
+          <span class="meta">
+            <span class="name">{{ t.label }}</span>
+            <span class="blurb">{{ t.blurb }}</span>
+          </span>
+        </label>
+      </div>
+      {% endfor %}
+    </div>
+    {% endfor %}
+
+    <div class="actions">
+      <button type="submit">Save my look</button>
+      <span class="note">Appearance only &mdash; never access.</span>
+    </div>
+  </form>
+</div>
+</body>
+</html>

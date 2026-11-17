@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#070a18">
+<meta name="robots" content="noindex, nofollow">
+<title>Sign in</title>
+<link rel="stylesheet" href="static/auth.css">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+<style>body{font-family:'Inter',system-ui,sans-serif}</style>
+{% if passkeys %}
+<!-- Marks the page "cine" BEFORE it is first drawn when this browser has the
+     'pk-here' note (a passkey was used or added on this device), so the fade-in
+     does not flash. The page script sets the same class if this cannot run. -->
+<script>try{if(localStorage.getItem('pk-here')==='1')document.documentElement.className+=' cine'}catch(e){}</script>
+{% endif %}
+</head>
+<body class="centered">
+{% include "sky.html" %}
+<main>
+  <div class="brand"><div class="mark" aria-hidden="true"></div><b>ULTRANOVA</b></div>
+
+  <form class="card" method="post" action="signin">
+    <div class="float-orb" aria-hidden="true"></div>
+    <div>
+      <h1>Welcome back</h1>
+      {% if passkeys %}<p class="sub">Your device may ask for your fingerprint or face.</p>{% endif %}
+    </div>
+    {% if !error.is_empty() %}<p class="note bad">{{ error }}</p>{% endif %}
+
+    {% if passkeys %}
+    <!-- The passkey control: a round button with a short looping clip inside.
+         It stays hidden until the script knows the browser supports passkeys.
+         The clip is only fetched when the person has not asked for reduced
+         motion or data saving; without it the CSS glow shows, and the button
+         works either way. Placed high in the card so it stays visible above the
+         phone's own passkey sheet. -->
+    <div class="orbwrap" id="pk-orbwrap" style="display:none">
+      <button id="pk-btn" class="orb" type="button" aria-label="Sign in with your passkey">
+        <!-- Layers, bottom to top: the glow, the sheen (a little larger than the
+             orb, for the one-time light sweep), then the video on top, unobscured. -->
+        <span class="orb-glow" aria-hidden="true"></span>
+        <span class="orb-sheen" aria-hidden="true"></span>
+        <video class="orb-video" id="bgvideo" muted loop autoplay playsinline preload="none"
+               aria-hidden="true" tabindex="-1" data-src="static/passkey-orb.v1.mp4"
+               style="display:none"></video>
+      </button>
+      <p class="orb-label">Tap to sign in with your passkey</p>
+    </div>
+    <p id="pk-msg" class="note" style="display:none"></p>
+    {% endif %}
+
+    <div>
+      <label for="e">Email</label>
+      <!-- Kept across a failed attempt, so a mistyped password does not mean
+           retyping the address. -->
+      <input id="e" name="email" type="email" inputmode="email" autocomplete="username webauthn"
+             autocapitalize="off" autocorrect="off" spellcheck="false" value="{{ email }}" required
+             {% if email.is_empty() %}autofocus{% endif %}>
+    </div>
+    <div>
+      <label for="p">Password</label>
+      <input id="p" name="password" type="password" autocomplete="current-password" required
+             {% if !email.is_empty() %}autofocus{% endif %}>
+    </div>
+    <input type="hidden" name="next" value="{{ next }}">
+    <button class="btn main wide" type="submit">Sign in</button>
+    <p class="fine">
+      <a href="forgot?next={{ next_q }}">Forgotten your password?</a>
+      {% if passkeys %} &middot; <a href="recover">Lost your passkey device?</a>{% endif %}
+    </p>
+  </form>
+</main>
+<script src="passkey/passkey.js" defer></script>
+</body>
+</html>

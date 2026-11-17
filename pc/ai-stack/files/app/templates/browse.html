@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}{{ tree.label }} — {{ site_name }}{% endblock %}
+{% block body %}
+<h1>{{ tree.label }}</h1>
+<p class="small">
+  <a class="crumb" href="{{ root }}/browse/{{ tree.key }}">top</a>
+  {%- for c in crumbs %} / <a class="crumb" href="{{ root }}/browse/{{ tree.key }}?path={{ c.rel|urlencode }}">{{ c.name }}</a>{% endfor %}
+</p>
+
+{% if not dirs and not files %}
+  <p class="muted">This folder is empty.</p>
+{% endif %}
+
+{% if dirs %}
+<table>
+  <tr><th>Folder</th><th class="num">Items</th></tr>
+  {% for d in dirs %}
+  <tr>
+    <td><a href="{{ root }}/browse/{{ tree.key }}?path={{ d.rel|urlencode }}">{{ d.name }}/</a></td>
+    <td class="num">{{ d.count }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
+
+{% if files %}
+<table style="margin-top:1rem">
+  <tr><th>File</th><th class="num">Size</th><th class="num">Changed</th></tr>
+  {% for f in files %}
+  <tr>
+    <td><a href="{{ root }}/get/{{ tree.key }}?path={{ f.rel|urlencode }}">{{ f.name }}</a></td>
+    <td class="num">{{ human(f.size) }}</td>
+    <td class="num small muted">{{ f.mtime|int|datetimeformat }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
+{% endblock %}

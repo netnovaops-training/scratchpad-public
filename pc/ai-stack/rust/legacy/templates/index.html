@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0d0a12">
+<meta name="robots" content="noindex, nofollow, noarchive, noimageindex">
+<title>{{ title }}</title>
+<style>
+:root{--bg:#0d0a12;--ink:#f2ecf0;--muted:#a08fa0;--line:rgba(217,138,176,.22);--accent:#d98ab0}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+     font:16px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif;padding:32px 20px 48px}
+.wrap{max-width:880px;margin:0 auto}
+header{display:flex;justify-content:space-between;align-items:baseline;gap:14px;flex-wrap:wrap}
+h1{margin:0;font-size:1.5rem;font-weight:600;letter-spacing:-.01em}
+.out{border:0;background:none;color:var(--muted);font-size:.8rem;cursor:pointer;text-decoration:underline;padding:0}
+.out:hover{color:var(--ink)}
+p.intro{margin:.6rem 0 30px;color:var(--muted);font-size:.92rem;max-width:56ch}
+.grid{display:grid;gap:16px;grid-template-columns:repeat(auto-fill,minmax(240px,1fr))}
+a.album{display:block;text-decoration:none;color:inherit;border:1px solid var(--line);
+  border-radius:14px;padding:22px;background:rgba(255,255,255,.025);
+  transition:border-color .18s ease,transform .18s ease,background .18s ease}
+a.album:hover,a.album:focus-visible{border-color:var(--accent);transform:translateY(-2px);
+  background:rgba(255,255,255,.05);outline:none}
+h2{margin:0 0 .3rem;font-size:1.05rem;font-weight:600}
+.note{margin:0;color:var(--muted);font-size:.84rem}
+.count{margin-top:.8rem;font-size:.76rem;color:var(--accent);letter-spacing:.04em}
+.empty{border:1px dashed var(--line);border-radius:14px;padding:28px;color:var(--muted);
+  font-size:.88rem;text-align:center}
+footer{margin-top:36px;color:var(--muted);font-size:.72rem;text-align:center;line-height:1.8}
+@media (prefers-reduced-motion:reduce){a.album{transition:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>{{ title }}</h1>
+    <form method="post" action="logout"><button class="out" type="submit">Sign out</button></form>
+  </header>
+  {% if !intro.is_empty() %}<p class="intro">{{ intro }}</p>{% endif %}
+
+  {% if albums.is_empty() %}
+    <p class="empty">No albums published yet.</p>
+  {% else %}
+    <div class="grid">
+      {% for a in albums %}
+      <a class="album" href="a/{{ a.id }}">
+        <h2>{{ a.title }}</h2>
+        {% if !a.note.is_empty() %}<p class="note">{{ a.note }}</p>{% endif %}
+        <div class="count">{{ a.count }} photo{% if a.count != 1 %}s{% endif %}</div>
+      </a>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  <footer>Private &middot; not indexed &middot; please don't share the link<br>&copy; {{ year }}</footer>
+</div>
+</body>
+</html>

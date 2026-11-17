@@ -1,0 +1,20 @@
+# Public copy of the Scratchpad (2026-11-17). Real config and secrets never live here.
+__pycache__/
+target/
+# Environment files: the real ones hold Proton Pass references and stay on the machines.
+.env
+*.env
+!*.env.example
+secrets.env
+# Generated scan reports
+SECRETS-FOUND.md
+*.sarif
+findings-*.json
+# Media
+*.pdf
+*.mp4
+*.mp3
+*.jpg
+*.jpeg
+*.png
+*.heic

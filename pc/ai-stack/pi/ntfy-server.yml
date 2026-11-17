@@ -1,0 +1,70 @@
+# ntfy on the Pi -- how the house reaches Jason's phone.
+#
+# Jason, 2026-09-11, picking what the Pi should take on next.
+#
+# WHAT THIS IS ACTUALLY FOR. The Uptime Kuma instance next to it watches
+# the public URLs from outside both machines it monitors -- which was the
+# whole point, after haproxy-relay exited during a reboot on 2026-09-10
+# and took every public site down for hours while every internal check
+# stayed green.
+#
+# But a watchdog that can only be READ is not a watchdog. Its dashboard is
+# served through the PC's Caddy, so the outage it exists to catch is
+# exactly the outage that hides the page telling you about it. It has to
+# PUSH, to a device that is not in the house, over a path that does not go
+# through the thing that broke.
+#
+# THIS IS WHY IT LIVES ON THE PI AND NOT THE NUC. Same reasoning as the
+# watchdog itself: the alerter must not share a failure domain with the
+# things it alerts about. Kuma on the Pi noticing the NUC is down, and
+# then being unable to tell anyone because the notifier was on the NUC,
+# would be the same mistake twice.
+#
+# ---------------------------------------------------------------------------
+# auth-default-access: deny-all IS THE ONE LINE THAT MATTERS.
+#
+# ntfy's default is anonymous read AND write on every topic. Published on a
+# public hostname with that default, anyone who guesses or observes a topic
+# name can read every alert this house generates -- and, worse, publish to
+# it. Fake "all clear" notifications are a more interesting attack than
+# fake alarms.
+#
+# deny-all inverts that: nothing is permitted until a user is granted it
+# explicitly. Topics are then handed out per purpose, not shared.
+#
+# AND IT IS NOT BEHIND forward_auth, DELIBERATELY. Every other site on this
+# stack sits behind the household SSO gate. This one cannot: the ntfy phone
+# app holds a long-lived subscription and speaks tokens, not browser
+# session cookies, so a gate that redirects to a login page breaks it in a
+# way that looks like "notifications just stopped". ntfy's own token auth
+# is doing the job here instead, which is why the line above is not
+# optional.
+# ---------------------------------------------------------------------------
+
+base-url: https://push.home.example.net
+listen-http: ":80"
+
+# behind-proxy makes ntfy trust X-Forwarded-For for rate limiting. Caddy is
+# the only thing that can reach it (the container binds to the Pi's LAN
+# address), so the header cannot be forged from outside.
+behind-proxy: true
+
+auth-file: /var/lib/ntfy/user.db
+auth-default-access: deny-all
+
+cache-file: /var/lib/ntfy/cache.db
+# Twelve hours of history is enough to see what happened overnight without
+# the database growing on an SD card that is already the weak point on this
+# machine. See pi-sdcard-guard.sh.
+cache-duration: "12h"
+
+attachment-cache-dir: /var/cache/ntfy/attachments
+attachment-total-size-limit: "200M"
+attachment-file-size-limit: "15M"
+attachment-expiry-duration: "12h"
+
+enable-signup: false
+enable-login: true
+upstream-base-url: "https://ntfy.sh"
+
+log-level: info

@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#8ecae6">
+<meta name="robots" content="noindex">
+<title>{{ who }}&rsquo;s page</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@400;600;700&display=swap">
+<style>
+/* ===========================================================================
+   MOM'S PAGE
+
+   DELIBERATELY NOT THE HOUSE STYLE. Every other page here is near-black with
+   a thin blue accent. This one is a sunny morning, because Jason asked for
+   bright and happy and because the person who opens it should feel like it
+   was made for her rather than issued to her.
+
+   The two things on it are the two things she does: cooking and driving. So
+   the scene at the top is a pot on the boil and a car on the road, not a
+   generic hero with a gradient.
+
+   BUILT FOR OLDER EYES, and that is a constraint, not a nicety. Body text is
+   18px and never grey-on-grey; touch targets are large; the accent colours
+   are used behind dark text rather than as text. Nothing important is
+   conveyed by colour alone.
+
+   THE ANIMATION RESPECTS prefers-reduced-motion. Everything that moves stops
+   under that setting, and the page still reads as finished with all of it
+   switched off -- the car simply parks.
+   =========================================================================== */
+
+:root {
+  --sky-top:   #8ecae6;
+  --sky-low:   #ffe8c9;
+  --sun:       #ffc94a;
+  --tomato:    #e8604c;
+  --basil:     #5fa777;
+  --road:      #6b7280;
+  --grass:     #86c06c;
+  --ink:       #2c2016;
+  --ink-soft:  #5c4a3a;
+  --card:      #fffdf8;
+  --card-edge: #f0e2cd;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100%;
+  background: linear-gradient(180deg, var(--sky-top) 0%, #bfe3f2 38%, var(--sky-low) 100%);
+  background-attachment: fixed;
+  color: var(--ink);
+  font: 18px/1.65 Nunito, ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.wrap { max-width: 900px; margin: 0 auto; padding: 1.5rem 1.25rem 3rem; }
+
+/* --- The scene: a pot on the boil, and the road out ------------------------ */
+.scene {
+  position: relative;
+  height: 210px;
+  margin: 0 -1.25rem 1.5rem;
+  overflow: hidden;
+}
+.scene svg { width: 100%; height: 100%; display: block; }
+
+/* Clouds drift right to left, slowly, at two speeds so it does not read as
+   one sheet sliding past. */
+@keyframes drift { from { transform: translateX(0); } to { transform: translateX(-560px); } }
+.cloud-a { animation: drift 48s linear infinite; }
+.cloud-b { animation: drift 74s linear infinite; }
+
+/* The car crosses, pauses off-screen, comes back. A loop with a rest in it
+   feels like a road; a constant conveyor belt does not. */
+@keyframes drive {
+  0%   { transform: translateX(-140px); }
+  55%  { transform: translateX(760px); }
+  100% { transform: translateX(760px); }
+}
+.car { animation: drive 14s ease-in-out infinite; }
+
+/* Steam: three wisps, offset, rising and fading. */
+@keyframes steam {
+  0%   { transform: translateY(0) scaleX(1);   opacity: 0; }
+  22%  { opacity: .75; }
+  100% { transform: translateY(-34px) scaleX(1.5); opacity: 0; }
+}
+.wisp   { animation: steam 3.4s ease-out infinite; transform-origin: center bottom; }
+.wisp-2 { animation-delay: 1.1s; }
+.wisp-3 { animation-delay: 2.2s; }
+
+/* The sun turns very slowly. Almost subliminal; it just keeps the sky alive. */
+@keyframes spin { to { transform: rotate(360deg); } }
+.rays { animation: spin 90s linear infinite; transform-origin: 62px 46px; }
+
+/* --- Greeting ------------------------------------------------------------- */
+header { text-align: center; margin-bottom: 2rem; }
+h1 {
+  font-family: Fredoka, Nunito, sans-serif;
+  font-weight: 700;
+  font-size: clamp(2rem, 7vw, 3rem);
+  margin: 0 0 .4rem;
+  color: var(--ink);
+  letter-spacing: -.01em;
+}
+h1 .name { color: var(--tomato); text-transform: capitalize; }
+header p {
+  margin: 0 auto;
+  max-width: 30rem;
+  color: var(--ink-soft);
+  font-size: 1.05rem;
+}
+
+/* --- The four cards ------------------------------------------------------- */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1.15rem;
+}
+
+.card {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+  background: var(--card);
+  border: 2px solid var(--card-edge);
+  border-left: 9px solid var(--accent, var(--tomato));
+  border-radius: 18px;
+  padding: 1.4rem 1.4rem 1.25rem;
+  box-shadow: 0 3px 0 rgba(44,32,22,.07), 0 12px 24px -14px rgba(44,32,22,.35);
+  transition: transform .18s ease, box-shadow .18s ease;
+}
+.card:hover, .card:focus-visible {
+  transform: translateY(-4px);
+  box-shadow: 0 5px 0 rgba(44,32,22,.09), 0 20px 32px -16px rgba(44,32,22,.42);
+}
+.card:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; }
+
+.card .ico {
+  display: inline-flex;
+  width: 52px; height: 52px;
+  align-items: center; justify-content: center;
+  border-radius: 14px;
+  background: var(--accent, var(--tomato));
+  margin-bottom: .85rem;
+}
+.card .ico svg {
+  width: 27px; height: 27px;
+  stroke: #fff; fill: none; stroke-width: 2;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+.card h2 {
+  font-family: Fredoka, Nunito, sans-serif;
+  font-size: 1.4rem; font-weight: 600;
+  margin: 0 0 .2rem;
+}
+.card .sub {
+  margin: 0 0 .5rem;
+  font-size: .82rem; font-weight: 700;
+  letter-spacing: .09em; text-transform: uppercase;
+  color: var(--ink-soft);
+}
+.card p.desc { margin: 0; color: var(--ink-soft); font-size: 1rem; line-height: 1.55; }
+.card .go {
+  display: inline-block;
+  margin-top: .9rem;
+  font-weight: 700;
+  color: var(--ink);
+  border-bottom: 3px solid var(--accent, var(--tomato));
+  padding-bottom: 1px;
+}
+
+.nothing {
+  background: var(--card); border: 2px dashed var(--card-edge);
+  border-radius: 18px; padding: 2rem; text-align: center; color: var(--ink-soft);
+}
+
+footer {
+  margin-top: 2.5rem; text-align: center;
+  color: var(--ink-soft); font-size: .95rem;
+}
+footer a { color: var(--ink); font-weight: 700; }
+
+@media (prefers-reduced-motion: reduce) {
+  .cloud-a, .cloud-b, .car, .wisp, .rays { animation: none; }
+  .card { transition: none; }
+  /* Parked, not mid-journey: with the animation off the car would otherwise
+     sit at its starting position, which is off the left edge. */
+  .car { transform: translateX(300px); }
+}
+{% include "_effects.html" %}
+
+/* --- applying the effects (2026-09-07) -------------------------------------
+   The classes existed and nothing wore them, so the page looked unchanged.
+   These three lines are what make the difference visible. */
+
+/* The entrance, staggered by --i. Capped in the template at 10: past that a
+   stagger stops reading as choreography and starts reading as a slow page. */
+.card.enter { animation-delay: calc(var(--i, 0) * 45ms); }
+
+/* The glow needs somewhere to sit above the card's own background. */
+.card.lit { isolation: isolate; }
+</style>
+</head>
+<body>
+
+<div class="scene" aria-hidden="true">
+  <svg viewBox="0 0 800 210" preserveAspectRatio="xMidYMax slice">
+    <!-- sun -->
+    <g class="rays">
+      <circle cx="62" cy="46" r="26" fill="#ffc94a"/>
+      <g stroke="#ffc94a" stroke-width="4" stroke-linecap="round" opacity=".55">
+        <line x1="62" y1="4"  x2="62" y2="14"/>
+        <line x1="62" y1="78" x2="62" y2="88"/>
+        <line x1="20" y1="46" x2="30" y2="46"/>
+        <line x1="94" y1="46" x2="104" y2="46"/>
+      </g>
+    </g>
+
+    <!-- clouds -->
+    <g class="cloud-a" fill="#ffffff" opacity=".85">
+      <ellipse cx="240" cy="42" rx="38" ry="17"/>
+      <ellipse cx="272" cy="46" rx="27" ry="13"/>
+      <ellipse cx="760" cy="38" rx="34" ry="15"/>
+    </g>
+    <g class="cloud-b" fill="#ffffff" opacity=".6">
+      <ellipse cx="520" cy="66" rx="30" ry="13"/>
+      <ellipse cx="980" cy="54" rx="40" ry="17"/>
+    </g>
+
+    <!-- hills -->
+    <path d="M0 152 Q 140 116 300 150 T 620 146 T 800 152 V210 H0 Z" fill="#9ed17f"/>
+    <path d="M0 168 Q 200 142 420 170 T 800 166 V210 H0 Z" fill="#86c06c"/>
+
+    <!-- road -->
+    <path d="M0 186 H800 V210 H0 Z" fill="#6b7280"/>
+    <g stroke="#fdf3d8" stroke-width="4" stroke-linecap="round" opacity=".9">
+      <line x1="30"  y1="198" x2="80"  y2="198"/>
+      <line x1="140" y1="198" x2="190" y2="198"/>
+      <line x1="250" y1="198" x2="300" y2="198"/>
+      <line x1="360" y1="198" x2="410" y2="198"/>
+      <line x1="470" y1="198" x2="520" y2="198"/>
+      <line x1="580" y1="198" x2="630" y2="198"/>
+      <line x1="690" y1="198" x2="740" y2="198"/>
+    </g>
+
+    <!-- the car -->
+    <g class="car">
+      <rect x="10" y="168" width="72" height="20" rx="7" fill="#e8604c"/>
+      <path d="M26 168 L34 156 H62 L70 168 Z" fill="#ef8474"/>
+      <circle cx="28" cy="190" r="7" fill="#2c2016"/>
+      <circle cx="66" cy="190" r="7" fill="#2c2016"/>
+      <circle cx="28" cy="190" r="2.6" fill="#9aa2ac"/>
+      <circle cx="66" cy="190" r="2.6" fill="#9aa2ac"/>
+      <rect x="78" y="174" width="6" height="4" rx="2" fill="#ffe27a"/>
+    </g>
+
+    <!-- the pot, on the right, steaming -->
+    <g>
+      <g fill="#ffffff" opacity=".9">
+        <ellipse class="wisp"   cx="694" cy="140" rx="5" ry="8"/>
+        <ellipse class="wisp wisp-2" cx="706" cy="140" rx="4" ry="7"/>
+        <ellipse class="wisp wisp-3" cx="683" cy="140" rx="4" ry="7"/>
+      </g>
+      <rect x="668" y="146" width="54" height="30" rx="6" fill="#5fa777"/>
+      <rect x="662" y="140" width="66" height="9"  rx="4.5" fill="#79c191"/>
+      <rect x="656" y="154" width="8"  height="7"  rx="3" fill="#79c191"/>
+      <rect x="726" y="154" width="8"  height="7"  rx="3" fill="#79c191"/>
+    </g>
+  </svg>
+</div>
+
+<div class="wrap">
+  <header>
+    <h1>Hi <span class="name">{{ who }}</span>!</h1>
+    <p>Everything you need, all in one place. Tap any card to open it.</p>
+  </header>
+
+  {% if sections.is_empty() %}
+  <div class="nothing">
+    Nothing has been set up for you yet. Give Jason a nudge.
+  </div>
+  {% else %}
+  {% include "_search.html" %}
+  <div class="grid">
+    {% for s in sections %}
+    <a class="card enter{% if s.href == "/ability/" %} lit{% endif %}" href="{{ s.href }}" style="--accent:{{ s.accent }};--i:{{ loop.index0 }}">
+      <span class="ico"><svg viewBox="0 0 24 24">{{ s.icon|safe }}</svg></span>
+      <p class="sub">{{ s.sub }}</p>
+      <h2>{{ s.name }}</h2>
+      <p class="desc">{{ s.desc }}</p>
+      <span class="go">Open &rarr;</span>
+    </a>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <footer>
+    <a href="/looks">Change look</a> &middot; <a href="/auth/logout">Sign out</a> &middot; made for you, {{ year }}
+  </footer>
+</div>
+<script>
+/* Entrance animations run once per device, then stop.
+   Jason, 2026-09-07: "turn off animations after the person logs in."
+
+   localStorage, not a session flag: he means the daily user, and a session
+   flag replays the whole entrance every morning -- the thing being removed.
+
+   Set BEFORE first paint and wrapped in try/catch: a private window throws on
+   storage access, and an exception here would leave the class unset and the
+   animation running forever for that person -- invisible in testing,
+   permanent for them. Animating is the safe default when storage is gone. */
+(function () {
+  try {
+    if (localStorage.getItem('seen-entrance')) {
+      document.documentElement.classList.add('pre-seen');
+    } else { localStorage.setItem('seen-entrance', '1'); }
+  } catch (e) {}
+  document.addEventListener('DOMContentLoaded', function () {
+    var t = document.querySelectorAll('.tally[style*="--n"]');
+    if (!t.length || !window.IntersectionObserver) return;
+    /* Count-ups start only once visible, so a number below the fold has not
+       already finished counting by the time it is scrolled to. */
+    var io = new IntersectionObserver(function (es) {
+      es.forEach(function (e) {
+        if (e.isIntersecting) { e.target.classList.add('run'); io.unobserve(e.target); }
+      });
+    }, { threshold: 0.4 });
+    t.forEach(function (el) { io.observe(el); });
+  });
+})();
+</script>
+</body>
+</html>

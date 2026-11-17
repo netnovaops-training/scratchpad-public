@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#050a12">
+<meta name="robots" content="noindex, nofollow">
+<title>admin</title>
+<link rel="stylesheet" href="/theme.css">
+</head>
+<body>
+<div class="wrap">
+  <div class="between">
+    <h1>admin</h1>
+    <form method="post" action="{{ base }}/logout"><button class="link" type="submit">Sign out</button></form>
+  </div>
+  <p class="sub">Pick a site to upload its data. Nothing is rebuilt &mdash; changes are live immediately.</p>
+
+  <div class="grid">
+    <a class="card" href="{{ base }}/people" style="--accent:#7ee8d0">
+      <span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24">
+        <circle cx="9" cy="8" r="3.2"/><path d="M3.5 20a5.5 5.5 0 0 1 11 0"/>
+        <circle cx="17" cy="9.5" r="2.4"/><path d="M15.8 15.2A4.6 4.6 0 0 1 21 19.4"/>
+      </svg></span>
+      <p class="kicker">Sign-in</p>
+      <h2>People</h2>
+      <p class="row" style="gap:.4rem;margin:.6rem 0 0;font-size:.78rem;color:var(--muted)">
+        <span class="dot {% if people > 0 %}on{% endif %}"></span>{{ people }} can sign in{% if people_pending > 0 %}, {{ people_pending }} need a password{% endif %}
+      </p>
+    </a>
+    <a class="card" href="{{ base }}/trials" style="--accent:#e8c87e">
+      <span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24">
+        <rect x="3" y="7" width="18" height="12" rx="2"/>
+        <path d="M8 7V5.5A2.5 2.5 0 0 1 10.5 3h3A2.5 2.5 0 0 1 16 5.5V7"/>
+        <path d="M3 12h18"/>
+      </svg></span>
+      <p class="kicker">Before an account</p>
+      <h2>Trials</h2>
+      <p class="row" style="gap:.4rem;margin:.6rem 0 0;font-size:.78rem;color:var(--muted)">
+        <span class="dot {% if trials_waiting > 0 %}on{% endif %}"></span>
+        {%- if trials_waiting > 0 %}
+          {{ trials_waiting }} waiting to hear back
+        {%- else if trial_codes > 0 %}
+          {{ trial_codes }} code{% if trial_codes != 1 %}s{% endif %}, nobody waiting
+        {%- else %}
+          no codes yet
+        {%- endif %}
+      </p>
+    </a>
+    <a class="card" href="{{ base }}/tables/" style="--accent:#9fb8f0">
+      <span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24">
+        <rect x="3" y="4" width="18" height="16" rx="2"/>
+        <path d="M3 9h18M3 14.5h18M9 4v16M15 4v16"/>
+      </svg></span>
+      <p class="kicker">Tables</p>
+      <h2>Edit as a grid</h2>
+      <p class="row" style="gap:.4rem;margin:.6rem 0 0;font-size:.78rem;color:var(--muted)">
+        See what is in each file. Add and remove rows.
+      </p>
+    </a>
+    {# NOT under {{ base }} — the recipe app lives at /kitchen, outside the
+       admin. It is here because this dashboard is where you come to run the
+       place, and "the recipes" is one of the things you run. The People card
+       above is what controls who can open it: one password, set once, works
+       here and there and everywhere else on this machine. #}
+    <a class="card" href="/kitchen/" style="--accent:#e0705f">
+      <span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24">
+        <path d="M6 13a3.6 3.6 0 1 1 1.5-6.9 4 4 0 0 1 9 0A3.6 3.6 0 1 1 18 13z"/>
+        <path d="M6.4 13v5a2 2 0 0 0 2 2h7.2a2 2 0 0 0 2-2v-5"/>
+        <path d="M6.6 16.4h10.8"/>
+      </svg></span>
+      <p class="kicker">Recipes</p>
+      <h2>The kitchen</h2>
+      <p class="row" style="gap:.4rem;margin:.6rem 0 0;font-size:.78rem;color:var(--muted)">
+        Import a link, write out your own, approve what others suggest.
+      </p>
+    </a>
+    {# STRAIGHT INTO THE LIBRARY, via /kitchen/library rather than at Mealie's
+       own address. That route mints a Mealie session from the address you are
+       already signed in as here, so this lands you inside the library rather
+       than at a second login page. Linking to the port directly would show
+       Mealie's login, which is the thing the hand-off exists to remove. #}
+    <a class="card" href="/kitchen/library" style="--accent:#7aa6d8">
+      <span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24">
+        <path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H11v16H5.5A1.5 1.5 0 0 1 4 18.5z"/>
+        <path d="M20 5.5A1.5 1.5 0 0 0 18.5 4H13v16h5.5a1.5 1.5 0 0 0 1.5-1.5z"/>
+        <path d="M7 8h1.5M7 11h1.5M15.5 8H17M15.5 11H17"/>
+      </svg></span>
+      <p class="kicker">Library</p>
+      <h2>Manage recipes</h2>
+      <p class="row" style="gap:.4rem;margin:.6rem 0 0;font-size:.78rem;color:var(--muted)">
+        Everything kept, in Mealie. Signs you straight in — no second password.
+      </p>
+    </a>
+    <a class="card" href="{{ base }}/pictures" style="--accent:#e8c26a">
+      <span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24">
+        <rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.5"/>
+        <path d="m21 16-5-5-6 6"/>
+      </svg></span>
+      <p class="kicker">Backlog</p>
+      <h2>Pictures</h2>
+      <p class="row" style="gap:.4rem;margin:.6rem 0 0;font-size:.78rem;color:var(--muted)">
+        <span class="dot {% if pictures_missing > 0 %}on{% endif %}"></span>{{ pictures_missing }} still missing, across recipes and guides
+      </p>
+    </a>
+    <a class="card" href="{{ base }}/reparse" style="--accent:#9d7ee8">
+      <span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24">
+        <path d="M3 12a9 9 0 1 1 2.6 6.3"/><path d="M3 21v-6h6"/>
+      </svg></span>
+      <p class="kicker">Library</p>
+      <h2>Re-parse</h2>
+      <p class="row" style="gap:.4rem;margin:.6rem 0 0;font-size:.78rem;color:var(--muted)">
+        Re-read a recipe from its source with Phi-4, one at a time
+      </p>
+    </a>
+    <a class="card" href="{{ base }}/llm-findings" style="--accent:#e85a9a">
+      <span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24">
+        <circle cx="7" cy="7" r="3"/><circle cx="17" cy="17" r="3"/>
+        <path d="M9.5 9.5 14.5 14.5"/>
+      </svg></span>
+      <p class="kicker">Library</p>
+      <h2>LLM findings</h2>
+      <p class="row" style="gap:.4rem;margin:.6rem 0 0;font-size:.78rem;color:var(--muted)">
+        Match every food &amp; tool against every other one, review what it finds
+      </p>
+    </a>
+    <a class="card" href="{{ base }}/items" style="--accent:#7ee8a0">
+      <span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24">
+        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+      </svg></span>
+      <p class="kicker">Library</p>
+      <h2>Items</h2>
+      <p class="row" style="gap:.4rem;margin:.6rem 0 0;font-size:.78rem;color:var(--muted)">
+        Where-to-find, how-to-use, history and fun facts for every food and tool with a picture
+      </p>
+    </a>
+    {% for t in targets %}
+    <a class="card" href="{{ base }}/site/{{ t.key }}" style="--accent:{{ t.accent }}">
+      <span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24">{{ t.icon|safe }}</svg></span>
+      <p class="kicker">{{ t.sub }}</p>
+      <h2>{{ t.label }}</h2>
+      <p class="row" style="gap:.4rem;margin:.6rem 0 0;font-size:.78rem;color:var(--muted)">
+        <span class="dot {% if t.has_file %}on{% endif %}"></span>{{ t.status }}
+      </p>
+    </a>
+    {% endfor %}
+  </div>
+
+  <footer>
+    Uploads are checked for valid JSON before anything is replaced.<br>
+    The last 10 versions of each file are kept in <span class="mono">www\Admin\backups</span>.<br>
+    &copy; {{ year }}
+  </footer>
+</div>
+</body>
+</html>

@@ -1,0 +1,611 @@
+# =============================================================================
+#  Places — a local directory for North Las Vegas and the Las Vegas valley.
+#
+#  WHY THIS FILE EXISTS
+#  The assistant should answer "where could she take Mom on a Tuesday?" from
+#  disk in a millisecond, not by searching the web mid-call while an 80-year-old
+#  listens to silence. Everything here is loaded once at startup.
+#
+#  ACCURACY RULES — these are the point of the file, please keep them.
+#    * Every entry was verified against an official source. The URL is on the
+#      entry. If you add one, add its source.
+#    * A missing phone or zip means it was not published. It is NOT an
+#      invitation to guess. A wrong address sends a frail person to the wrong
+#      building.
+#    * `verified:` is when a human or a research pass last confirmed it.
+#    * `stale: high` means this category churns and the entry should be
+#      re-checked before it is relied on. See the notes at the bottom.
+#
+#  A NOTE ON THE MEDICAL ENTRIES
+#  Listing dialysis centres and hospices here is fine — it is public business
+#  information about companies, not information about a client.
+#
+#  What is NOT fine is writing "took Mrs A to DaVita Lake Mead" into a client
+#  record, because that records a kidney condition. telephony/app/phi.py
+#  generalises destinations to "medical appointment" plus the address for
+#  exactly this reason. Use this file to FIND the address; let the record keep
+#  only the address.
+#
+#  Verified: 2026-08-18
+# =============================================================================
+
+meta:
+  region: North Las Vegas and the Las Vegas valley, Nevada
+  verified: 2026-08-18
+  timezone: America/Los_Angeles
+
+# -----------------------------------------------------------------------------
+#  SOMEWHERE TO BE — the heart of this business.
+#
+#  This is the section nobody else has a list of. Everything below is a place a
+#  companion can actually sit with someone for two hours.
+# -----------------------------------------------------------------------------
+
+senior_centers:
+  - name: Neighborhood Recreation Center (North Las Vegas Senior Center)
+    address: 1638 N. Bruce St., North Las Vegas, NV 89030
+    phone: "555-0100"
+    hours: Mon-Fri 8am-7pm, Sat 8am-2pm, closed Sunday
+    good_for: [billiards, cards, classes, excursions, indoor]
+    notes: >
+      Home of the city's Social Seniors Club. The State of Nevada lists this as
+      the official North Las Vegas senior center. City pages disagree on whether
+      it opens at 8 or 9am — call first.
+    source: https://www.cityofnorthlasvegas.com/things-to-do/parks-and-recreation/seniors
+
+  - name: Silver Mesa Recreation Center
+    address: 4025 Allen Lane, North Las Vegas, NV 89032
+    phone: "555-0101"
+    hours: Mon-Fri 8am-7pm, Sat 8am-2pm, closed Sunday
+    ages: 55+
+    good_for: [indoor, fitness, art_studio, classes, summer_refuge]
+    notes: >
+      The city's designated 55+ centre. Gym, multi-purpose rooms, dance studio,
+      art studio, adjacent pool. Good indoor refuge in summer. No membership
+      fee published.
+    source: https://www.cityofnorthlasvegas.com/things-to-do/parks-and-recreation/seniors
+
+  - name: Skyview Multi-Generational Center
+    address: 3050 E. Centennial Parkway, North Las Vegas, NV 89081
+    phone: "555-0102"
+    hours: Mon-Thu 6am-8pm, Fri 6am-7pm, Sat 7am-4pm, closed Sunday
+    good_for: [indoor, early_morning, fitness, summer_refuge]
+    notes: >
+      Largest NLV indoor facility and the longest hours — opens at 6am, which
+      is the useful window in July and August.
+    source: https://www.cityofnorthlasvegas.com/things-to-do/recreation-centers
+
+  - name: Doolittle Active Adult Center
+    address: 1930 N. J St., Las Vegas, NV 89106
+    phone: "555-0103"
+    hours: Mon-Fri 8am-5pm
+    ages: 50+
+    cost: $10 annual membership for classes and activities
+    good_for: [indoor, cards, crafts, classes, dance]
+    notes: >
+      Closest city-of-Las-Vegas active adult centre to central North Las Vegas.
+      ADDRESS CONFLICT — the city says 1930 N. J St., the state directory says
+      1950. Same phone. Confirm before a first visit.
+    source: https://www.lasvegasnevada.gov/Residents/Parks-Facilities/Doolittle-Active-Adult-Center
+
+  - name: Howard Lieburn Active Adult Center
+    address: 6230 Garwood Ave., Las Vegas, NV 89107
+    phone: "555-0104"
+    hours: 8am-5pm
+    ages: 50+
+    cost: $10 annual membership
+    good_for: [gardening, crafts, dance, yoga, seasonal_trips]
+    notes: The gardening programme suits a client who used to garden and can no longer manage their own.
+    source: https://www.lasvegasnevada.gov/Residents/Parks-Facilities/Howard-Lieburn-Senior-Center
+
+  - name: Centennial Hills Active Adult Center
+    address: 6601 N. Buffalo Drive, Las Vegas, NV 89131
+    phone: "555-0105"
+    hours: Mon-Fri 7am-5pm
+    cost: $10/year membership; fitness pass $10 for 30 days
+    good_for: [chair_yoga, cards, bridge, pinochle, quilting, painting, book_club]
+    notes: >
+      Chair yoga and card games are the most companion-friendly activities here.
+      Directly next to Centennial Hills Library — the two combine into one outing.
+    source: https://files.lasvegasnevada.gov/parks-recreation/Centennial-Hills-Active-Adult-Center/2025-June-Aug-Centennial_Hills_activity-calendar.pdf
+
+  - name: Cora Coleman Senior Center
+    address: 2100 Bonnie Lane, Las Vegas, NV 89156
+    phone: "555-0106"
+    hours: Mon-Fri 7:15am-5pm
+    good_for: [indoor, indoor_pool, game_room, summer_refuge]
+    notes: Closest Clark County senior centre to east North Las Vegas. Cost not published.
+    source: https://www.clarkcountynv.gov/government/departments/parks___recreation/seniors_centers/cora_coleman_senior_center/
+
+  - name: West Flamingo Senior Center
+    address: 6255 W. Flamingo Rd., Las Vegas, NV 89103
+    phone: "555-0107"
+    hours: Mon-Fri 8am-5pm, closed weekends
+    ages: 50+
+    good_for: [lending_library, cards, crafts, quiet, shaded_outdoor]
+    notes: >
+      Lending library plus a card room is a strong quiet-companionship setup.
+      Attached park has benches, shade structure, restrooms and a walking course.
+    source: https://www.clarkcountynv.gov/government/departments/parks___recreation/seniors_centers/west_flamingo_senior_center/
+
+libraries:
+  # North Las Vegas runs its OWN library district, separate from Las Vegas-Clark
+  # County. Cards are not interchangeable. Worth knowing before promising anything.
+  - name: Aliante Library
+    district: North Las Vegas Library District
+    address: 2400 W. Deer Springs Way, North Las Vegas, NV 89084
+    phone: "555-0108"
+    hours: Mon-Tue 10:30am-8pm, Wed-Thu 9am-9pm, Fri-Sat 9am-6pm
+    good_for: [quiet, no_stairs, newspapers, magazines, indoor, free]
+    notes: Single-storey — no stairs anywhere, which matters for a client with a walker.
+    source: https://www.cityofnorthlasvegas.com/Home/Components/FacilityDirectory/FacilityDirectory/113/680
+
+  - name: Alexander Library
+    district: North Las Vegas Library District
+    address: 1755 W. Alexander Road, North Las Vegas, NV 89032
+    phone: "555-0109"
+    good_for: [quiet, spanish_language, indoor, free]
+    notes: Hours not published on the city page — call to confirm.
+    source: https://www.cityofnorthlasvegas.com/residents/libraries
+
+  - name: North Las Vegas City Hall Library
+    district: North Las Vegas Library District
+    address: 2250 Las Vegas Blvd. North, North Las Vegas, NV 89030
+    phone: "555-0110"
+    good_for: [quiet, indoor, free, easy_parking]
+    notes: Inside City Hall — air conditioned, secure, civic parking. Hours not published.
+    source: https://www.cityofnorthlasvegas.com/residents/libraries
+
+  - name: West Las Vegas Library
+    district: Las Vegas-Clark County
+    address: 1861 N. Martin Luther King Jr. Blvd., Las Vegas, NV 89106
+    phone: "555-0111"
+    hours: Mon-Thu 10am-8pm, Fri-Sun 10am-6pm
+    good_for: [art_gallery, performances, quiet, indoor, free, open_seven_days]
+    notes: >
+      MOVED — new building opened December 2025 at the MLK Blvd address. Older
+      directories still say 951 W. Lake Mead Blvd; that is wrong.
+      Rotating art galleries and live performances make this the best
+      "something to look at and talk about" stop in the north valley, and it is
+      open seven days a week.
+    source: https://thelibrarydistrict.org/locations/wv/
+
+  - name: Centennial Hills Library
+    district: Las Vegas-Clark County
+    address: 6711 N. Buffalo Dr., Las Vegas, NV 89131
+    phone: "555-0112"
+    hours: Mon-Thu 10am-8pm, Fri-Sun 10am-6pm
+    good_for: [quiet_room, art_gallery, accessible_parking, indoor, free]
+    notes: >
+      Has a dedicated Quiet Room. Accessible parking near the south entrance,
+      ramp, automatic doors. Next to the Active Adult Center and Centennial
+      Hills Park — three stops in one trip.
+    source: https://thelibrarydistrict.org/locations/ch/
+
+parks:
+  # North Las Vegas parks: 6am-11pm daily. In summer the usable window is
+  # roughly 6-9am. That is not a detail — it decides whether the outing works.
+  - name: Craig Ranch Regional Park
+    address: 628 W. Craig Road, North Las Vegas, NV 89032
+    phone: "555-0113"
+    hours: 6am-11pm daily
+    good_for: [shade, reservable_ramadas, community_garden, mature_trees, amphitheatre]
+    notes: >
+      ~170 acres with EIGHT RESERVABLE RAMADAS — the best shaded seating in
+      North Las Vegas, and reservable so you aren't competing for it. Built on a
+      former golf course so it has mature trees, which is rare here. Community
+      garden with reservable planter boxes: excellent low-exertion activity.
+    source: https://www.cityofnorthlasvegas.com/things-to-do/parks-and-recreation/parks/craig-ranch-regional-park
+
+  - name: Aliante Nature Discovery Park
+    address: 2627 Nature Park Drive, North Las Vegas, NV 89084
+    hours: 6am-11pm daily
+    good_for: [lake, waterfall, ducks, gazebos, shade, restrooms, flat_paths, benches]
+    notes: >
+      Confirmed on the city page: restrooms, gazebos and shade structures,
+      picnic tables. Water feature plus shade plus flat paths is close to ideal
+      for low mobility, and the waterfall and ducks give a passive focal point
+      for someone who can't converse much. Splash pad means families mid-day —
+      go early.
+    source: https://www.cityofnorthlasvegas.com/Home/Components/FacilityDirectory/FacilityDirectory/73/777
+
+  - name: Lorenzi Park
+    address: 3333 W. Washington Ave., Las Vegas, NV 89107
+    hours: 7am-11pm
+    good_for: [twin_lakes, waterfowl, shade, benches, historic_markers, mature_landscaping]
+    notes: >
+      Historic district with interpretive markers — a built-in conversational
+      walk for someone who lived through that history. Originally developed
+      1926, later the Twin Lakes Lodge resort. Do not feed the wildlife.
+    source: https://www.lasvegasnevada.gov/Residents/Parks-Facilities/Lorenzi-Park
+
+  - name: Floyd Lamb Park at Tule Springs
+    address: 9200 Tule Springs Road, Las Vegas, NV 89131
+    phone: "555-0114"
+    hours: Apr-Sep 8am-8pm; Oct-Mar 8am-5pm
+    cost: $6 per vehicle, CARD ONLY at the gate. Household pass $50/yr, $25 senior.
+    good_for: [drive_up_picnic, heavy_shade, ponds, peafowl, restrooms, historic_barn]
+    notes: >
+      YOU CAN DRIVE RIGHT UP TO MOST PICNIC AREAS. That matters more than
+      anything else on this list for a client who cannot walk far from the car.
+      Buy the $25 senior annual pass if this becomes regular.
+    source: https://www.lasvegasnevada.gov/Residents/Parks-Facilities/Floyd-Lamb-Park
+
+indoor_summer:
+  # May-September, outdoor plans mostly don't work. These are the fallbacks.
+  - name: Meadows Mall
+    address: 4300 Meadows Lane, Las Vegas, NV 89107
+    phone: "555-0115"
+    hours: Mon-Thu 11am-7pm, Fri-Sat 11am-8pm, Sun 11am-6pm
+    cost: free
+    good_for: [free_wheelchairs, massage_chairs, mall_walking, air_conditioned, seating]
+    notes: >
+      THE default hot-weather fallback. Free wheelchairs from security on level
+      2 near JCPenney. Massage chairs throughout. Mall walking programme —
+      doors open an hour before the mall does, one lap is about half a mile.
+      Safety escorts on (702) 880-6692. Costs nothing.
+    source: https://www.meadowsmall.com/en/visit/
+
+  - name: Las Vegas Science & Natural History Museum
+    address: 900 Las Vegas Blvd. N, Las Vegas, NV 89101
+    phone: "555-0116"
+    hours: daily 9am-4pm
+    cost: adults $14, seniors/military/students $12, Nevada residents $1 off with ID
+    good_for: [free_wheelchairs, fully_accessible, free_close_parking, open_daily, small_scale]
+    notes: >
+      The strongest paid indoor option for a frail client: complimentary
+      wheelchairs, elevators and ramps throughout, free parking directly behind
+      the building including covered spaces, open seven days, and small enough
+      not to exhaust anyone. Also the most geographically convenient museum for
+      North Las Vegas.
+    source: https://www.lvnhm.org/plan-your-visit
+
+  - name: Springs Preserve
+    address: 333 S. Valley View Blvd., Las Vegas, NV 89107
+    phone: "555-0117"
+    hours: Thu-Mon 9am-4pm — CLOSED TUESDAY AND WEDNESDAY
+    cost: Nevada resident $9.95 adult, $8.95 senior. Non-resident $18.95 / $17.95.
+    good_for: [botanical_gardens, butterfly_habitat, indoor_galleries]
+    notes: >
+      Members get outdoor access from 8am, and 8-9am is the only comfortable
+      outdoor window in summer — worth a membership if the client can't take heat.
+    source: https://www.springspreserve.org/visitor-information/tickets.html
+
+  - name: Nevada State Museum, Las Vegas
+    address: 309 S. Valley View Blvd., Las Vegas, NV 89107
+    phone: "555-0118"
+    hours: Thu-Mon 9am-4pm, closed Tue/Wed
+    cost: Nevada resident $9.95 adult. Senior and military discounts with ID.
+    good_for: [nevada_history, indoor, conversation_prompts]
+    notes: >
+      Nevada history from prehistory to now — good prompt material for someone
+      with long local memory. Navigate to 333 S. Valley View (Springs Preserve
+      parking), not the museum's own address.
+    source: https://www.lasvegasnvmuseum.org/location-directions/
+
+  - name: Clark County Wetlands Park & Nature Center
+    address: 7050 Wetlands Park Lane, Las Vegas, NV 89122
+    phone: "555-0119"
+    hours: Nature Center Tue-Sun 9am-3pm; trails dawn to dusk
+    cost: free
+    good_for: [climate_controlled_picnic, paved_trail, dioramas, films, free]
+    notes: >
+      The "Lizard Lounge" is a climate-controlled picnic area with seating
+      overlooking the preserve — exactly what this service needs in August, and
+      free. Paved trail section between the Wetlands Loop and Pabco trailheads.
+      Check the alerts page: the loop trail doesn't currently complete, and
+      there's sewer work on Nature Preserve Way. East valley, a real drive.
+    source: https://www.clarkcountynv.gov/government/departments/parks___recreation/wetlands_park/
+
+# -----------------------------------------------------------------------------
+#  RESPITE AND SUPPORT — partners and referral sources, not destinations.
+# -----------------------------------------------------------------------------
+
+adult_day_and_respite:
+  - name: Nevada Senior Services — Adult Day Care Center of Las Vegas
+    address: 901 N. Jones Blvd., Las Vegas, NV 89108
+    phone: "555-0120"
+    caregiver_line: "555-0121"
+    hours: Mon-Fri 7am-5:30pm, Sat 8am-6pm
+    notes: >
+      Saturday coverage is unusual and valuable. Dedicated memory care
+      programming. Accepts Medicaid and HCBW; states no one is turned away on
+      ability to pay. Also runs in-home respite and caregiver support groups.
+    source: https://www.nevadaseniorservices.org/faqs
+
+  - name: Helping Hands of Vegas Valley
+    address: 3680 S. Maryland Parkway, Suite 526, Las Vegas, NV 89169
+    phone: "555-0122"
+    hours: Mon-Thu 8am-2pm
+    notes: >
+      MOVED — many directories still list 3640 N. 5th St. in North Las Vegas.
+      Serves low-income frail adults 60+ including North Las Vegas. All five
+      programmes free to clients: transport, meals, case management, minor home
+      repair, respite. They run a FRIENDLY VISITOR service — a natural referral
+      partner, worth calling early.
+    source: https://hhovv.org/about-us/
+
+  - name: Catholic Charities of Southern Nevada
+    address: 1501 Las Vegas Blvd. North, Las Vegas, NV 89101
+    phone: "555-0123"
+    notes: Meals on Wheels and a community dining facility. Referral partner, not a destination.
+    source: https://www.catholiccharities.com/contact
+
+helplines:
+  - name: Nevada Care Connection Resource Center (Clark County) — Jewish Family Service Agency
+    phone: "555-0124"
+    email: user@example.com
+    notes: >
+      The single best referral entry point for a North Las Vegas senior.
+      Options counselling, caregiver support, benefits navigation. Nevada has NO
+      standalone Clark County Area Agency on Aging — any list claiming one is wrong.
+    source: https://www.nevadacareconnection.org/contact-us/
+
+  - name: Nevada Care Connection (statewide)
+    phone: "555-0125"
+    source: https://www.nevadacareconnection.org/contact-us/
+
+  - name: Elder Protective Services — Clark County
+    phone: "555-0126"
+    notes: >
+      ELDER ABUSE REPORTING. NRS 200.5093 gives a personal-care-in-the-home
+      agency 24 HOURS to report suspected abuse, neglect or exploitation, and
+      failure to report is a misdemeanour. This is the number.
+    source: https://adsd.nv.gov/Contact/Contact_AllOffices
+
+  - name: Elder Protective Services — statewide
+    phone: "555-0127"
+    source: https://adsd.nv.gov/Contact/Contact_AllOffices
+
+transport:
+  - name: RTC Paratransit (ADA)
+    phone: "555-0128"
+    certification_line: "555-0129"
+    cost: $3.00 one way; 10-ride coupon book $30
+    notes: >
+      Runs 24 hours, reservation-based, within 3/4 mile of a bus route.
+      Eligibility is FUNCTIONAL, not medical — a diagnosis alone doesn't
+      qualify, and there's a mock bus trip assessment. Five minutes to board
+      once the window opens.
+    source: https://www.rtcsnv.com/ways-to-travel/paratransit-accessibility/
+
+  - name: RTC Silver STAR
+    phone: "555-0130"
+    cost: $0.50 per boarding, exact change
+    notes: >
+      Neighbourhood loops (routes 703-718) serving senior communities, centres
+      and groceries. Open to anyone, no certification. BUT each route runs only
+      1-2 days a week on a fixed loop — no door-to-door, and nobody waits with
+      the client.
+    source: https://www.rtcsnv.com/ways-to-travel/fares-passes/
+
+  - name: RTC Reduced Fare
+    phone: "555-0130"
+    cost: $1 single ride residential routes; $32.50 for 30 days
+    eligibility: 60+, disabled, Medicare-eligible, active military, veterans
+    source: https://www.rtcsnv.com/ways-to-travel/fares-passes/reduced-fare/
+
+# -----------------------------------------------------------------------------
+#  PRACTICAL STOPS — errands during a visit.
+# -----------------------------------------------------------------------------
+
+pharmacies:
+  # stale: high — CVS and Walgreens are both in multi-year closure programmes
+  # and pharmacy hours shift every few months. Confirm before promising.
+  - name: Walgreens — W Craig Rd
+    address: 1445 W Craig Rd, North Las Vegas, NV 89032
+    phone: "555-0131"
+    hours: 24 hours, pharmacy 24 hours (meal break 1:30-2am)
+    drive_through: unconfirmed
+    notes: The only 24-hour pharmacy in North Las Vegas. Best after-hours option.
+    stale: high
+    source: https://www.walgreens.com/locator/walgreens-1445+w+craig+rd-north+las+vegas-nv-89032/id=5814
+
+  - name: Walgreens — Las Vegas Blvd N
+    address: 2280 Las Vegas Blvd N, North Las Vegas, NV 89030
+    phone: "555-0132"
+    hours: store 24h; pharmacy to 10pm, meal break 1:30-2pm
+    drive_through: yes
+    stale: high
+    source: https://www.walgreens.com/storelocator/drive-thru-pharmacy/north-las-vegas-nv
+
+  - name: Walgreens — 3030 Las Vegas Blvd N
+    address: 3030 Las Vegas Blvd N, North Las Vegas, NV 89030
+    phone: "555-0133"
+    hours: store to 10pm; pharmacy to 9pm
+    drive_through: yes
+    stale: high
+    source: https://www.walgreens.com/storelocator/drive-thru-pharmacy/north-las-vegas-nv
+
+  - name: Albertsons — Ann & Simmons
+    address: 3010 W Ann Rd, North Las Vegas, NV 89031
+    phone: "555-0134"
+    hours: pharmacy Mon-Fri 9am-1:30pm and 2-8pm; Sat-Sun 10am-5pm
+    drive_through: yes
+    notes: Only Albertsons in North Las Vegas.
+    stale: high
+    source: https://local.albertsons.com/nv/north-las-vegas/3010-w-ann-rd.html
+
+  - name: CVS — W Craig Rd
+    address: 3655 W Craig Rd, North Las Vegas, NV 89032
+    phone: "555-0135"
+    drive_through: yes
+    stale: high
+    source: https://www.cvs.com/store-locator/cvs-pharmacy-locations/Nevada/North-Las-Vegas
+  - name: CVS — W Ann Rd
+    address: 4755 W Ann Rd, North Las Vegas, NV 89031
+    phone: "555-0136"
+    drive_through: yes
+    stale: high
+    source: https://www.cvs.com/store-locator/cvs-pharmacy-locations/Nevada/North-Las-Vegas
+  - name: CVS — Aliante Pkwy
+    address: 7285 Aliante Pkwy, North Las Vegas, NV 89084
+    phone: "555-0137"
+    drive_through: yes
+    stale: high
+    source: https://www.cvs.com/store-locator/cvs-pharmacy-locations/Nevada/North-Las-Vegas
+  - name: CVS — Losee Rd
+    address: 6432 Losee Rd, North Las Vegas, NV 89086
+    phone: "555-0138"
+    drive_through: yes
+    stale: high
+    source: https://www.cvs.com/store-locator/cvs-pharmacy-locations/Nevada/North-Las-Vegas
+  - name: CVS — E Lake Mead Blvd
+    address: 2011 E Lake Mead Blvd, North Las Vegas, NV 89030
+    phone: "555-0139"
+    stale: high
+    source: https://www.cvs.com/store-locator/cvs-pharmacy-locations/Nevada/North-Las-Vegas
+
+  - name: Smith's — Las Vegas Blvd N & Civic Center
+    address: 2255 Las Vegas Blvd N, North Las Vegas, NV 89030
+    phone: "555-0140"
+    notes: Drive-through status not published by Smith's — call.
+    stale: high
+    source: https://www.smithsfoodanddrug.com/stores/pharmacy/nv/north-las-vegas
+  - name: Smith's — W Craig & Simmons
+    address: 3013 W Craig Rd, North Las Vegas, NV 89032
+    phone: "555-0141"
+    stale: high
+    source: https://www.smithsfoodanddrug.com/stores/pharmacy/nv/north-las-vegas
+  - name: Smith's — Aliante Parkway
+    address: 6855 Aliante Pkwy, North Las Vegas, NV 89084
+    phone: "555-0142"
+    stale: high
+    source: https://www.smithsfoodanddrug.com/stores/pharmacy/nv/north-las-vegas
+  - name: Smith's — Shadowcreek
+    address: 2255 E Centennial Pkwy, North Las Vegas, NV 89081
+    phone: "555-0143"
+    stale: high
+    source: https://www.smithsfoodanddrug.com/stores/pharmacy/nv/north-las-vegas
+  - name: Smith's — Decatur Crossing
+    address: 4700 W Ann Rd, North Las Vegas, NV 89031
+    phone: "555-0144"
+    stale: high
+    source: https://www.smithsfoodanddrug.com/stores/pharmacy/nv/north-las-vegas
+  - name: Smith's — El Dorado Village
+    address: 5564 Camino Al Norte, North Las Vegas, NV 89031
+    phone: "555-0145"
+    stale: high
+    source: https://www.smithsfoodanddrug.com/stores/pharmacy/nv/north-las-vegas
+
+# -----------------------------------------------------------------------------
+#  APPOINTMENTS — used to find an address and estimate a wait.
+#  NEVER copied into a client record; see the note at the top of this file.
+# -----------------------------------------------------------------------------
+
+dialysis:
+  # Companion wait is typically 3.5-5 hours door to door. Centres do not publish
+  # shift times — ask the centre, per client. Typical shifts start ~5am, ~10am,
+  # ~3pm, Mon/Wed/Fri or Tue/Thu/Sat.
+  - name: DaVita North Las Vegas Dialysis Center
+    address: 2065 N Las Vegas Blvd, North Las Vegas, NV 89030
+    phone: "555-0146"
+    stations: 28
+    source: CMS dataset 23ew-n7w9
+  - name: DaVita Lake Mead Dialysis
+    address: 713 E Lake Mead Blvd, North Las Vegas, NV 89030
+    phone: "555-0147"
+    stations: 25
+    source: CMS dataset 23ew-n7w9
+  - name: American Dialysis Centers North Las Vegas
+    address: 4107 W Cheyenne Ave, North Las Vegas, NV 89032
+    phone: "555-0148"
+    stations: 31
+    notes: Independent. Two separately certified units share this building.
+    source: CMS dataset 23ew-n7w9
+  - name: Fresenius Lake Mead North
+    address: 1581 Mount Mariah Dr Ste 100, Las Vegas, NV 89106
+    phone: "555-0149"
+    stations: 32
+    source: CMS dataset 23ew-n7w9
+  - name: DaVita Cheyenne Dialysis
+    address: 3291 N Buffalo Dr Bldg A Ste 150, Las Vegas, NV 89129
+    phone: "555-0150"
+    stations: 24
+    source: CMS dataset 23ew-n7w9
+
+physical_therapy:
+  - name: ATI Physical Therapy — E Centennial Pkwy
+    address: 2225 E Centennial Pkwy Ste 106, North Las Vegas, NV 89081
+    phone: "555-0151"
+    hours: Mon-Fri 7am-7pm
+    stale: high
+    source: https://locations.atipt.com/nevada/north-las-vegas/2225-e-centennial-pkwy/
+  - name: Smith Therapy Partners — Craig NLV
+    address: 955 W Craig Rd #103, North Las Vegas, NV 89032
+    phone: "555-0152"
+    hours: Mon/Wed/Fri 7am-7pm; Tue/Thu 7am-5pm
+    stale: high
+    source: https://smiththerapypartners.com/stores/craig-nlv/
+  - name: Optimal Therapy — Ann Road
+    address: 3840 W Ann Rd #101B, North Las Vegas, NV 89031
+    phone: "555-0153"
+    stale: high
+    source: https://optimalptlv.com/about-us/ann-clinic-north-las-vegas-nv/
+
+hospice:
+  # stale: high — 146 Medicare-certified hospices in Las Vegas, roughly half
+  # certified 2021-2023, with frequent ownership changes and address moves.
+  # NO hospice has a business address in North Las Vegas; all serve it from the
+  # wider valley. 64 report serving ZIP 89030.
+  # This list is for reaching a client's existing provider, not recommending one.
+  - name: Nathan Adelson Hospice
+    address: 4141 University Center Dr, Las Vegas, NV 89119
+    phone: "555-0154"
+    notes: Non-profit, Medicare-certified 1987 — oldest and largest in the valley.
+    stale: high
+    source: CMS dataset yc9t-dgbk
+  - name: Southwest Medical Associates Hospice and Palliative Care
+    address: 2720 N Tenaya Way, Las Vegas, NV 89128
+    phone: "555-0155"
+    stale: high
+    source: CMS dataset yc9t-dgbk
+  - name: Infinity Hospice Care
+    address: 6330 S Jones Blvd, Las Vegas, NV 89118
+    phone: "555-0156"
+    stale: high
+    source: CMS dataset yc9t-dgbk
+
+care_homes:
+  # Pickup locations. Only three CMS-certified nursing facilities exist in NLV.
+  - name: Vista Park
+    kind: independent living
+    address: 4190 W Farm Rd, North Las Vegas, NV 89084
+    phone: "555-0157"
+    notes: Largest true retirement community in North Las Vegas.
+    source: https://rlcommunities.com/communities/nevada/vista-park-retirement/
+  - name: Mission Pines Nursing and Rehab Center
+    kind: skilled nursing
+    address: 2860 E Cheyenne Ave, North Las Vegas, NV 89030
+    phone: "555-0158"
+    source: CMS dataset 4pq5-n9py
+  - name: College Park Rehabilitation Center
+    kind: skilled nursing
+    address: 2856 E Cheyenne Ave, North Las Vegas, NV 89030
+    phone: "555-0159"
+    source: CMS dataset 4pq5-n9py
+  - name: North Las Vegas Care Center
+    kind: skilled nursing
+    address: 3215 E Cheyenne Ave, North Las Vegas, NV 89030
+    phone: "555-0160"
+    source: CMS dataset 4pq5-n9py
+
+# =============================================================================
+#  KNOWN PROBLEMS — read before relying on anything above.
+# =============================================================================
+warnings:
+  - "DERFELT SENIOR CENTER IS NOT A SENIOR CENTER ANY MORE. The state directory
+     still lists it. The city now runs 3343 W. Washington Ave as a youth
+     enrichment centre. Do not send anyone there expecting seniors."
+  - "Las Vegas Senior Center, 451 E. Bonanza Rd — status unresolved. The state
+     lists it active; the city has no operational page. Call 555-0161
+     before using it."
+  - "DROP-IN POLICY IS UNPUBLISHED EVERYWHERE. No city or county page says
+     whether a companion may accompany a member, or whether drop-in visitors are
+     welcome. The $10/year memberships imply classes are gated. This needs one
+     phone call per centre and it is the most important open question here."
+  - "North Las Vegas recreation centre opening times differ by an hour between
+     the city's own pages. Call ahead."
+  - "Summer reality: for parks, the usable window from May to September is
+     roughly 6-9am. Craig Ranch's reservable ramadas and Floyd Lamb's drive-up
+     picnic areas are the only two that extend it."

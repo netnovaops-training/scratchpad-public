@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#050a12">
+<meta name="robots" content="noindex, nofollow">
+<title>{{ t.label }} &middot; admin</title>
+<link rel="stylesheet" href="/theme.css">
+<style>
+  /* Each site page takes its card's accent, so you can tell at a glance which
+     one you're editing without reading the heading. */
+  body{--accent:{{ t.accent }}}
+  ul.hist{list-style:none;margin:0;padding:0}
+  ul.hist li{font-size:.78rem;color:var(--muted);padding:.35rem 0;border-bottom:1px solid var(--line)}
+  ul.hist li:last-child{border-bottom:0}
+  ul.ent{list-style:none;margin:0;padding:0}
+  ul.ent li{display:flex;align-items:center;gap:.6rem;padding:.5rem 0;border-bottom:1px solid var(--line)}
+  ul.ent li:last-child{border-bottom:0}
+  ul.ent .nm{flex:1;min-width:0}
+  ul.ent .nm b{display:block;font-weight:600;font-size:.9rem}
+  ul.ent .nm code{font-size:.72rem;color:var(--muted)}
+  ul.ent form{margin:0}
+  ul.ent button{background:none;border:1px solid var(--line);color:var(--muted);
+    padding:.25rem .6rem;font-size:.75rem;border-radius:6px}
+  ul.ent button:hover{border-color:#e8695a;color:#e8695a}
+  .tag{font-size:.66rem;letter-spacing:.04em;text-transform:uppercase;
+    border:1px solid var(--accent);color:var(--accent);border-radius:99px;padding:.1rem .45rem}
+  textarea{width:100%;min-height:11rem;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+    font-size:.82rem;line-height:1.5;background:#0a1220;color:inherit;
+    border:1px solid var(--line);border-radius:8px;padding:.7rem}
+  details.danger{margin-top:1rem;border-top:1px solid var(--line);padding-top:.9rem}
+  details.danger summary{cursor:pointer;font-size:.82rem;color:var(--muted)}
+  /* The link out to where an article is really managed. Small and
+     quiet: it sits under every row and must not compete with the
+     article's own name. */
+  .ent .mng{display:block;margin-top:.25rem;font-size:.78rem}
+</style>
+</head>
+<body>
+<div class="wrap narrow">
+  <a class="back" href="{{ base }}/">&larr; all sites</a>
+
+  <div class="row" style="align-items:flex-start;gap:.9rem;margin-bottom:1.3rem">
+    <span class="ico lg" aria-hidden="true"><svg viewBox="0 0 24 24">{{ t.icon|safe }}</svg></span>
+    <div style="flex:1;min-width:0">
+      <p class="kicker">{{ t.sub }}</p>
+      <h1>{{ t.label }}</h1>
+      <p class="sub" style="margin:.2rem 0 0">{{ t.hint }}</p>
+    </div>
+  </div>
+
+  {% if !flash.is_empty() %}
+    <p class="note {% if flash_ok %}ok{% else %}bad{% endif %}">{{ flash }}</p>
+  {% endif %}
+
+  {# THE BETTER TOOL, BEFORE THE UPLOAD BOX.
+     Somebody looking for the importer arrives here, because this is where the
+     data lives and that is a reasonable place to look. Putting the pointer
+     underneath the JSON box would mean finding it only after deciding to do
+     it the hard way. #}
+  {% if !t.tool_href.is_empty() %}
+  <div class="panel" style="border-color:var(--accent)">
+    <h2>{{ t.tool_label }}</h2>
+    <p class="sub" style="margin:.35rem 0 .9rem">{{ t.tool_why }}</p>
+
+    {% if t.key == "mom-kb" %}
+    {# The box itself, not just a link to the box. Posting straight to the kb
+       service: it lives behind the same sign-in as /mama, so if this browser
+       has that session the import starts immediately, and if it does not the
+       worst case is the sign-in page followed by the importer. Either way
+       nobody has to go and find it. #}
+    {# Written out rather than derived from tool_href. Deriving it needs a
+       string filter this Askama version does not have, and one more line of
+       cleverness to save one line of literal is a bad trade. #}
+    <form method="post" action="/mama/kb/import"
+          style="display:flex;gap:.6rem;flex-wrap:wrap;align-items:center">
+      <input type="url" name="url" required placeholder="https://…"
+             style="flex:1;min-width:260px">
+      <button type="submit">Read this page</button>
+    </form>
+    <p class="sub" style="margin:.7rem 0 0">
+      It waits if somebody is on the phone, so a caller never queues behind an
+      import. Everything it writes is a draft until you publish it.
+    </p>
+    {% else %}
+    <p style="margin:0"><a href="{{ t.tool_href }}">Open it &rarr;</a></p>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if t.patch %}
+  <div class="panel">
+    <h2>Add or remove {{ t.noun }}s</h2>
+    <p class="sub" style="margin:.35rem 0 .9rem">
+      <code>{{ t.file }}</code> &middot; currently {{ t.status }}
+      {% if t.has_file %}&middot; <a href="{{ base }}/download/{{ t.key }}">download current</a>{% endif %}
+      <br>Only what you name here changes. Everything else in the file is left alone.
+      Sending the same {{ t.noun }} again <b>updates</b> it &mdash; it never adds a second copy.
+    </p>
+    <form method="post" action="{{ base }}/upload" enctype="multipart/form-data">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <input type="hidden" name="target" value="{{ t.key }}">
+      <input type="hidden" name="mode" value="patch">
+      <textarea name="text" spellcheck="false"
+        placeholder='{ "add": [ { "&hellip;": "&hellip;" } ], "remove": ["an-id"] }
+
+A bare list works too, and so does one {{ t.noun }} on its own.'></textarea>
+      <div class="row" style="margin-top:.7rem">
+        <input type="file" name="file" accept="application/json,.json" style="flex:1;min-width:190px">
+        <button type="submit">Apply</button>
+      </div>
+      <p class="sub" style="margin:.5rem 0 0;font-size:.76rem">
+        Paste above, or attach a file &mdash; whichever is easier.
+      </p>
+    </form>
+
+    <details class="danger">
+      <summary>Replace the whole file instead</summary>
+      <p class="sub" style="margin:.6rem 0 .7rem">
+        What you send <b>becomes</b> the file. Anything not in it is gone.
+        You almost never want this for a list &mdash; one stale copy and every
+        {{ t.noun }} added since is lost.
+      </p>
+      <form method="post" action="{{ base }}/upload" enctype="multipart/form-data">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <input type="hidden" name="target" value="{{ t.key }}">
+        <input type="hidden" name="mode" value="replace">
+        <div class="row">
+          <input type="file" name="file" accept="application/json,.json" required style="flex:1;min-width:190px">
+          <button type="submit">Replace</button>
+        </div>
+      </form>
+    </details>
+  </div>
+
+  <div class="panel">
+    <h2>In the file now</h2>
+    {% if entries.is_empty() %}
+      <p class="sub" style="margin:.35rem 0 0">
+        Nothing yet. {{ t.label }} is running on whatever it ships with, which is
+        a normal state rather than a problem.
+      </p>
+    {% else %}
+      <p class="sub" style="margin:.35rem 0 .8rem">
+        {{ entries.len() }} in the order they are stored. Removing is by id, never
+        by position, so it cannot take the wrong row.
+      </p>
+      <ul class="ent">
+        {% for e in entries %}
+        <li>
+          <span class="nm">
+            <b>{{ e.name }}{% if e.direct %} <span class="tag">answers on its own</span>{% endif %}</b>
+            <code>{{ e.id }}{% if !e.note.is_empty() %} &middot; {{ e.note }}{% endif %}</code>
+            {# REMOVE IS ALL THIS PAGE CAN DO, and that was the confusing part:
+               an article marked "answers on its own" with no way to stop it.
+               Turning that off, editing the wording and unpublishing all live
+               in the knowledge base's own pages, which is where the article is
+               actually edited. Link to it rather than reimplement three
+               buttons that would then be two places to keep in step. #}
+            {% if !t.tool_href.is_empty() %}
+            <a class="mng" href="/mama/kb/a/{{ e.id }}">Open, edit, or stop it
+              answering on its own &rarr;</a>
+            {% endif %}
+          </span>
+          <form method="post" action="{{ base }}/entry/remove">
+            <input type="hidden" name="csrf" value="{{ csrf }}">
+            <input type="hidden" name="target" value="{{ t.key }}">
+            <input type="hidden" name="id" value="{{ e.id }}">
+            <button type="submit">Remove</button>
+          </form>
+        </li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+  </div>
+  {% else %}
+  <div class="panel">
+    <h2>Upload new data</h2>
+    <p class="sub" style="margin:.35rem 0 .9rem">
+      <code>{{ t.file }}</code> &middot; currently {{ t.status }}
+      {% if t.has_file %}&middot; <a href="{{ base }}/download/{{ t.key }}">download current</a>{% endif %}
+      <br>What you send becomes the file.
+    </p>
+    <form method="post" action="{{ base }}/upload" enctype="multipart/form-data">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <input type="hidden" name="target" value="{{ t.key }}">
+      <input type="hidden" name="mode" value="replace">
+      <div class="row">
+        <input type="file" name="file" accept="application/json,.json" required style="flex:1;min-width:190px">
+        <button type="submit">Upload</button>
+      </div>
+    </form>
+  </div>
+  {% endif %}
+
+  {% if !backups.is_empty() %}
+  <div class="panel">
+    <h2>Previous versions</h2>
+    <p class="sub" style="margin:.35rem 0 .8rem">Kept automatically before each upload. Newest first.</p>
+    <ul class="hist">
+      {% for b in backups %}<li>{{ b }}</li>{% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  <footer>Invalid JSON is refused and the live file is left alone.<br>&copy; {{ year }}</footer>
+</div>
+</body>
+</html>

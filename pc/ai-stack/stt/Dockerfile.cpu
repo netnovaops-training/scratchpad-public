@@ -1,0 +1,36 @@
+# Streaming speech-to-text for the phone line — CPU build, for the NUC.
+#
+# WHY A SECOND DOCKERFILE
+# The GPU one starts FROM pytorch/pytorch:2.6.0-cuda12.4-cudnn9-runtime, which
+# is several gigabytes of CUDA. The NUC has no NVIDIA GPU, so all of that would
+# be downloaded, stored and never executed.
+#
+# AND NOTHING HERE NEEDS TORCH ANYWAY. faster-whisper runs on CTranslate2, not
+# PyTorch — checked: stt/requirements.txt lists no torch, and stt/server.py
+# imports none. The CUDA base was inherited, not required. This image is
+# python:3.12-slim plus ffmpeg, and is a fraction of the size even before the
+# CUDA layers are counted.
+#
+# The two Dockerfiles share requirements.txt and server.py, so the code cannot
+# drift between the GPU and CPU builds.
+FROM python:3.14-slim-trixie@sha256:35caba83af2fe6da9a5d922f9b0156f21d1246a48278c58a08bd253303ba42e8
+
+ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 \
+    HF_HOME=/root/.cache/huggingface PORT=8092 \
+    # CTranslate2 reads these. Left explicit rather than relying on defaults so
+    # the thread count is visible next to the machine it was chosen for: the
+    # NUC has 12 cores and runs 23 other containers, so taking four for
+    # transcription leaves the rest of the box responsive.
+    OMP_NUM_THREADS=4
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ffmpeg libsndfile1 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY stt/requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir -r /app/requirements.txt
+
+COPY stt/server.py /app/server.py
+EXPOSE 8092
+CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8092", "--workers", "1"]

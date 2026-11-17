@@ -1,0 +1,120 @@
+# =============================================================================
+#  The Rust side of the stack.
+#
+#  A Cargo *workspace*, not four separate projects, and that's deliberate: one
+#  lockfile, one set of dependency versions, one shared `common` crate, and a
+#  single `target/` directory that every app's build reuses. The first build is
+#  slow; every one after it is fast because the dependencies are already there.
+#
+#  Adding an app later:
+#     1. cargo new --bin rust/booking
+#     2. add it to `members` below
+#     3. add a service to docker-compose.web.yml with  APP: booking
+#  Nothing else changes. The Dockerfile is generic.
+# =============================================================================
+
+[workspace]
+resolver = "2"
+members = [
+    "common",
+    "landing",
+    "admin",
+    "legacy",
+    "auth",
+    "scratchpad",   # 2026-11-12: code scratchpad (browse/search/share Jason's scripts), runs on the NUC
+    # "garden" retired 2026-10-25: Robin's Garden now runs from garden-for-all (example.org/git/Jason/garden-for-all while GitHub is suspended)
+    # "booking",   <- next
+    # "casey",
+    # "mom",
+]
+
+# Every app pins its dependencies HERE, once, and inherits them with
+# `foo.workspace = true`. Two apps can never drift onto different axum versions.
+[workspace.dependencies]
+axum = { version = "0.8", features = ["multipart"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal", "fs"] }
+tower = "0.5"
+tower-http = { version = "0.7", features = ["fs", "compression-gzip", "trace", "set-header", "normalize-path"] }
+askama = "0.16"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+anyhow = "1"
+reqwest = { version = "0.13", default-features = false, features = ["json", "rustls", "form", "query", "stream", "multipart"] }
+time = { version = "0.3", features = ["formatting", "macros", "local-offset"] }
+
+# --- admin only --------------------------------------------------------------
+# argon2 hashes the admin password. NOT sha256, and not "compare the plaintext":
+# argon2 is deliberately slow and memory-hard, so guessing at it costs real time
+# and real RAM per attempt. The admin's .env holds only the hash, so reading
+# that file does not hand anyone the password.
+argon2 = "0.6"
+# Session tokens and CSRF tokens. OsRng is the operating system's own CSPRNG --
+# a predictable token would let someone forge a session without ever seeing the
+# password, which would make the password pointless.
+rand = "0.10"
+# SMTP, for the password-reset code. rustls rather than native-tls so the image
+# needs no OpenSSL at runtime, matching how reqwest is configured above.
+lettre = { version = "0.11", default-features = false, features = ["smtp-transport", "tokio1", "tokio1-rustls-tls", "builder", "hostname"] }
+
+# --- auth's OpenID Connect provider ------------------------------------------
+# The website's own sign-in becomes an identity provider, so an app that cannot
+# sit behind forward_auth -- a phone app, chiefly -- can still use the session
+# somebody already has instead of asking for a second login. See auth/src/oidc.rs.
+#
+# rustls, not native-tls, and default-features off on jsonwebtoken so it does
+# not drag in a second crypto stack: the images here carry no OpenSSL.
+# 10.3+: fixes GHSA-h395-gr6q-cpjc (claim type confusion when decoding; auth only encodes, so it
+# was never reachable here). Version 10 needs a crypto backend chosen: rust_crypto is pure Rust.
+jsonwebtoken = { version = "11.1", default-features = false, features = ["use_pem", "rust_crypto"] }
+rsa = { version = "0.9", features = ["pem"] }
+base64 = "0.23"
+
+# --- auth's passkeys (WebAuthn), src/passkeys.rs ------------------------------
+# A second way to sign in beside the password. Pinned to an exact version with
+# `=` because this is security code: it moves only when somebody chooses to.
+# `conditional-ui` is the feature that unlocks usernameless (discoverable)
+# sign-in. The crate uses OpenSSL, so the runtime image needs libssl3.
+webauthn-rs = { version = "=0.5.5", features = ["conditional-ui"] }
+
+# --- legacy only -------------------------------------------------------------
+# Thumbnails. The originals are ~9.5MB each; a grid of twenty would be a 190MB
+# page load. default-features = false keeps this to the formats actually on
+# disk instead of compiling every decoder the crate supports.
+image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
+
+# --- auth only ---------------------------------------------------------------
+# Signs the session cookie. A signed cookie means a 6-month session needs no
+# server-side storage at all -- nothing to lose in a restart, nothing to grow
+# without bound -- while still being unforgeable without the secret.
+hmac = "0.13"
+sha2 = "0.11"
+
+# --- garden only ----------------------------------------------------
+# The legacy PHP site's DB access is raw PDO SQL with no compile-time
+# checking at all -- sqlx keeps "raw SQL, no ORM" (matches the existing
+# schema/queries we're porting) but checks query shape against the schema
+# at compile time instead of first-request-in-production.
+sqlx = { version = "0.9", default-features = false, features = ["mysql", "runtime-tokio", "tls-rustls", "macros", "chrono"] }
+# Dates out of MariaDB DATETIME columns. `default-features = false` drops
+# the (unused here) oldtime/js interop weight; "clock" is not needed
+# either -- nothing in this stack asks chrono for "now", only for
+# formatting values the database handed it.
+chrono = { version = "0.4", default-features = false, features = ["std"] }
+
+common = { path = "common" }
+
+# Release builds are what ship. These settings roughly halve the binary and
+# make it meaningfully faster, at the cost of a slower compile -- which happens
+# inside Docker, on a machine that isn't waiting on it.
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = true
+
+# NOT `panic = "abort"`, tempting as it is for a smaller binary. These are web
+# servers: with abort, one panicking request takes the whole process down and
+# every other visitor's connection with it. Unwinding keeps the blast radius to
+# the one request that went wrong.

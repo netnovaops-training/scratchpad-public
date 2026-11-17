@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#050a12">
+<meta name="robots" content="noindex, nofollow">
+<title>admin</title>
+<link rel="stylesheet" href="/theme.css">
+</head>
+<body>
+<div class="centre">
+  <form class="panel" style="width:min(380px,100%)" method="post" action="{{ base }}/login">
+    <h1>admin</h1>
+    <p class="sub">Site data upload</p>
+    {% if !error.is_empty() %}<p class="note bad">{{ error }}</p>{% endif %}
+    <label for="pw">Password</label>
+    <input id="pw" name="password" type="password" autocomplete="current-password" autofocus required>
+    <button class="wide" type="submit" style="margin-top:1rem">Sign in</button>
+    <footer>&copy; {{ year }}</footer>
+  </form>
+</div>
+</body>
+</html>

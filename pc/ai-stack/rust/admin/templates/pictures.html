@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#050a12">
+<meta name="robots" content="noindex, nofollow">
+<title>Pictures &middot; admin</title>
+<link rel="stylesheet" href="/theme.css">
+<style>
+  body{--accent:#e8c26a}
+  table.backlog{width:100%;border-collapse:collapse;margin-top:.7rem}
+  table.backlog th{text-align:left;font-size:.72rem;text-transform:uppercase;
+    letter-spacing:.05em;color:var(--muted);padding:.4rem .5rem;border-bottom:1px solid var(--line)}
+  table.backlog td{padding:.6rem .5rem;border-bottom:1px solid var(--line);
+    font-size:.88rem;vertical-align:middle}
+  table.backlog tr:last-child td{border-bottom:0}
+  .src{font-size:.68rem;letter-spacing:.05em;text-transform:uppercase;border-radius:99px;
+    padding:.12rem .5rem;border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+  .src.kitchen{border-color:#e0705f;color:#e0705f}
+  .src.kb{border-color:#7aa6d8;color:#7aa6d8}
+  .src.food{border-color:#8fbf6a;color:#8fbf6a}
+  .src.tool{border-color:#b58fd6;color:#b58fd6}
+  .backlog form{margin:0}
+  .backlog button{padding:.35rem .7rem;font-size:.78rem}
+  .gpu{display:flex;flex-wrap:wrap;gap:.6rem;align-items:center;margin-top:.6rem}
+  .gpu .dot{margin-right:.35rem}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="{{ base }}/">&larr; all sites</a>
+
+  <h1>Pictures</h1>
+  <p class="sub">Everything across Kitchen, the knowledge base, and Kitchen's own
+    foods and tools that is still missing a picture. A food or a tool marked
+    "AI-drawn" also stays on this list until you approve it, even after a
+    picture has been drawn for it &mdash; that is what "still missing" means for
+    those two rows. Click a title to go find or draw one where that already
+    works &mdash; this page only tracks the list and lets you check items off.</p>
+
+  {% if !flash.is_empty() %}
+    <p class="note {% if flash_ok %}ok{% else %}bad{% endif %}">{{ flash }}</p>
+  {% endif %}
+
+  <div class="panel">
+    <h2>The graphics card</h2>
+    {% if !gpu_reachable %}
+      <p class="sub" style="margin:.35rem 0 0">The drawing service did not answer.
+        It may be starting up, or the stack may not have it running.</p>
+    {% else %}
+      <p class="sub" style="margin:.35rem 0 0">
+        <span class="dot {% if gpu_room %}on{% endif %}"></span>
+        {% if gpu_room %}There is room to draw right now
+        {% else %}Not enough room to draw &mdash; {{ gpu_free_mb }} MB free, {{ gpu_need_mb }} MB needed{% endif %}.
+      </p>
+      {% if !loaded_models.is_empty() %}
+      <div class="gpu">
+        <span class="sub" style="font-size:.8rem">Ollama has loaded:
+          {% for m in loaded_models %}{{ m }}{% if !loop.last %}, {% endif %}{% endfor %}</span>
+      </div>
+      {% endif %}
+      <form method="post" action="{{ base }}/pictures/free-gpu" style="margin-top:.7rem">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <button type="submit">Free the GPU for drawing</button>
+      </form>
+      <p class="sub" style="margin:.5rem 0 0;font-size:.78rem">
+        Unloads whatever Ollama currently has loaded so imagine has room. They
+        come back on their own the next time anything asks them a question --
+        there is nothing to switch back on afterward.
+      </p>
+    {% endif %}
+  </div>
+
+  <div class="panel">
+    <h2>Still missing a picture ({{ total }})</h2>
+    {% if rows.is_empty() %}
+      <p class="sub" style="margin:.4rem 0 0">Nothing on the list right now.</p>
+    {% else %}
+    <div style="overflow-x:auto">
+    <table class="backlog">
+      <tr><th>Where</th><th>Item</th><th>Missing</th><th></th></tr>
+      {% for r in rows %}
+      <tr>
+        <td><span class="src {{ r.source }}">{{ r.source }}</span></td>
+        <td><a href="{{ r.url }}">{{ r.title }}</a></td>
+        <td>{{ r.missing }}</td>
+        <td>
+          <form method="post" action="{{ base }}/pictures/approve">
+            <input type="hidden" name="csrf" value="{{ csrf }}">
+            <input type="hidden" name="key" value="{{ r.key }}">
+            <button type="submit">Approve</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="panel">
+    <h2>Ingredient warnings ({{ warning_total }})</h2>
+    <p class="sub" style="margin:.35rem 0 0">Lines the ingredient matcher could
+      not confidently place anywhere, even after reading the whole recipe for
+      context. Open the recipe, fix the line by hand, then dismiss it here.</p>
+    {% if warning_rows.is_empty() %}
+      <p class="sub" style="margin:.6rem 0 0">Nothing waiting on you.</p>
+    {% else %}
+    <div style="overflow-x:auto">
+    <table class="backlog">
+      <tr><th>Recipe</th><th>Line</th><th>Why</th><th></th></tr>
+      {% for w in warning_rows %}
+      <tr>
+        <td><a href="{{ w.url }}">{{ w.title }}</a></td>
+        <td>&ldquo;{{ w.line }}&rdquo;</td>
+        <td class="sub">{{ w.why }}</td>
+        <td>
+          <form method="post" action="{{ base }}/pictures/dismiss-warning">
+            <input type="hidden" name="csrf" value="{{ csrf }}">
+            <input type="hidden" name="id" value="{{ w.id }}">
+            <button type="submit">Dismiss</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="panel">
+    <h2>Food &amp; tool merges to review ({{ merge_total }})</h2>
+    <p class="sub" style="margin:.35rem 0 0">Phi's guesses at which foods or
+      tools are really the same thing, described differently -- near-identical
+      ones (plurals, "fresh"/"loosely packed" style wording) already merged on
+      their own; these needed real judgment, so nothing has changed yet.
+      Approve merges the second name into the first, everywhere it's used.</p>
+    {% if merge_rows.is_empty() %}
+      <p class="sub" style="margin:.6rem 0 0">Nothing waiting on you.</p>
+    {% else %}
+    <div style="overflow-x:auto">
+    <table class="backlog">
+      <tr><th>Kind</th><th>Merge</th><th>Why</th><th></th></tr>
+      {% for m in merge_rows %}
+      <tr>
+        <td><span class="src {{ m.kind }}">{{ m.kind }}</span></td>
+        <td>&ldquo;{{ m.item_name }}&rdquo; &rarr; &ldquo;{{ m.target_name }}&rdquo;
+          <br><a class="small" href="{{ m.usage_url }}">where it's used</a></td>
+        <td class="sub">{{ m.reason }}</td>
+        <td>
+          <form method="post" action="{{ base }}/pictures/merge-approve">
+            <input type="hidden" name="csrf" value="{{ csrf }}">
+            <input type="hidden" name="id" value="{{ m.id }}">
+            <button type="submit">Approve</button>
+          </form>
+          <form method="post" action="{{ base }}/pictures/merge-reject" style="margin-top:.3rem">
+            <input type="hidden" name="csrf" value="{{ csrf }}">
+            <input type="hidden" name="id" value="{{ m.id }}">
+            <button type="submit" class="ghost">Reject</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="panel">
+    <h2>Nutrition to review ({{ nutrition_total }})</h2>
+    <p class="sub" style="margin:.35rem 0 0">Foods where what's currently
+      saved and a fresh local USDA lookup disagree by more than 2x calories.
+      No automatic call was made either way &mdash; two attempts at auto-fixing
+      the obvious ones both found a new way to be wrong, so every one of
+      these needs your own read. Use local swaps in the better match; use
+      cached leaves it as-is; either way it comes off this list.</p>
+    {% if nutrition_rows.is_empty() %}
+      <p class="sub" style="margin:.6rem 0 0">Nothing waiting on you.</p>
+    {% else %}
+    <div style="overflow-x:auto">
+    <table class="backlog">
+      <tr><th>Ingredient</th><th>Currently saved</th><th>Local USDA match</th><th></th></tr>
+      {% for n in nutrition_rows %}
+      <tr>
+        <td>&ldquo;{{ n.name }}&rdquo;</td>
+        <td>{{ n.cached_name }}<br><span class="sub">{{ n.cached_cal }} kcal/100g</span></td>
+        <td>{{ n.local_name }}<br><span class="sub">{{ n.local_cal }} kcal/100g</span></td>
+        <td>
+          <form method="post" action="{{ base }}/pictures/nutrition-apply">
+            <input type="hidden" name="csrf" value="{{ csrf }}">
+            <input type="hidden" name="id" value="{{ n.id }}">
+            <input type="hidden" name="choice" value="local">
+            <button type="submit">Use local</button>
+          </form>
+          <form method="post" action="{{ base }}/pictures/nutrition-apply" style="margin-top:.3rem">
+            <input type="hidden" name="csrf" value="{{ csrf }}">
+            <input type="hidden" name="id" value="{{ n.id }}">
+            <input type="hidden" name="choice" value="cached">
+            <button type="submit" class="ghost">Keep cached</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
+    </div>
+    {% endif %}
+  </div>
+
+  <footer>
+    Approve just takes it off this list &mdash; it does not change the recipe or
+    guide itself. Nothing here draws or fetches a picture on its own; that
+    happens on the item's own page, one click away.<br>
+    &copy; {{ year }}
+  </footer>
+</div>
+</body>
+</html>

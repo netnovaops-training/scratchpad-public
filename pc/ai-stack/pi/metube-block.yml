@@ -1,0 +1,71 @@
+  # -------------------------------------------------------------------------
+  #  metube -- paste a URL, get the video. For Jason and Sachin only.
+  #
+  #  Jason, 2026-09-11: "i want the abilty to have sachin to paste in a url
+  #  to a video ... i want two parts one for general viewing and one for porn
+  #  or (private) and i want this only to be avaible to the sso for me and
+  #  him".
+  #
+  #  A yt-dlp front end with a queue and a real progress bar, which is the
+  #  part that makes it usable by somebody who is not going to read a log.
+  #
+  #  INSIDE gluetun's NETWORK NAMESPACE, exactly like qbittorrent. It has no
+  #  interface of its own, so every request it makes leaves through Proton
+  #  or does not leave at all -- there is no route to fall back to if the
+  #  tunnel drops. That is why its web UI port is declared on GLUETUN and not
+  #  here: the socket lives in gluetun's namespace.
+  #
+  #  This is also why it is in THIS file rather than compose.yml. It cannot
+  #  start without the Proton key, and that is correct -- a video fetcher
+  #  that silently falls back to the household IP when the VPN is missing is
+  #  worse than one that refuses to start.
+  #
+  #  TWO DESTINATIONS, AND THE SEPARATION IS THE POINT.
+  #
+  #      /downloads/general   ->  Jellyfin "General"
+  #      /downloads/private   ->  Jellyfin "Private", granted to two accounts
+  #
+  #  DOWNLOAD_DIRS_INDEXABLE puts a folder picker in the UI, so the choice is
+  #  made per download at submit time rather than by sorting afterwards.
+  #  Getting it wrong once and having to move a file is fine; having no
+  #  choice and everything landing in one pile is not.
+  #
+  #  ACCESS IS ENFORCED AT THE GATE, NOT HERE. MeTube has no login of its
+  #  own -- anyone who can reach it can use it. It is reachable only through
+  #  grab.home.example.net, and "grab" is registered in
+  #  rust/common/src/people.rs as an EXPLICIT_ONLY app, so the auth service
+  #  returns 403 to every account without a named grant. Explicit-only
+  #  matters more than the grant itself: it means a future "give this person
+  #  everything" account does NOT inherit this one.
+  # -------------------------------------------------------------------------
+  metube:
+    image: ghcr.io/alexta69/metube:latest
+    container_name: metube
+    restart: unless-stopped
+    network_mode: "service:gluetun"
+    depends_on:
+      gluetun:
+        condition: service_healthy
+    environment:
+      - UID=1000
+      - GID=1000
+      - TZ=America/New_York
+      - DOWNLOAD_DIR=/downloads
+      - STATE_DIR=/downloads/.metube
+      - TEMP_DIR=/downloads/.incomplete
+      # The folder picker. Without it everything lands in one directory and
+      # the general/private split becomes a manual sorting job.
+      - DOWNLOAD_DIRS_INDEXABLE=true
+      - CREATE_CUSTOM_DIRS=true
+      - DEFAULT_THEME=dark
+      # Behind a proxy on a subpath-free hostname, but MeTube still needs to
+      # know it is not at the root of localhost or its websocket -- which is
+      # what drives the progress bar -- connects to the wrong origin and the
+      # UI sits at 0% forever while the download actually runs.
+      - URL_PREFIX=/
+      - OUTPUT_TEMPLATE=%(title)s.%(ext)s
+    volumes:
+      - ${DOWNLOADS:?set DOWNLOADS in ai-stack/pi/.env -- it must NOT be on the SD card}:/downloads
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }

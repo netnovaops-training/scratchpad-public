@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#050a12">
+<meta name="robots" content="noindex">
+<title>Jason — projects &amp; lab</title>
+<!-- Shared palette + card mechanics, same file every other page on this
+     domain uses -- see web/public/theme.css's own header comment for why.
+     Only what's specific to THIS page's layout stays local below. -->
+<link rel="stylesheet" href="/theme.css">
+<style>
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;background:var(--bg);color:var(--ink);
+  font:16px/1.6 ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:980px;margin:0 auto;padding:clamp(1.5rem,5vw,4rem) 1.25rem}
+header{text-align:center;margin-bottom:clamp(2rem,6vw,3rem)}
+h1{margin:0 0 .8rem;font-size:clamp(1.9rem,6vw,2.8rem);font-weight:750;letter-spacing:-.02em}
+h1 em{font-style:normal;background:linear-gradient(100deg,#c78af0,#5aa2e8);
+  -webkit-background-clip:text;background-clip:text;color:transparent}
+header p{margin:0;color:var(--muted);max-width:34rem;margin-inline:auto}
+header a{color:var(--accent);text-decoration:none;font-weight:600;
+  display:inline-flex;align-items:center;gap:.4rem;margin-top:1.2rem}
+header a:hover{text-decoration:underline}
+header svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:2;
+  stroke-linecap:round;stroke-linejoin:round}
+
+/* Text inside a card -- .grid/a.card/.ico themselves come from theme.css. */
+.card .sub{margin:0;font-size:.78rem;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--accent);opacity:.9}
+.card h2{margin:0;font-size:1.15rem;font-weight:700;letter-spacing:-.01em}
+.card p{margin:.2rem 0 0;color:var(--muted);font-size:.9rem;line-height:1.5}
+.card .go{margin-top:.7rem;font-size:.84rem;font-weight:600;color:var(--accent);
+  display:inline-flex;align-items:center;gap:.4rem}
+.card .go svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2;
+  transition:transform .28s cubic-bezier(.2,.8,.3,1)}
+a.card:hover .go svg{transform:translateX(4px)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Projects <em>&amp; lab</em></h1>
+    <p>Builds, experiments, and everything in progress -- the NUC homelab's
+       own tools, all behind the same sign-in as everything else here.</p>
+    <a href="/"><svg viewBox="0 0 24 24"><path d="M19 12H5m6 6-6-6 6-6"/></svg> Back</a>
+  </header>
+
+  <nav class="grid">
+    {% for s in sections %}
+    <a class="card" href="{{ s.href }}" style="--accent:{{ s.accent }}">
+      <span class="ico" aria-hidden="true">
+        <svg viewBox="0 0 24 24">{{ s.icon|safe }}</svg>
+      </span>
+      <p class="sub">{{ s.sub }}</p>
+      <h2>{{ s.name }}</h2>
+      <p>{{ s.desc }}</p>
+      <span class="go">Open
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg>
+      </span>
+    </a>
+    {% endfor %}
+  </nav>
+</div>
+</body>
+</html>

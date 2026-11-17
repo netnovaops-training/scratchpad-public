@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#050a12">
+<meta name="robots" content="noindex, nofollow">
+<title>Find a match &middot; admin</title>
+<link rel="stylesheet" href="/theme.css">
+<style>
+  body{--accent:#e8c26a}
+  table.backlog{width:100%;border-collapse:collapse;margin-top:.7rem}
+  table.backlog th{text-align:left;font-size:.72rem;text-transform:uppercase;
+    letter-spacing:.05em;color:var(--muted);padding:.4rem .5rem;border-bottom:1px solid var(--line)}
+  table.backlog td{padding:.6rem .5rem;border-bottom:1px solid var(--line);
+    font-size:.88rem;vertical-align:middle}
+  table.backlog tr:last-child td{border-bottom:0}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="{{ base }}/items?kind={{ kind }}">&larr; items</a>
+
+  <h1>Find a match for &ldquo;{{ item_name }}&rdquo;</h1>
+  <p class="sub">Search for an existing {{ kind }} to merge this one into.
+    Matching moves every recipe that uses &ldquo;{{ item_name }}&rdquo; over to
+    whatever you pick here, and &ldquo;{{ item_name }}&rdquo; stops existing on
+    its own -- same as an approved automatic merge.</p>
+
+  {% if !flash.is_empty() %}
+    <p class="note {% if flash_ok %}ok{% else %}bad{% endif %}">{{ flash }}</p>
+  {% endif %}
+
+  <div class="card">
+    <form method="get" action="{{ base }}/items/match/{{ kind }}/{{ item_id }}">
+      <input type="search" name="q" value="{{ q }}" placeholder="Search for a match&hellip;"
+             autofocus style="width:100%">
+    </form>
+  </div>
+
+  {% if !q.is_empty() %}
+  <div class="panel">
+    {% if candidates.is_empty() %}
+      <p class="sub" style="margin:.4rem 0 0">Nothing matches &ldquo;{{ q }}&rdquo;.
+        If none of these are right, leave &ldquo;{{ item_name }}&rdquo; as its own
+        item -- a wrong match is worse than no match.</p>
+    {% else %}
+    <div style="overflow-x:auto">
+    <table class="backlog">
+      <tr><th>{{ kind }}</th><th></th></tr>
+      {% for c in candidates %}
+      <tr>
+        <td>{{ c.name }}</td>
+        <td>
+          <form method="post" action="{{ base }}/items/match/merge">
+            <input type="hidden" name="csrf" value="{{ csrf }}">
+            <input type="hidden" name="kind" value="{{ kind }}">
+            <input type="hidden" name="item_id" value="{{ item_id }}">
+            <input type="hidden" name="target_id" value="{{ c.id }}">
+            <button type="submit">Match to this</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <footer>
+    &copy; {{ year }}
+  </footer>
+</div>
+</body>
+</html>

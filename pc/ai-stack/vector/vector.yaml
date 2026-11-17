@@ -1,0 +1,31 @@
+# PC (SuperNova) container logs -> the one Loki on the NUC (2026-11-04, Jason: "feeds all the
+# logs ... from all [pieces] ... then Grafana"). Same shape as the NUC's
+# ~/nuc-homelab/vector/vector.yaml, labelled host=pc so Grafana can show either machine or both.
+data_dir: /var/lib/vector
+sources:
+  docker:
+    type: docker_logs
+    exclude_containers:
+      - pc-vector
+transforms:
+  tag:
+    type: remap
+    inputs: [docker]
+    source: |
+      .host = "pc"
+      .container = .container_name
+      .container = replace!(.container, r'^/', "")
+      .source = "docker"
+sinks:
+  loki:
+    type: loki
+    inputs: [tag]
+    endpoint: "http://192.168.1.86:3100"
+    encoding:
+      codec: text
+    out_of_order_action: accept
+    labels:
+      host: "{{ host }}"
+      container: "{{ container }}"
+      source: "{{ source }}"
+    remove_label_fields: true

@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#070a18">
+<meta name="robots" content="noindex, nofollow">
+<title>Owner tools</title>
+<link rel="stylesheet" href="static/auth.css">
+<style>main{max-width:720px}</style>
+</head>
+<body>
+{% include "sky.html" %}
+<main>
+  <div class="brand"><div class="mark" aria-hidden="true"></div><b>ULTRANOVA</b></div>
+  <div class="card" id="pk-owner">
+    <div>
+      <h1>Owner tools</h1>
+      <p class="sub">Every change here is confirmed with your own passkey (fingerprint or face).
+        Only your passkey names, dates and limits are shown, never keys.</p>
+    </div>
+    <p id="pk-msg" class="note" style="display:none"></p>
+
+    {% for p in people %}
+    <div class="stack" style="border-top:1px solid var(--glass-edge);padding-top:12px">
+      <h2>{{ p.email }}{% if !p.name.is_empty() %} <span class="sub">({{ p.name }})</span>{% endif %}
+        {% if p.guest %} <span class="pill temp">Guest until {{ p.ends }}</span>{% endif %}</h2>
+      {% if p.keys.is_empty() %}
+        <p class="fine">No passkeys.</p>
+      {% else %}
+      <ul class="list">
+        {% for k in p.keys %}
+        <li>
+          <div><b>{{ k.name }}</b>{% if !k.ends.is_empty() %} <span class="pill temp">{{ k.ends }}</span>{% endif %}
+            <small>Belongs to {{ p.email }} &middot; created {{ k.added }} &middot; last used {{ k.last }}</small>
+            {% if !k.device.is_empty() %}<small>{{ k.device }}</small>{% endif %}</div>
+          <button type="button" class="small" data-oact="revoke" data-email="{{ p.email }}" data-id="{{ k.id }}">Revoke</button>
+        </li>
+        {% endfor %}
+      </ul>
+      <div><button type="button" class="small" data-oact="revoke" data-email="{{ p.email }}">Revoke all of {{ p.email }}'s passkeys</button></div>
+      {% endif %}
+
+      <form class="row owner-label" data-email="{{ p.email }}">
+        <label for="lb-{{ p.email }}" style="margin:0">Passkey label</label>
+        <input id="lb-{{ p.email }}" name="label" type="text" maxlength="64" value="{{ p.label }}" placeholder="{{ p.effective }}" style="width:16rem">
+        <button class="small" type="submit">Set</button>
+        <span class="fine">Empty = automatic ({{ p.effective }}). People cannot rename their own.</span>
+      </form>
+
+      <form class="row owner-cap" data-email="{{ p.email }}">
+        <label for="cap-{{ p.email }}" style="margin:0">Most passkeys</label>
+        <input id="cap-{{ p.email }}" name="cap" type="number" min="0" max="20" value="{{ p.cap }}" style="width:5rem">
+        <button class="small" type="submit">Set</button>
+        <span class="fine">0 = the default (5)</span>
+      </form>
+
+      <form class="row owner-guest" data-email="{{ p.email }}">
+        <label style="margin:0"><input type="checkbox" name="guest" style="width:auto" {% if p.guest %}checked{% endif %}> Guest account</label>
+        <input name="expires" type="date" value="{{ p.ends }}" style="width:11rem" aria-label="Last day">
+        <button class="small" type="submit">Save</button>
+        <span class="fine">A guest holds one temporary passkey and is locked out after the last day.</span>
+      </form>
+    </div>
+    {% endfor %}
+
+    <p class="fine"><a href="account">Back to my passkeys</a></p>
+  </div>
+</main>
+<script src="passkey/passkey.js" defer></script>
+</body>
+</html>

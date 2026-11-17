@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#a8d8f0">
+<meta name="robots" content="noindex">
+<title>{{ who }}&rsquo;s page</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Quicksand:wght@500;600;700&family=Nunito:wght@400;600;700&display=swap">
+<style>
+/* ===========================================================================
+   CASEY'S PAGE
+
+   A breezy day: open sky, jets crossing it, flowers moving in the wind at the
+   bottom of the screen. Jets because that is her world -- /casey is the Air
+   Force award portal -- so they are hers rather than decoration borrowed from
+   somewhere else.
+
+   DIFFERENT FROM MOM'S ON PURPOSE, and not just in colour. Mom's page is warm,
+   close and grounded: a pot and a road, four big cards. This one is high and
+   open, cooler, with more sky than ground. Two people, two rooms.
+
+   EVERYTHING MOVES ON A DIFFERENT CLOCK. Three jets on three timings, flowers
+   swaying at four, clouds at two. Nothing shares a period, so the page never
+   snaps into lockstep the way a single shared animation would.
+
+   prefers-reduced-motion stops all of it, and the scene still composes with
+   everything still: jets sit mid-sky like a photograph rather than parked off
+   the edge.
+   =========================================================================== */
+
+:root {
+  --sky-high:  #6bb8e0;
+  --sky-mid:   #a8d8f0;
+  --sky-low:   #e6f4fb;
+  --jet:       #46596b;
+  --contrail:  #ffffff;
+  --petal-a:   #f2789f;
+  --petal-b:   #ffd166;
+  --petal-c:   #c084fc;
+  --stem:      #6aa84f;
+  --ink:       #1f3243;
+  --ink-soft:  #55707f;
+  --card:      #ffffff;
+  --card-edge: #d5e9f4;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100%;
+  background: linear-gradient(180deg, var(--sky-high) 0%, var(--sky-mid) 42%, var(--sky-low) 100%);
+  background-attachment: fixed;
+  color: var(--ink);
+  font: 17px/1.65 Nunito, ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.wrap { max-width: 940px; margin: 0 auto; padding: 1.25rem 1.25rem 0; }
+
+/* --- Sky ------------------------------------------------------------------ */
+.sky { position: relative; height: 190px; margin: 0 -1.25rem 1.25rem; overflow: hidden; }
+.sky svg { width: 100%; height: 100%; display: block; }
+
+/* Each jet crosses on its own clock and its own line. The contrail is drawn
+   behind it and fades out at the tail, so it reads as something left behind
+   rather than a stripe attached to the aircraft. */
+@keyframes fly { from { transform: translateX(-220px); } to { transform: translateX(1020px); } }
+.jet-1 { animation: fly 17s linear infinite; }
+.jet-2 { animation: fly 26s linear infinite; animation-delay: 5s; }
+.jet-3 { animation: fly 34s linear infinite; animation-delay: 11s; }
+
+@keyframes drift { from { transform: translateX(0); } to { transform: translateX(-620px); } }
+.cloud-a { animation: drift 55s linear infinite; }
+.cloud-b { animation: drift 82s linear infinite; }
+
+/* --- Flowers along the bottom --------------------------------------------- */
+/* Fixed so they stay at the foot of the window while the cards scroll past --
+   the breeze keeps going the whole time you are reading. */
+.meadow {
+  position: fixed; left: 0; right: 0; bottom: 0;
+  height: 96px; pointer-events: none; z-index: 0;
+}
+.meadow svg { width: 100%; height: 100%; display: block; }
+
+/* Sway pivots at the base of the stem, which is what makes it read as wind
+   rather than as the whole flower sliding sideways. */
+@keyframes sway {
+  0%, 100% { transform: rotate(-3.5deg); }
+  50%      { transform: rotate(3.5deg); }
+}
+.bloom   { animation: sway 4.2s ease-in-out infinite; transform-box: fill-box; transform-origin: bottom center; }
+.bloom-2 { animation-duration: 5.6s; animation-delay: .5s; }
+.bloom-3 { animation-duration: 3.7s; animation-delay: 1.2s; }
+.bloom-4 { animation-duration: 6.3s; animation-delay: .2s; }
+.bloom-5 { animation-duration: 4.9s; animation-delay: 1.8s; }
+
+/* A few petals ride the breeze across the page. */
+@keyframes float-off {
+  0%   { transform: translate(0,0) rotate(0deg);        opacity: 0; }
+  12%  { opacity: .9; }
+  100% { transform: translate(210px,-150px) rotate(220deg); opacity: 0; }
+}
+.petal   { animation: float-off 11s linear infinite; transform-box: fill-box; }
+.petal-2 { animation-duration: 15s; animation-delay: 3s; }
+.petal-3 { animation-duration: 13s; animation-delay: 7s; }
+
+/* --- Content -------------------------------------------------------------- */
+.content { position: relative; z-index: 1; padding-bottom: 7rem; }
+
+header { text-align: center; margin-bottom: 1.9rem; }
+h1 {
+  font-family: Quicksand, Nunito, sans-serif;
+  font-weight: 700;
+  font-size: clamp(2rem, 6.5vw, 2.9rem);
+  margin: 0 0 .35rem;
+  letter-spacing: -.01em;
+}
+h1 .name { color: #d94f7c; text-transform: capitalize; }
+header p { margin: 0 auto; max-width: 32rem; color: var(--ink-soft); font-size: 1.02rem; }
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(215px, 1fr));
+  gap: 1rem;
+}
+
+.card {
+  display: block; text-decoration: none; color: inherit;
+  background: var(--card);
+  border: 1px solid var(--card-edge);
+  border-top: 5px solid var(--accent, var(--petal-a));
+  border-radius: 16px;
+  padding: 1.25rem 1.25rem 1.1rem;
+  box-shadow: 0 10px 26px -18px rgba(31,50,67,.55);
+  transition: transform .2s cubic-bezier(.2,.8,.3,1), box-shadow .2s ease;
+}
+.card:hover, .card:focus-visible {
+  transform: translateY(-5px);
+  box-shadow: 0 18px 34px -18px rgba(31,50,67,.6);
+}
+.card:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; }
+
+.card .ico {
+  display: inline-flex; width: 44px; height: 44px;
+  align-items: center; justify-content: center;
+  border-radius: 50%;
+  background: var(--accent, var(--petal-a));
+  margin-bottom: .7rem;
+}
+.card .ico svg {
+  width: 22px; height: 22px; stroke: #fff; fill: none;
+  stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+}
+.card h2 { font-family: Quicksand, sans-serif; font-size: 1.22rem; font-weight: 700; margin: 0 0 .15rem; }
+.card .sub {
+  margin: 0 0 .45rem; font-size: .74rem; font-weight: 700;
+  letter-spacing: .1em; text-transform: uppercase; color: var(--ink-soft);
+}
+.card p.desc { margin: 0; color: var(--ink-soft); font-size: .95rem; line-height: 1.55; }
+.card .go {
+  display: inline-block; margin-top: .8rem; font-weight: 700;
+  color: var(--ink); border-bottom: 3px solid var(--accent, var(--petal-a)); padding-bottom: 1px;
+}
+
+.nothing {
+  background: var(--card); border: 2px dashed var(--card-edge);
+  border-radius: 16px; padding: 2rem; text-align: center; color: var(--ink-soft);
+}
+
+footer { margin-top: 2.2rem; text-align: center; color: var(--ink-soft); font-size: .92rem; }
+footer a { color: var(--ink); font-weight: 700; }
+
+@media (prefers-reduced-motion: reduce) {
+  .jet-1, .jet-2, .jet-3, .cloud-a, .cloud-b,
+  .bloom, .petal { animation: none; }
+  .card { transition: none; }
+  /* Held mid-sky rather than parked off the left edge, so the scene still
+     composes with nothing moving. */
+  .jet-1 { transform: translateX(180px); }
+  .jet-2 { transform: translateX(470px); }
+  .jet-3 { transform: translateX(700px); }
+  .petal { opacity: 0; }
+}
+{% include "_effects.html" %}
+
+/* --- applying the effects (2026-09-07) -------------------------------------
+   The classes existed and nothing wore them, so the page looked unchanged.
+   These three lines are what make the difference visible. */
+
+/* The entrance, staggered by --i. Capped in the template at 10: past that a
+   stagger stops reading as choreography and starts reading as a slow page. */
+.card.enter { animation-delay: calc(var(--i, 0) * 45ms); }
+
+/* The glow needs somewhere to sit above the card's own background. */
+.card.lit { isolation: isolate; }
+</style>
+</head>
+<body>
+
+<div class="sky" aria-hidden="true">
+  <svg viewBox="0 0 900 190" preserveAspectRatio="xMidYMid slice">
+    <defs>
+      <linearGradient id="trail" x1="0" x2="1">
+        <stop offset="0"  stop-color="#ffffff" stop-opacity="0"/>
+        <stop offset="1"  stop-color="#ffffff" stop-opacity=".85"/>
+      </linearGradient>
+    </defs>
+
+    <g class="cloud-a" fill="#ffffff" opacity=".55">
+      <ellipse cx="180" cy="128" rx="52" ry="17"/>
+      <ellipse cx="222" cy="133" rx="36" ry="13"/>
+      <ellipse cx="800" cy="118" rx="46" ry="16"/>
+    </g>
+    <g class="cloud-b" fill="#ffffff" opacity=".38">
+      <ellipse cx="520" cy="150" rx="60" ry="18"/>
+      <ellipse cx="1080" cy="140" rx="50" ry="16"/>
+    </g>
+
+    <!-- Three jets, three heights, three speeds. -->
+    <g class="jet-1">
+      <rect x="-130" y="40" width="130" height="5" rx="2.5" fill="url(#trail)"/>
+      <path d="M0 42 L26 36 L44 42 L26 48 Z" fill="#46596b"/>
+      <path d="M16 42 L6 26 L14 26 L26 40 Z" fill="#5a6f82"/>
+      <path d="M16 42 L6 58 L14 58 L26 44 Z" fill="#5a6f82"/>
+    </g>
+    <g class="jet-2">
+      <rect x="-110" y="76" width="110" height="4" rx="2" fill="url(#trail)"/>
+      <path d="M0 78 L21 73 L36 78 L21 83 Z" fill="#46596b"/>
+      <path d="M13 78 L5 65 L11 65 L21 76 Z" fill="#5a6f82"/>
+      <path d="M13 78 L5 91 L11 91 L21 80 Z" fill="#5a6f82"/>
+    </g>
+    <g class="jet-3">
+      <rect x="-90" y="104" width="90" height="3" rx="1.5" fill="url(#trail)"/>
+      <path d="M0 105 L17 101 L29 105 L17 109 Z" fill="#5a6f82"/>
+      <path d="M11 105 L4 95 L9 95 L17 104 Z" fill="#6d8296"/>
+      <path d="M11 105 L4 115 L9 115 L17 107 Z" fill="#6d8296"/>
+    </g>
+  </svg>
+</div>
+
+<div class="wrap content">
+  <header>
+    <h1>Hi <span class="name">{{ who }}</span></h1>
+    <p>Yours, all in one place. Pick something and go.</p>
+  </header>
+
+  {% if sections.is_empty() %}
+  <div class="nothing">
+    Nothing has been set up for you yet. Give Jason a nudge.
+  </div>
+  {% else %}
+  {% include "_search.html" %}
+  <div class="grid">
+    {% for s in sections %}
+    <a class="card enter{% if s.href == "/ability/" %} lit{% endif %}" href="{{ s.href }}" style="--accent:{{ s.accent }};--i:{{ loop.index0 }}">
+      <span class="ico"><svg viewBox="0 0 24 24">{{ s.icon|safe }}</svg></span>
+      <p class="sub">{{ s.sub }}</p>
+      <h2>{{ s.name }}</h2>
+      <p class="desc">{{ s.desc }}</p>
+      <span class="go">Open &rarr;</span>
+    </a>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <footer>
+    <a href="/looks">Change look</a> &middot; <a href="/auth/logout">Sign out</a> &middot; made for you, {{ year }}
+  </footer>
+</div>
+
+<div class="meadow" aria-hidden="true">
+  <svg viewBox="0 0 900 96" preserveAspectRatio="xMidYMax slice">
+    <!-- grass -->
+    <path d="M0 74 Q 120 58 240 74 T 480 74 T 720 74 T 900 74 V96 H0 Z" fill="#7fb069"/>
+    <path d="M0 84 Q 150 70 300 84 T 600 84 T 900 84 V96 H0 Z" fill="#6aa84f"/>
+
+    <!-- blooms: stem + head, pivoting at the base -->
+    <g class="bloom">
+      <path d="M96 88 V56" stroke="#6aa84f" stroke-width="3" fill="none"/>
+      <circle cx="96" cy="50" r="9" fill="#f2789f"/>
+      <circle cx="96" cy="50" r="3.4" fill="#ffd166"/>
+    </g>
+    <g class="bloom bloom-2">
+      <path d="M228 90 V52" stroke="#6aa84f" stroke-width="3" fill="none"/>
+      <circle cx="228" cy="46" r="10" fill="#ffd166"/>
+      <circle cx="228" cy="46" r="3.6" fill="#e8925b"/>
+    </g>
+    <g class="bloom bloom-3">
+      <path d="M392 88 V60" stroke="#6aa84f" stroke-width="3" fill="none"/>
+      <circle cx="392" cy="54" r="8" fill="#c084fc"/>
+      <circle cx="392" cy="54" r="3" fill="#fff0b8"/>
+    </g>
+    <g class="bloom bloom-4">
+      <path d="M560 90 V50" stroke="#6aa84f" stroke-width="3" fill="none"/>
+      <circle cx="560" cy="44" r="10" fill="#f2789f"/>
+      <circle cx="560" cy="44" r="3.6" fill="#ffd166"/>
+    </g>
+    <g class="bloom bloom-5">
+      <path d="M726 88 V58" stroke="#6aa84f" stroke-width="3" fill="none"/>
+      <circle cx="726" cy="52" r="8.5" fill="#ffd166"/>
+      <circle cx="726" cy="52" r="3.2" fill="#e8925b"/>
+    </g>
+    <g class="bloom bloom-2">
+      <path d="M844 90 V56" stroke="#6aa84f" stroke-width="3" fill="none"/>
+      <circle cx="844" cy="50" r="9" fill="#c084fc"/>
+      <circle cx="844" cy="50" r="3.2" fill="#fff0b8"/>
+    </g>
+
+    <!-- petals carried off on the breeze -->
+    <ellipse class="petal"          cx="150" cy="60" rx="5" ry="3" fill="#f2789f" opacity="0"/>
+    <ellipse class="petal petal-2"  cx="470" cy="56" rx="4.5" ry="2.8" fill="#ffd166" opacity="0"/>
+    <ellipse class="petal petal-3"  cx="660" cy="62" rx="5" ry="3" fill="#c084fc" opacity="0"/>
+  </svg>
+</div>
+<script>
+/* Entrance animations run once per device, then stop.
+   Jason, 2026-09-07: "turn off animations after the person logs in."
+
+   localStorage, not a session flag: he means the daily user, and a session
+   flag replays the whole entrance every morning -- the thing being removed.
+
+   Set BEFORE first paint and wrapped in try/catch: a private window throws on
+   storage access, and an exception here would leave the class unset and the
+   animation running forever for that person -- invisible in testing,
+   permanent for them. Animating is the safe default when storage is gone. */
+(function () {
+  try {
+    if (localStorage.getItem('seen-entrance')) {
+      document.documentElement.classList.add('pre-seen');
+    } else { localStorage.setItem('seen-entrance', '1'); }
+  } catch (e) {}
+  document.addEventListener('DOMContentLoaded', function () {
+    var t = document.querySelectorAll('.tally[style*="--n"]');
+    if (!t.length || !window.IntersectionObserver) return;
+    /* Count-ups start only once visible, so a number below the fold has not
+       already finished counting by the time it is scrolled to. */
+    var io = new IntersectionObserver(function (es) {
+      es.forEach(function (e) {
+        if (e.isIntersecting) { e.target.classList.add('run'); io.unobserve(e.target); }
+      });
+    }, { threshold: 0.4 });
+    t.forEach(function (el) { io.observe(el); });
+  });
+})();
+</script>
+</body>
+</html>

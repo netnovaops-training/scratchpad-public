@@ -1,0 +1,654 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jason Gibson — AV &amp; IT</title>
+<meta name="description" content="AV and IT technician in Schenectady, New York. Crestron and Extron rooms, 1,000 tickets a year, and a 118-container production environment built at home.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Newsreader:opsz,wght@6..72,400;6..72,500&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* ===========================================================================
+   The palette is AV rack equipment, not a code editor.
+
+   A dark page with one bright accent is the default for every technician's
+   portfolio on the internet, and it buries the half of this CV that the job
+   is actually for. So: a printed spec sheet for the reading, a rack face for
+   the hero, and the two greens and one red that every mixing desk already
+   uses -- signal present, and peak.
+   ======================================================================== */
+:root{
+  --paper:#F7F6F3;
+  --paper-2:#EFEDE8;
+  --rack:#1C1F24;
+  --rack-2:#262A30;
+  --ink:#16181B;
+  --ink-2:#3F444A;
+  --label:#6B7075;
+  --rule:#DAD7D0;
+  --signal:#1F7A4D;
+  --signal-lit:#35D07F;
+  --peak:#C4442E;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#15171A; --paper-2:#1C1F24; --ink:#ECEAE5; --ink-2:#B4B8BD;
+    --label:#8C9196; --rule:#2C3137; --rack:#0F1114; --rack-2:#191C20;
+    --signal:#35D07F;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#15171A; --paper-2:#1C1F24; --ink:#ECEAE5; --ink-2:#B4B8BD;
+  --label:#8C9196; --rule:#2C3137; --rack:#0F1114; --rack-2:#191C20;
+  --signal:#35D07F;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0; background:var(--paper); color:var(--ink);
+  font:400 17px/1.62 Newsreader,Georgia,serif;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1080px;margin:0 auto;padding:0 24px}
+
+/* Panel silkscreen: condensed, wide-tracked, small. Every label on every
+   piece of rack gear in the world looks like this. */
+.label{
+  font:600 12px/1 "Barlow Condensed",system-ui,sans-serif;
+  letter-spacing:.22em; text-transform:uppercase; color:var(--label);
+}
+
+/* ---- the rack: hero ---------------------------------------------------- */
+.rack{background:var(--rack);color:#ECEAE5;padding:64px 0 0}
+.rack .label{color:#7E858C}
+.rack h1{
+  font:700 clamp(46px,9vw,104px)/0.92 "Barlow Condensed",system-ui,sans-serif;
+  letter-spacing:-.01em; margin:14px 0 0; text-transform:uppercase;
+}
+.rack h1 em{font-style:normal;color:var(--signal-lit)}
+.thesis{
+  font:400 clamp(19px,2.3vw,25px)/1.5 Newsreader,Georgia,serif;
+  color:#C9CDD2; max-width:34ch; margin:20px 0 0;
+}
+.where{margin:26px 0 0;display:flex;flex-wrap:wrap;gap:8px 22px;align-items:center}
+.where a{color:#ECEAE5;text-decoration:none;border-bottom:1px solid #454B52}
+.where a:hover{border-bottom-color:var(--signal-lit)}
+
+/* ---- THE SIGNATURE: a channel strip per career strand ------------------
+   Not decoration. Each strip is one thing he does, and the lit segments
+   are how deep it goes -- the same gesture as looking down a mixing desk
+   to see which channels are hot. It is the one place this page is loud. */
+.desk{
+  margin:52px 0 0;display:grid;gap:1px;background:#31363C;
+  grid-template-columns:repeat(5,1fr);border-top:1px solid #31363C;
+}
+.strip{background:var(--rack-2);padding:20px 12px 18px;text-align:center}
+.meter{display:flex;flex-direction:column-reverse;gap:3px;height:112px;
+  justify-content:flex-start;margin:0 auto 14px;width:26px}
+.seg{height:7px;border-radius:1px;background:#31363C}
+.seg.on{background:var(--signal)}
+.seg.hot{background:var(--signal-lit)}
+.seg.pk{background:var(--peak)}
+.strip .name{
+  font:600 13px/1.25 "Barlow Condensed",system-ui,sans-serif;
+  letter-spacing:.14em;text-transform:uppercase;color:#ECEAE5}
+.strip .yrs{font:400 11px/1.4 "IBM Plex Mono",monospace;color:#7E858C;margin-top:5px}
+@media (prefers-reduced-motion:no-preference){
+  .seg.on,.seg.hot,.seg.pk{animation:lift .5s ease both}
+  .seg:nth-child(1){animation-delay:.05s}.seg:nth-child(2){animation-delay:.1s}
+  .seg:nth-child(3){animation-delay:.15s}.seg:nth-child(4){animation-delay:.2s}
+  .seg:nth-child(5){animation-delay:.25s}.seg:nth-child(6){animation-delay:.3s}
+  .seg:nth-child(7){animation-delay:.35s}.seg:nth-child(8){animation-delay:.4s}
+}
+@keyframes lift{from{opacity:0;transform:scaleX(.3)}to{opacity:1;transform:none}}
+
+/* ---- paper sections ---------------------------------------------------- */
+section{padding:72px 0}
+section + section{border-top:1px solid var(--rule)}
+h2{font:700 clamp(26px,3.4vw,38px)/1.1 "Barlow Condensed",system-ui,sans-serif;
+  text-transform:uppercase;letter-spacing:.01em;margin:10px 0 24px}
+p{margin:0 0 16px;max-width:64ch}
+.lead{font-size:19px;color:var(--ink)}
+.muted{color:var(--ink-2)}
+
+.two{display:grid;grid-template-columns:1fr 1fr;gap:44px}
+.three{display:grid;grid-template-columns:repeat(3,1fr);gap:32px}
+@media (max-width:820px){.two,.three{grid-template-columns:1fr;gap:28px}
+  .desk{grid-template-columns:repeat(5,1fr)}}
+/* FIVE STRIPS DO NOT DIVIDE BY THREE. At phone width a 3-column grid
+   leaves a hole where the sixth strip would be, and an empty cell in a
+   row of meters reads as a broken one. Two columns with the last strip
+   spanning the full width has no hole and keeps the desk reading as a
+   desk. */
+@media (max-width:520px){
+  .desk{grid-template-columns:repeat(2,1fr)}
+  .strip:nth-child(5){grid-column:1 / -1}
+  .meter{height:88px}
+}
+
+/* Measurements are set in mono, because that is what they are. */
+.fig{font:500 34px/1 "IBM Plex Mono",monospace;color:var(--signal);letter-spacing:-.02em}
+.fig + .label{display:block;margin-top:8px}
+.figs{display:grid;grid-template-columns:repeat(4,1fr);gap:26px;margin:0 0 8px}
+@media (max-width:820px){.figs{grid-template-columns:repeat(2,1fr);gap:24px}}
+
+.job{padding:22px 0;border-top:1px solid var(--rule)}
+.job:first-of-type{border-top:0}
+.job h3{font:600 21px/1.3 "Barlow Condensed",system-ui,sans-serif;
+  letter-spacing:.06em;text-transform:uppercase;margin:0}
+.job .when{font:400 12px/1.5 "IBM Plex Mono",monospace;color:var(--label);margin:3px 0 10px}
+.job ul{margin:0;padding-left:18px}
+.job li{margin:0 0 7px}
+
+/* The fault log reuses .job rows -- same rule, same condensed heading, same
+   mono meta line -- because these ARE the same kind of entry as a job: a
+   thing done, with what it involved underneath. Giving them their own visual
+   language would say they are a lesser kind of claim, and they are not. */
+.faults{margin-top:34px;border-top:1px solid var(--rule);padding-top:8px}
+.faults .job p{margin:0 0 10px;font-size:15.5px}
+.faults .job p:last-child{margin-bottom:0}
+
+.built{border:1px solid var(--rule);border-radius:3px;padding:20px;background:var(--paper-2)}
+.built h3{font:600 17px/1.3 "Barlow Condensed",system-ui,sans-serif;
+  letter-spacing:.1em;text-transform:uppercase;margin:0 0 8px}
+.built p{font-size:15.5px;margin:0;color:var(--ink-2)}
+
+.cta{display:flex;flex-wrap:wrap;gap:12px;margin:28px 0 0;align-items:center}
+.btn{
+  display:inline-block;padding:13px 22px;border-radius:2px;text-decoration:none;
+  font:600 14px/1 "Barlow Condensed",system-ui,sans-serif;letter-spacing:.16em;
+  text-transform:uppercase;border:1px solid var(--ink);color:var(--ink);
+}
+.btn:hover{background:var(--ink);color:var(--paper)}
+.btn.go{background:var(--signal);border-color:var(--signal);color:#fff}
+.btn.go:hover{background:var(--ink);border-color:var(--ink)}
+.btn:focus-visible,a:focus-visible{outline:2px solid var(--signal);outline-offset:3px}
+
+footer{background:var(--rack);color:#9AA0A6;padding:40px 0;
+  font:400 14px/1.6 "IBM Plex Mono",monospace}
+footer a{color:#ECEAE5}
+
+/* The household sign-in. Quiet on purpose: present for the one person who
+   needs it, invisible to the audience the rest of the page is for. */
+.rack { position: relative; }
+.signin {
+  position: absolute;
+  top: 1rem;
+  right: 1.25rem;
+  z-index: 5;
+  font-size: .78rem;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  text-decoration: none;
+  padding: .4rem .75rem;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  opacity: .5;
+  transition: opacity .2s ease;
+}
+.signin:hover, .signin:focus-visible { opacity: 1; }
+@media (max-width: 640px) {
+  .signin { top: .5rem; right: .6rem; font-size: .72rem; }
+}
+</style>
+</head>
+<body>
+
+<header class="rack">
+  <!-- THE WAY IN, and deliberately a small one.
+       This page is written for a recruiter, so the household sign-in does
+       not belong in the pitch -- but with no link at all the only way Jason
+       could reach his own stack was to type /auth/ from memory, which is
+       how he ended up locked out of his own front door. Top corner, quiet,
+       out of the reading path.
+
+       IT POINTS AT /home, NOT AT /auth/. Signing in from a bare /auth/ has
+       no destination attached, so `safe_next` falls back to "/" and drops
+       you straight back on this public page -- no visible change, which
+       reads exactly like the button doing nothing. /home is the gated hub
+       with the cards for every app, so it redirects through sign-in and
+       lands somewhere, and skips the form entirely when already signed in. -->
+  <a class="signin" href="/home">Sign in</a>
+  <div class="wrap">
+    <span class="label">Schenectady, New York &nbsp;·&nbsp; Security+ &nbsp;·&nbsp; A+</span>
+    <h1>Jason Gibson<br><em>AV &amp; IT</em></h1>
+    <!-- The thesis. One sentence, and it is the thing that makes the rest
+         of this page cohere rather than read as two unrelated hobbies. -->
+    <p class="thesis">Give me a system I have never seen and I will find
+      where it breaks. A patch bay routes audio, a reverse proxy routes
+      requests — the thinking is the same, and I taught myself both by
+      doing them.</p>
+    <div class="where">
+      <a href="mailto:user@example.com">user@example.com</a>
+      <a href="tel:+15189287616">555-0163</a>
+      <a href="https://www.linkedin.com/in/example518">LinkedIn</a>
+    </div>
+
+    <div class="desk" role="img"
+         aria-label="Five channel strips showing depth of experience: audio visual, networks and systems, security, automation, and music.">
+      <div class="strip">
+        <div class="meter" aria-hidden="true">
+          <i class="seg on"></i><i class="seg on"></i><i class="seg on"></i>
+          <i class="seg on"></i><i class="seg on"></i><i class="seg hot"></i>
+          <i class="seg hot"></i><i class="seg pk"></i>
+        </div>
+        <div class="name">Audio&nbsp;Visual</div>
+        <div class="yrs">5 yrs</div>
+      </div>
+      <div class="strip">
+        <div class="meter" aria-hidden="true">
+          <i class="seg on"></i><i class="seg on"></i><i class="seg on"></i>
+          <i class="seg on"></i><i class="seg on"></i><i class="seg hot"></i>
+          <i class="seg hot"></i><i class="seg"></i>
+        </div>
+        <div class="name">Networks</div>
+        <div class="yrs">5 yrs</div>
+      </div>
+      <div class="strip">
+        <div class="meter" aria-hidden="true">
+          <i class="seg on"></i><i class="seg on"></i><i class="seg on"></i>
+          <i class="seg on"></i><i class="seg on"></i><i class="seg hot"></i>
+          <i class="seg"></i><i class="seg"></i>
+        </div>
+        <div class="name">Security</div>
+        <div class="yrs">TryHackMe · top 7%</div>
+      </div>
+      <div class="strip">
+        <div class="meter" aria-hidden="true">
+          <i class="seg on"></i><i class="seg on"></i><i class="seg on"></i>
+          <i class="seg on"></i><i class="seg on"></i><i class="seg hot"></i>
+          <i class="seg hot"></i><i class="seg"></i>
+        </div>
+        <div class="name">Automation</div>
+        <div class="yrs">118 containers</div>
+      </div>
+      <div class="strip">
+        <div class="meter" aria-hidden="true">
+          <i class="seg on"></i><i class="seg on"></i><i class="seg on"></i>
+          <i class="seg on"></i><i class="seg hot"></i><i class="seg hot"></i>
+          <i class="seg"></i><i class="seg"></i>
+        </div>
+        <div class="name">Music</div>
+        <div class="yrs">DJ · live sound</div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main>
+
+<section>
+  <div class="wrap">
+    <span class="label">What I do</span>
+    <h2>Rooms that work when the meeting starts</h2>
+    <div class="two">
+      <div>
+        <p class="lead">I install, configure and troubleshoot AV and IT
+          systems — Crestron and Extron control, Zoom and Teams rooms,
+          networks, imaging and Active Directory.</p>
+        <p class="muted">At SUNY Schenectady that meant 80 large events a
+          year and a thousand tickets, on a campus of five thousand people.
+          At Domino's it meant AV, sensors and thin clients across
+          restaurants, where downtime is measured in orders lost.</p>
+      </div>
+      <div>
+        <div class="figs">
+          <div><span class="fig">1,000</span><span class="label">Tickets / year</span></div>
+          <div><span class="fig">+15%</span><span class="label">Over SLA</span></div>
+          <div><span class="fig">80+</span><span class="label">Events / year</span></div>
+          <div><span class="fig">5,000</span><span class="label">Users supported</span></div>
+        </div>
+        <p class="muted" style="font-size:15px">Also: a 10% cut in A/V spend
+          at SUNY, by specifying equipment that did the job instead of
+          equipment that looked like it would.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <span class="label">Proof, not a course certificate</span>
+    <h2>A production environment I run myself</h2>
+    <p class="lead">118 containers across two machines, at home, in daily use
+      by my family. Single sign-on, reverse proxy and TLS, centralised
+      logging, intrusion detection, offsite backup, and a private model
+      gateway.</p>
+    <p class="muted">It is not a lab that sits idle. Things break in it and I
+      fix them, which is the part a certificate cannot show: a database that
+      filled a disk and took a photo service down with it, a nightly backup
+      that had been copying a NAS onto the wrong drive for a week, a service
+      that restarted a thousand times because it mistook its own slowness
+      for somebody else's.</p>
+    <div class="cta">
+      <a class="btn go" href="/notes.html">Read five real faults and how I found them</a>
+    </div>
+    <div class="three" style="margin-top:28px">
+      <div class="built">
+        <h3>Single sign-on</h3>
+        <p>One account across every application in the house, with per-person
+          access and sessions that end when access is removed.</p>
+      </div>
+      <div class="built">
+        <h3>Observability</h3>
+        <p>Metrics, logs and uptime checks on a second machine, so the box
+          that is down is not the box being asked whether it is down.</p>
+      </div>
+      <div class="built">
+        <h3>Applications</h3>
+        <p>A phone assistant, a photo library with automatic tagging, a
+          garden catalogue, and a telephone line that answers and plays a
+          recording.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <span class="label">Security, practised not just studied</span>
+    <h2>74 rooms and a report to show for it</h2>
+    <div class="two">
+      <div>
+        <p class="lead">Top 7% on TryHackMe — 74 completed rooms across
+          offensive and defensive tracks, from the Cyber Kill Chain and
+          the Pyramid of Pain through to digital forensics and SOC
+          operations.</p>
+        <p class="muted">It is the deliberate half of the same habit as the
+          homelab: break something in a place where breaking it is the
+          point, then write down how.</p>
+        <p class="muted" style="font-size:15px">Offensive: SQL injection,
+          command injection, file inclusion, SSRF, XSS, IDOR,
+          authentication bypass, subdomain enumeration, Metasploit, Burp
+          Suite, Linux and Windows privilege escalation.<br>
+          Defensive: SOC operations, digital forensics, threat
+          intelligence, the Cyber Kill Chain, the Unified Kill Chain, the
+          Pyramid of Pain, the Diamond Model.<br>
+          Foundations: networking to the packet, the OSI model, DNS, HTTP,
+          Linux and Windows internals, PowerShell and Python for testers.</p>
+        <div class="cta">
+          <a class="btn" href="https://tryhackme.com/p/sonshine.518"
+             rel="noopener">View the profile</a>
+        </div>
+      </div>
+      <div>
+        <div class="figs" style="grid-template-columns:repeat(3,1fr)">
+          <div><span class="fig">74</span><span class="label">Rooms done</span></div>
+          <div><span class="fig">7%</span><span class="label">Top rank</span></div>
+          <div><span class="fig">10</span><span class="label">Badges</span></div>
+        </div>
+        <p class="muted" style="font-size:15.5px">Coursework at Saint Rose
+          included a full ethical-hacking report on the OverTheWire Bandit
+          wargame — scope, intelligence gathering, threat model,
+          vulnerability analysis, exploitation, post-exploitation and
+          findings, written the way an engagement is actually documented.</p>
+        <div class="cta">
+          <a class="btn" href="/cv/Jason-Gibson-Ethical-Hacking-Report.pdf"
+             download>Read the report (PDF, 11&nbsp;MB)</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <span class="label">The other desk</span>
+    <h2>DJ and live sound</h2>
+    <div class="two">
+      <div>
+        <p class="lead">I DJ. Which is the same job as the rest of this page,
+          with an audience watching.</p>
+        <p class="muted">Signal flow, gain staging, a room's acoustics, and
+          knowing what to do in the four seconds after something cuts out —
+          that is AV work, and doing it live is the version with no second
+          take. It is why I am comfortable in a control booth during an
+          event rather than only before one.</p>
+      </div>
+      <div>
+        <p class="muted">Equipment I work with: Crestron and Extron control
+          and switching, Zoom and Teams room systems, DSP and mixing,
+          projection and displays, cable infrastructure and the patching
+          that keeps it serviceable.</p>
+        <p class="muted">I also stream my own sets from a server I run —
+          Traktor into OBS, RTMP into Owncast on the LAN, HLS back out
+          through the same reverse proxy as everything else here.</p>
+        <p style="margin:18px 0 0">
+          <a class="btn go" href="https://nights.home.example.net/">Nights I have played</a>
+          <a class="btn" href="https://dj.home.example.net/">The live stream</a>
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <span class="label">How I work</span>
+    <h2>Nobody taught me any of this</h2>
+    <div class="two">
+      <div>
+        <p class="lead">Every system on this page I built by reading, trying
+          it, breaking it and fixing it. No bootcamp, no team to fall back
+          on, no one to hand it to when it got hard.</p>
+        <p class="muted">That is the part worth hiring. Certificates say I
+          passed an exam. What I actually do is take a scope I have not
+          seen before and keep going until it works — then write down what
+          went wrong so the next person does not lose the same afternoon.</p>
+        <p class="muted">It changed how I learn, not how much:
+          I go all the way into a problem and I do not come out until it is
+          solved. Seventy-four rooms, a hundred and eighteen containers and a
+          fault chased through three layers are all the same trait doing
+          the same thing. Most employers treat it as a risk. It is the
+          reason any of this exists.</p>
+      </div>
+      <div>
+        <p class="muted">None of this was knowledge I started with. I had
+          not written PHP, I had not designed a schema, and I had never
+          terminated TLS or read a reverse proxy config. I learned it the slow
+          way, on a live system, with my own family using it.</p>
+
+        <p class="muted"><strong>And I use AI heavily — I would rather say so
+          than have you wonder.</strong> It became available to me academically
+          in my last semester, and it is how these pages get written as fast as
+          they do. By hand I would have run out of gas long before this much
+          existed. That is the honest trade: one person, a day job, and a
+          system the family actually depends on.</p>
+
+        <p class="muted">What it does not do is the deciding or the finding.
+          It is confidently wrong often enough that taking its word is how you
+          ship a fault, and the failure I watch for hardest is code that only
+          works because the tool made it work — a thing that passes because
+          whatever wrote it also wrote what it was checked against. So I do
+          not verify the tool with the tool. I research it out, read the
+          forums, ask colleagues and friends what they make of an idea, and
+          bring my own education and experience to it before I keep anything.</p>
+
+        <p class="muted">Prompting and pasting does not get you here. Somebody
+          who had only done that would have no faults to write up, because they
+          would never have found them. Every part of this site I have
+          troubleshot myself, as deeply as I could. Five faults are
+          written up in the <a href="/notes.html">engineering notes</a> —
+          the symptom, what it first looked like, and the cause two or three
+          layers down — including the ones where I was wrong first.</p>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <span class="label">The same problems, at home first</span>
+    <h2>Why any of this transfers</h2>
+
+    <div>
+      <div>
+        <p class="lead">A company does not need someone who has run
+          containers. It needs someone who has had to decide who gets in,
+          what happens when a certificate expires at 2am, and where the
+          second copy lives. I have had to decide all of it, because there
+          was nobody else to ask.</p>
+        <p class="muted">The numbers below were counted on the running
+          systems, not estimated. They change; the shape does not.</p>
+      </div>
+    </div>
+
+    <div class="faults">
+
+      <div class="job">
+        <h3>Identity — one account, not thirty</h3>
+        <div class="when">30 hostnames · 117 access rules · one sign-in</div>
+        <p class="muted">Every private service sits behind a single OIDC
+          issuer I run: Immich, Jellyfin, Kavita, Audiobookshelf, two wikis,
+          the recipe library and two phone apps I wrote. One account per
+          person, one place to revoke it, and no service holding its own
+          password list.</p>
+      </div>
+
+      <div class="job">
+        <h3>Access — two ports for the whole estate</h3>
+        <div class="when">80 and 443 · 34 certificates · renewed unattended</div>
+        <p class="muted">Nothing is published on a port of its own. A reverse
+          proxy terminates TLS for every hostname, renews all 34 certificates
+          without being asked, and forwards to services that are not reachable
+          from outside at all. Remote shell rides on 443 alongside the web
+          traffic, so port 22 is closed to the internet.</p>
+      </div>
+
+      <div class="job">
+        <h3>Language models, run in-house</h3>
+        <div class="when">Local weights · one gateway · nothing leaves the house</div>
+        <p class="muted">The assistants across these sites answer from models
+          running on my own hardware, reached through a single gateway that
+          holds the credentials and routes by task, so an application never
+          holds a key and the model behind it can be swapped without touching
+          the application. Speech synthesis runs on the low-power machine;
+          the GPU is reserved for what needs it.</p>
+      </div>
+
+      <div class="job">
+        <h3>Change control and recovery</h3>
+        <div class="when">Self-hosted Git · 118 containers · declared, not clicked</div>
+        <p class="muted">Source lives in a Git service I host, and the
+          machines are described in compose files rather than assembled by
+          hand — so a rebuild is a file, not a memory. When something is
+          patched into a running container it is written back into the build
+          context in the same sitting, because code that exists only in a
+          running container is not deployed, it is borrowed, and the bill
+          arrives at the next rebuild.</p>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <span class="label">Experience</span>
+    <h2>Where I have done it</h2>
+
+    <div class="job">
+      <h3>Lead AV &amp; IT Technician — Domino's Inc</h3>
+      <div class="when">Jul 2024 – Feb 2025 · New York area</div>
+      <ul>
+        <li>Installed and configured AV systems, temperature sensors and thin
+          clients across restaurant sites.</li>
+        <li>Troubleshot AV and network faults on franchise-specific equipment,
+          keeping stores trading.</li>
+        <li>Preventative maintenance and cable management standards, so the
+          next fault was quicker to find.</li>
+      </ul>
+    </div>
+
+    <div class="job">
+      <h3>Senior IT / Lead AV Technician — SUNY Schenectady</h3>
+      <div class="when">Sep 2021 – Dec 2023 · Schenectady, New York</div>
+      <ul>
+        <li>Led the team through 1,000+ support requests a year in
+          Remedyforce, beating SLA by 15%.</li>
+        <li>Ran Crestron and Extron systems for 80+ large virtual events a
+          year on Zoom and Teams.</li>
+        <li>Built user onboarding with Active Directory and imaging, and
+          improved network efficiency for 5,000+ users.</li>
+        <li>Cut A/V spend 10% while improving production quality.</li>
+      </ul>
+    </div>
+
+    <div class="job">
+      <h3>Crew &amp; Drive-Thru — Burger King</h3>
+      <div class="when">3 years · Top guest-satisfaction scores at the location</div>
+      <ul>
+        <li>Reached the location's highest guest-satisfaction scores within a
+          year, measured by GuestTrack — the company's own survey programme,
+          answered by customers rather than by me.</li>
+        <li>Knew the regulars well enough to have the order started by the
+          sound of the car. Suggestive selling worked because it was a correct
+          guess rather than a script, and it is why the upsell was usually
+          accepted.</li>
+        <li>Twenty cents on a cup against a customer who comes back: I gave
+          away the cup. Arguing wins the transaction and loses the account, and
+          at a single location the account is worth more. It is the same call
+          support turns on — the cheap reversible fix now, rather than being
+          right about the small item.</li>
+        <li>No complaint that outlived the window: anything wrong was put right
+          at the point it was raised, and those customers returned. Accuracy
+          checked before handover, because the expensive failure is the one
+          found in the car park.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="two">
+      <div>
+        <span class="label">Education</span>
+        <h2>Qualifications</h2>
+        <p><strong>Digital Forensics and Cybersecurity — Cyber
+          Operations, MS</strong> · University at Albany
+          <span class="muted">(in progress)</span><br>
+          <strong>BS Cyber Security</strong> · The College of Saint Rose<br>
+          <strong>AS Computer Information Technology</strong> · Northwest
+          Florida State College</p>
+        <p class="muted">CompTIA Security+ and A+, both current to 2027.
+          Cloud+ expected 2026. Six further college certificates and two
+          TryHackMe paths.</p>
+        <p class="muted"><a href="/credentials.html">Every certificate, with
+          its date and how to verify it &rarr;</a></p>
+      </div>
+      <div>
+        <span class="label">Next step</span>
+        <h2>Let's talk</h2>
+        <p class="muted">Open to AV, IT and security work — on site in the
+          Capital Region, or remote. The resume is a page; this site is the
+          evidence behind it, and everything on it I built myself.</p>
+        <p class="muted">One thing has not changed across any of it: I make it
+          right with the customer, whatever it takes. A room that fails four
+          minutes before a meeting and an order that is wrong at the window
+          are the same problem — somebody is waiting, and being right about
+          the policy is worth less than fixing it.</p>
+        <div class="cta">
+          <a class="btn go" href="/cv/Jason-Gibson-Resume.pdf" download>Download resume</a>
+          <a class="btn" href="/notes.html">Engineering notes</a>
+          <a class="btn" href="mailto:user@example.com">Email me</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    Jason Gibson · Schenectady, New York ·
+    <a href="mailto:user@example.com">user@example.com</a> ·
+    <a href="tel:+15189287616">555-0163</a>
+  </div>
+</footer>
+
+</body>
+</html>

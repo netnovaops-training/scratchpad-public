@@ -1,0 +1,3892 @@
+# =============================================================================
+#  Caddy â€” the web server. ONE hostname now, everything under paths.
+#
+#  THIS REPLACES CERTBOT. Caddy gets and renews Let's Encrypt certificates
+#  automatically, on its own, forever. There is no certbot container, no cron
+#  job, no renewal to forget. That's the main reason it's here rather than
+#  Apache + Certbot.
+#
+#  For that to work TWO things must be true:
+#    1. Ports 80 AND 443 forwarded from your router to this PC.
+#       Port 80 is not optional â€” Let's Encrypt uses it to verify you own the
+#       domain, even though the site itself runs on 443.
+#    2. The DNS names already resolve to your home IP before Caddy starts.
+#       No-IP is already doing that.
+#
+#  If your ISP blocks inbound port 80 â€” Spectrum and several others do on
+#  residential lines â€” certificates will fail and the sites won't load. See
+#  WEBSITES.md, "If your ISP blocks port 80", for the Cloudflare Tunnel route
+#  which needs no open ports at all.
+#
+#  Everything else in this stack stays bound to 127.0.0.1. Caddy proxies to
+#  loopback the same as always -- what changed 2026-08-27 is who's in FRONT
+#  of Caddy. The NUC (192.168.1.86) is now the literal internet-facing
+#  edge (a blind HAProxy TCP relay, see share/nuc-homelab/haproxy-relay.cfg
+#  and ~/.claude/plans/happy-yawning-wilkes.md) once the router's port-
+#  forward points there instead of here. Caddy itself, its cert storage,
+#  and every app behind it are UNCHANGED -- the relay doesn't terminate TLS
+#  or make routing decisions, it just forwards bytes on 80/443/9443/9444/
+#  9445 straight through to this same Caddy. Ports 80/443 etc. still need
+#  to reach THIS box in the end (now via the relay rather than directly),
+#  same "port 80 for ACME" requirement as always.
+# =============================================================================
+
+{
+	email {$ACME_EMAIL}
+
+	# Uncomment to use Let's Encrypt's staging server while you're testing.
+	# Staging certs are NOT trusted by browsers â€” you'll get a warning â€” but
+	# the rate limits are far looser. Real certs are limited to 5 per domain
+	# per week, and it is very easy to burn those on a misconfiguration.
+	# acme_ca https://acme-staging-v02.api.letsencrypt.org/directory
+
+	# TRIED 2026-08-27, REVERTED SAME DAY: a `proxy_protocol` listener
+	# wrapper here (paired with `send-proxy` on the NUC's haproxy-relay) was
+	# meant to recover the real visitor IP once the NUC relay sits in front
+	# of this Caddy -- see ~/.claude/plans/happy-yawning-wilkes.md. Doesn't
+	# work on THIS stack: this whole ai-stack runs under Docker Desktop for
+	# Windows, which NATs every inbound container connection's source IP to
+	# the docker bridge gateway (172.18.0.1) before Caddy ever sees it --
+	# confirmed from real internet-scanner log entries (Host header showing
+	# the actual public IP, remote_ip already 172.18.0.1) from BEFORE this
+	# was ever added, so it's a pre-existing platform limitation, not
+	# something the relay caused. Because of that NAT, Caddy can never see
+	# a genuine peer of the relay's real LAN IP to `allow` -- and widening
+	# `allow` to 172.18.0.1 instead would trust a PROXY header from that
+	# same address ANY external connection arrives from, letting literally
+	# anyone spoof their client IP. Left out rather than ship either a dead
+	# no-op or a spoofing hole. Net effect: client-IP attribution was
+	# already inaccurate for every visitor before today and still is --
+	# not a regression, just not fixable without a bigger platform change
+	# (e.g. Caddy running outside Docker Desktop's Windows NAT).
+}
+
+# Shared hardening applied to every site below.
+(common) {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "SAMEORIGIN"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+	# Access logs go to stdout, which means `logs.cmd caddy`.
+	#
+	# THIS USED TO BE `output file /var/log/caddy/{host}.log`, and that was
+	# wrong in two ways at once:
+	#
+	#   1. `{host}` is a REQUEST-TIME placeholder. The file writer opens its
+	#      file once, when the module is provisioned, long before any request
+	#      exists -- so there is nothing to substitute. It does not fan out into
+	#      one log per site the way it reads like it does.
+	#
+	#   2. It made a bind-mounted Windows directory a hard startup dependency.
+	#      If Caddy cannot open that path it does not degrade and carry on -- it
+	#      fails to provision and the container never starts, which then looks
+	#      exactly like a certificate problem.
+	#
+	# Docker's json-file driver already caps and rotates these at 10MB x 3 (see
+	# x-web-logging in docker-compose.web.yml), so nothing is lost by this.
+	log {
+		output stdout
+	}
+}
+
+# Proxy settings shared by the three FastAPI apps. Long timeouts because these
+# apps talk to a local LLM, and a 30-second answer is normal, not a hang.
+# --- Sign-in checks ask the NUC (one account list, on the NUC) -------------
+# Every forward_auth below calls the NUC's /verify door (Caddyfile.nuc, @pcgate),
+# which answers only this PC, over the NUC's existing 443 (no new port). The
+# certificate is checked as example.org. The host the visitor asked
+# for (with its port, for :9444/:9445) goes along in X-Forwarded-Host so the
+# sign-in page sends them back to the right place.
+# Undo: the Caddyfile.bak-* copies, moved 2026-11-12 to D:\ai-stack-archive\backups\web\.
+(nuc_gate) {
+	header_up Host example.org
+	header_up X-Forwarded-Host {http.request.hostport}
+	transport http {
+		tls_server_name example.org
+	}
+}
+
+# --- Sign-in pages are served by the NUC (one account list, on the NUC) -----
+# /auth/*, /sso/* and /__sso* on this PC are passed whole (no prefix stripped;
+# the NUC strips it) to the NUC's own sign-in service over its existing 443.
+# The visitor's host and port go along as Host, and the certificate is checked
+# for that name. The NUC replaces the forwarding headers at its own edge.
+# Undo: the Caddyfile.bak-* copies, moved 2026-11-12 to D:\ai-stack-archive\backups\web\.
+(nuc_signin) {
+	header_up Host {http.request.hostport}
+	header_up -X-Forwarded-Host
+	transport http {
+		tls_server_name {http.request.host}
+		read_timeout 300s
+		write_timeout 300s
+	}
+}
+
+
+(appproxy) {
+	# --- strip every client-supplied "this is who I really am" header --------
+	# Scanners hitting these sites send a whole set of these, all claiming to
+	# be 127.0.0.1:
+	#
+	#   X-Real-Ip, True-Client-Ip, X-Client-Ip, X-Originating-Ip,
+	#   X-Azure-Clientip, X-Azure-Socketip, X-Host, X-Forwared (their typo)
+	#
+	# The point of that is to slip past anything upstream that says "allow if
+	# the request came from localhost". Nothing in this stack currently reads
+	# any of them -- checked -- so today it achieves nothing. The reason to
+	# delete them anyway is that "nothing reads them today" is not a property
+	# that survives the next feature. An admin page that trusts X-Real-Ip
+	# would be wide open the day it ships, and would look perfectly correct in
+	# review. Removing them at the edge means that mistake cannot be made.
+	#
+	# X-Forwarded-For is SET rather than deleted: set replaces whatever the
+	# client sent, so a forged value never reaches the app either way.
+	header_up -X-Real-IP
+	header_up -True-Client-IP
+	header_up -X-Client-IP
+	header_up -X-Originating-IP
+	header_up -X-Azure-ClientIP
+	header_up -X-Azure-SocketIP
+	header_up -X-Forwarded-Host
+	header_up -X-Host
+	header_up -X-Forwared
+	header_up -Forwarded
+
+	# NOTE: {remote_host} is the Docker gateway (172.18.0.1), NOT the visitor.
+	# Docker Desktop on Windows publishes ports through a userland proxy that
+	# NATs every connection, so the real client IP is lost before Caddy ever
+	# sees it. Nothing here can recover it. That means: the access log cannot
+	# identify a visitor, and IP-based blocking or rate limiting cannot work
+	# in this setup -- don't build anything that depends on either.
+	header_up X-Forwarded-For {remote_host}
+	header_up X-Forwarded-Proto {scheme}
+	transport http {
+		read_timeout 300s
+		write_timeout 300s
+	}
+}
+
+# =============================================================================
+#  example.org â€” the landing page, plus Casey and Mom underneath
+# =============================================================================
+example.org {
+	import common
+
+	handle /healthz {
+		respond "ok" 200
+	}
+
+	# --- sign in -------------------------------------------------------------
+	# Magic links and 6-digit codes for the three allowed addresses. This block
+	# is deliberately NOT behind forward_auth - it is where you go to become
+	# authenticated, so requiring authentication to reach it would be a loop.
+	# The cookie bridge's minting side (see rust/auth/src/bridge.rs). NOT
+	# behind forward_auth on purpose: the handler checks the cookie itself
+	# and redirects to sign-in when there is none -- wrapping it in the gate
+	# would just add a second copy of the same bounce.
+	handle /sso/* {
+		reverse_proxy https://192.168.1.86 {
+			import nuc_signin
+		}
+	}
+
+	redir /auth /auth/ 308
+	handle /auth/* {
+		reverse_proxy https://192.168.1.86 {
+			import nuc_signin
+		}
+	}
+
+	# --- Zanetta's career portal, under /casey ---------------------------------
+	# handle_path strips the prefix before proxying; the app puts it back on
+	# every link it generates via ZEE_ROOT_PATH.
+	# --- THE ONE PATH UNDER /casey THAT SSO CANNOT GUARD --------------------
+	#
+	# A ChatGPT custom GPT Action is called by OpenAI's servers, not by her
+	# browser. They hold no session cookie and cannot complete an
+	# interactive sign-in, so forward_auth would 302 every call to the
+	# sign-in page and the GPT would report a broken connector.
+	#
+	# So this one prefix is exempt from the household SSO and carries its
+	# OWN bearer token instead -- see Casey/app/actions.py, which refuses
+	# every call when ZEE_ACTION_TOKEN is unset rather than defaulting to
+	# open. It must come BEFORE the /casey/* block below: Caddy takes the
+	# first matching handler, so ordering is the whole mechanism here.
+	#
+	# Kept deliberately narrow. It is her career record, reachable from the
+	# open internet with one token, and nothing else was widened to allow it.
+	# handle + strip_prefix /casey, NOT handle_path. handle_path would strip
+	# the WHOLE matched prefix -- /casey/actions -- and the app would be
+	# asked for /awards when its router lives at /actions/awards. Measured:
+	# every call came back 404 with a valid token. Only /casey comes off.
+	handle /casey/actions/* {
+		uri strip_prefix /casey
+		request_body {
+			max_size 2MB
+		}
+		reverse_proxy casey:8000 {
+			import appproxy
+			header_up X-Forwarded-Prefix /casey
+		}
+	}
+
+	# --- /ability -- Jason's own record ---------------------------------------
+	#
+	# Jason, 2026-09-07: "can we do something with my career now, I'll upload
+	# my pictures docx files and PDFs."
+	#
+	# The SAME IMAGE as /casey with different data, prompts and root path -- see
+	# the ability service in docker-compose.web.yml for why that is one
+	# container rather than a second codebase.
+	#
+	# Behind the household gate like everything else. It is his own record and
+	# nobody else's business, and the gate already separates the two portals
+	# at the door.
+	redir /ability /ability/ 308
+	handle /ability* {
+		forward_auth https://192.168.1.86 {
+			import nuc_gate
+			uri /verify
+			copy_headers X-Auth-Email
+			header_up X-Forwarded-Uri {http.request.orig_uri}
+		}
+		reverse_proxy ability:8000 {
+			import appproxy
+		}
+	}
+
+	# Moved from /casey 2026-11-03: /casey is now her card page, served by the NUC.
+	redir /casey/portal /casey/portal/ 308
+	handle_path /casey/portal/* {
+		request_body {
+			max_size 512MB
+		}
+		# CHECK FIRST, PROXY SECOND.
+		# On 2xx Caddy continues and copies X-Auth-Email into the request. On
+		# anything else it returns the auth service's response to the browser,
+		# which is a redirect to /auth/ carrying where they were headed. The
+		# app behind this never sees an unauthenticated request at all.
+		forward_auth https://192.168.1.86 {
+			import nuc_gate
+			uri /verify
+			copy_headers X-Auth-Email
+			# THE ORIGINAL PATH, NOT THE STRIPPED ONE.
+			#
+			# handle_path removes the prefix before this runs, so Caddy's
+			# own X-Forwarded-Uri arrived at the auth service as "/" for
+			# every app in a handle_path block. Two things broke, and only
+			# the harmless one was visible:
+			#
+			#  1. Signing in dumped you at the site root instead of the
+			#     page you asked for -- /auth/?next=/ rather than
+			#     ?next=/git/.
+			#  2. MUCH WORSE: app_for_uri() decides per-app permissions by
+			#     matching that path. Given "/" it matched nothing and
+			#     returned None, which means "being on the sign-in list is
+			#     the only gate" -- so the per-app toggles on /admin/people
+			#     did nothing at all for /git, /portainer, /status, /tools
+			#     and /pdf. Anyone who could sign in could reach Portainer,
+			#     which holds the Docker socket and is root-equivalent.
+			#
+			# Proven by the one block that does NOT strip: /logs uses
+			# `handle` and correctly produced ?next=/logs/ while every
+			# handle_path app produced ?next=/ (measured 2026-08-28).
+			#
+			# orig_uri is the path as the browser sent it, before any
+			# rewrite -- which is what both the redirect and the permission
+			# check have always meant to use.
+			header_up X-Forwarded-Uri {http.request.orig_uri}
+		}
+		reverse_proxy casey:8000 {
+			import appproxy
+			header_up X-Forwarded-Prefix /casey/portal
+		}
+	}
+
+	# --- the knowledge base, under /mama/kb ----------------------------------
+	# MUST COME BEFORE /mama/* below. Caddy tries handle blocks in the order
+	# they are written, not longest-match-first, so the /mama/* block would
+	# swallow this and the guides would never be reachable.
+	#
+	# `handle`, not `handle_path`: the app is told its own root path and builds
+	# absolute links from it, so it needs to see /mama/kb/... as sent.
+	#
+	# Same sign-in as /mama itself. Everyone who can sign in can READ the
+	# guides; the app itself checks the address against its owner list before
+	# letting anything be imported, edited or published.
+	handle /mama/kb* {
+		request_body {
+			max_size 8MB
+		}
+		forward_auth https://192.168.1.86 {
+			import nuc_gate
+			uri /verify
+			copy_headers X-Auth-Email
+			# THE ORIGINAL PATH, NOT THE STRIPPED ONE.
+			#
+			# handle_path removes the prefix before this runs, so Caddy's
+			# own X-Forwarded-Uri arrived at the auth service as "/" for
+			# every app in a handle_path block. Two things broke, and only
+			# the harmless one was visible:
+			#
+			#  1. Signing in dumped you at the site root instead of the
+			#     page you asked for -- /auth/?next=/ rather than
+			#     ?next=/git/.
+			#  2. MUCH WORSE: app_for_uri() decides per-app permissions by
+			#     matching that path. Given "/" it matched nothing and
+			#     returned None, which means "being on the sign-in list is
+			#     the only gate" -- so the per-app toggles on /admin/people
+			#     did nothing at all for /git, /portainer, /status, /tools
+			#     and /pdf. Anyone who could sign in could reach Portainer,
+			#     which holds the Docker socket and is root-equivalent.
+			#
+			# Proven by the one block that does NOT strip: /logs uses
+			# `handle` and correctly produced ?next=/logs/ while every
+			# handle_path app produced ?next=/ (measured 2026-08-28).
+			#
+			# orig_uri is the path as the browser sent it, before any
+			# rewrite -- which is what both the redirect and the permission
+			# check have always meant to use.
+			header_up X-Forwarded-Uri {http.request.orig_uri}
+		}
+		# kb retired 2026-10-25 (a wiki replaces it). To bring it back, restore:
+		#   reverse_proxy kb:8014 { import appproxy }
+		respond "The guides page is retired. A wiki is on the way." 410
+	}
+
+	# --- Mom's Tech Help, under /mama ----------------------------------------
+	redir /mama /mama/ 308
+	handle_path /mama/* {
+		request_body {
+			max_size 64MB
+		}
+		forward_auth https://192.168.1.86 {
+			import nuc_gate
+			uri /verify
+			copy_headers X-Auth-Email
+			# THE ORIGINAL PATH, NOT THE STRIPPED ONE.
+			#
+			# handle_path removes the prefix before this runs, so Caddy's
+			# own X-Forwarded-Uri arrived at the auth service as "/" for
+			# every app in a handle_path block. Two things broke, and only
+			# the harmless one was visible:
+			#
+			#  1. Signing in dumped you at the site root instead of the
+			#     page you asked for -- /auth/?next=/ rather than
+			#     ?next=/git/.
+			#  2. MUCH WORSE: app_for_uri() decides per-app permissions by
+			#     matching that path. Given "/" it matched nothing and
+			#     returned None, which means "being on the sign-in list is
+			#     the only gate" -- so the per-app toggles on /admin/people
+			#     did nothing at all for /git, /portainer, /status, /tools
+			#     and /pdf. Anyone who could sign in could reach Portainer,
+			#     which holds the Docker socket and is root-equivalent.
+			#
+			# Proven by the one block that does NOT strip: /logs uses
+			# `handle` and correctly produced ?next=/logs/ while every
+			# handle_path app produced ?next=/ (measured 2026-08-28).
+			#
+			# orig_uri is the path as the browser sent it, before any
+			# rewrite -- which is what both the redirect and the permission
+			# check have always meant to use.
+			header_up X-Forwarded-Uri {http.request.orig_uri}
+		}
+		reverse_proxy mom:8001 {
+			import appproxy
+			header_up X-Forwarded-Prefix /mama
+		}
+	}
+
+	# --- old /mom links -------------------------------------------------------
+	# The app has always lived at /mama here â€” that came over from the Pi â€” but
+	# the old index.php linked it as /mom, so that card was a 404 waiting to be
+	# clicked. The Rust landing page links /mama correctly; these two lines
+	# catch anything still pointing at the old path (a bookmark, a text your mom
+	# sent someone last year).
+	redir /mom /mama/ 308
+	redir /mom/ /mama/ 308
+
+	# =========================================================================
+	#  THE PHONE LINE. Twilio calls these three paths.
+	#
+	#  THEY MOVED HOSTNAME. They used to live on teewithmsdee.example.org, which
+	#  no longer exists. The paths are unchanged, so the ONLY thing that had to
+	#  change in the Twilio console is the hostname:
+	#
+	#      old  https://teewithmsdee.example.org/twiml/incoming
+	#      new  https://example.org/twiml/incoming
+	#
+	#  Until that is updated in Twilio, INBOUND CALLS FAIL. Twilio has no way
+	#  to know the number moved; it keeps POSTing to a hostname that stopped
+	#  resolving and the caller hears an error.
+	#
+	#  They sit at the ROOT of this host rather than under /dee, deliberately:
+	#  keeping the paths identical means the Twilio change is one field, not
+	#  three, and there is no chance of a half-migrated phone line.
+	#
+	#  ONLY these three paths reach the telephony container. It also serves
+	#  /admin/callers, /admin/clients, /admin/notes, /admin/messages and
+	#  /admin/ratings -- every client's name, number and visit history, with no
+	#  login on any of them. Those are for localhost:8093 and must never appear
+	#  here. Listing the allowed paths explicitly, rather than proxying the
+	#  service and trying to block /admin, means a new admin endpoint added
+	#  later is private by default instead of public by accident.
+	#
+	#  Both POST endpoints verify Twilio's signature; /media checks a secret
+	#  carried in the TwiML. See telephony/app/twilio_auth.py.
+	# =========================================================================
+	handle /twiml/incoming {
+		reverse_proxy telephony:8093 {
+			import appproxy
+		}
+	}
+	handle /twiml/sms {
+		reverse_proxy telephony:8093 {
+			import appproxy
+		}
+	}
+	# The audio stream. Caddy proxies WebSockets natively -- no special config.
+	# The long timeouts in `appproxy` are what keep a 20-minute call alive.
+	handle /media {
+		reverse_proxy telephony:8093 {
+			import appproxy
+		}
+	}
+
+	# --- Koalendar booking webhook -------------------------------------------
+	# Also moved hostname. Update the URL in Koalendar's booking page settings
+	# ("After Booking" -> webhook URL) to this host, or bookings stop arriving
+	# in Telegram. The path is unchanged.
+	#
+	# Koalendar has no signature verification on its webhooks (checked their
+	# docs), so this random 24-character path is the only thing standing
+	# between "anyone on the internet" and this one n8n workflow -- not a
+	# password, just an unguessable URL. That's a real but narrow risk: the
+	# worst a forged POST here can do is trigger one bogus Telegram message.
+	#
+	# If this URL ever leaks, replace the path below AND the Webhook node's
+	# "path" in n8n/workflows/koalendar.json to match, then update it in
+	# Koalendar too.
+	handle /koalendar-e963c080ff98c4c4fae3e231 {
+		rewrite * /webhook{uri}
+		reverse_proxy n8n:5678 {
+			import appproxy
+		}
+	}
+
+	# --- Tea with Ms Dee -- RETIRED 2026-09-06 -------------------------------
+	#
+	# Jason: "we are not going to use tea with Ms dee I have other plans for
+	# that so just stop all that."
+	#
+	# The container is profiled off and this route is withdrawn, because a
+	# /dee that answers with a service nobody is maintaining is worse than a
+	# /dee that is not there. NOTHING IS DELETED -- the app source, its
+	# database and its volumes are untouched, and "other plans" is not the
+	# same as finished.
+	#
+	# Commented rather than cut, because these two lines are the expensive
+	# part and whatever the other plans are, they will need them again:
+	# BOOK_ROOT_PATH makes FastAPI build its links with the prefix, and
+	# BOOK_COOKIE_PATH scopes the session cookie so it is not also sent to
+	# /mama, /casey and the admin. Both live in docker-compose.web.yml.
+	#
+	#	redir /dee /dee/ 308
+	#	handle_path /dee/* {
+	#		request_body {
+	#			max_size 64MB
+	#		}
+	#		reverse_proxy teabook:8002 {
+	#			import appproxy
+	#			header_up X-Forwarded-Prefix /dee
+	#		}
+	#	}
+
+	# --- the recipe importer, under /kitchen ---------------------------------
+	# Paste a link, get a step-by-step guide with the portions scaled. The
+	# recipe LIBRARY is Mealie and lives on port 9443 (see the block at the
+	# bottom of this file) -- this is the front door that reads pages, and the
+	# thing that hands out Mealie sessions so nobody meets a second login.
+	#
+	# forward_auth, like /mama and /casey: the app has no login of its own and
+	# never sees an unauthenticated request. It reads X-Auth-Email only to know
+	# who imported what, and whether they are you.
+	#
+	# The landing card and everything else call it "Recipes"; the app and the
+	# container are called "kitchen". Rather than rename one to match the
+	# other, both names work and one of them is the real address.
+	redir /recipes /kitchen/ 308
+	redir /recipes/ /kitchen/ 308
+	redir /kitchen /kitchen/ 308
+
+	# --- /files: each person sees what is theirs -----------------------------
+	# Jason, 2026-09-06. Same forward_auth shape as every other app: the
+	# app has no login of its own and refuses outright if X-Auth-Email is
+	# missing, rather than falling back to some default user -- so being
+	# behind this block is not a convenience, it is the whole identity
+	# mechanism. See ai-stack/files/app/main.py's who().
+	redir /files /files/ 308
+	handle_path /files/* {
+		forward_auth https://192.168.1.86 {
+			import nuc_gate
+			uri /verify
+			copy_headers X-Auth-Email
+			# The original path, not the stripped one -- see the long note
+			# in the /recipe block below for what breaks otherwise.
+			header_up X-Forwarded-Uri {http.request.orig_uri}
+		}
+		reverse_proxy files:8000 {
+			import appproxy
+			header_up X-Forwarded-Prefix /files
+		}
+	}
+
+	# --- /dl: big files, off this machine, from anywhere ---------------------
+	# Jason, 2026-09-23: "Allow me to download it off my PC." Renders,
+	# exports and archives are too large to hand over in a chat window and
+	# have no business being public, so they sit in web/private and come
+	# out through here.
+	#
+	# BEHIND THE SAME SIGN-IN AS EVERY OTHER INSTRUMENT PANEL. An 82MB file
+	# on a domestic upload is worth gating for bandwidth alone, never mind
+	# that these are family photographs and personal work.
+	#
+	# `file_server` WITH NO `browse`, and that is deliberate. A directory
+	# listing here would be a catalogue of everything he has ever exported.
+	# Without it a file must be asked for by its exact name, which is how
+	# the rest of this file has behaved since `file_server browse` over
+	# ../Legacy turned out to be serving .env.
+	#
+	# root, NOT handle_path: the strip and the root would both remove the
+	# prefix and /dl/x.mp4 would be looked up as /srv/private/../x.mp4.
+	handle /dl/* {
+		forward_auth https://192.168.1.86 {
+			import nuc_gate
+			uri /verify
+			copy_headers X-Auth-Email
+			header_up X-Forwarded-Uri {http.request.orig_uri}
+		}
+		root * /srv
+		# Content-Disposition, so a browser SAVES the file instead of
+		# opening an 82MB video in a tab it then has to stream.
+		header Content-Disposition "attachment"
+		header Cache-Control "private, max-age=0, must-revalidate"
+		file_server
+	}
+
+	# --- the standalone recipe app, under /recipe -----------------------------
+	# Jason's own request (2026-08-24): browse, one recipe, random pick, meal
+	# planning AND the pantry picker, all on one page at /recipe, nothing
+	# that sends anyone off to Tandoor's own UI or back into Kitchen -- see
+	# recipe-app/app/config.py for the full reasoning. Superseded TWO earlier
+	# versions of this block, both real: first a plain redirect to Tandoor's
+	# own ":9445/view/recipe/{id}" (from when kitshn -- the real third-party
+	# Tandoor app, play.google.com/store/apps/details?id=de.kitshn.android --
+	# first came up), then Jason's own correction that /recipe should be an
+	# actual in-house app, not a redirect anywhere. Same forward_auth shape
+	# as /kitchen's own block just below -- the app has no login of its own,
+	# same reasoning as everywhere else in this file.
+	# --- /pi: digits of pi, cross-checked and fingerprinted (2026-11-08) ------
+	# Same gate as /recipe (see the long note there about X-Forwarded-Uri).
+	redir /pi /pi/ 308
+	handle_path /pi/* {
+		forward_auth https://192.168.1.86 {
+			import nuc_gate
+			uri /verify
+			copy_headers X-Auth-Email
+			header_up X-Forwarded-Uri {http.request.orig_uri}
+		}
+		reverse_proxy pi:8020 {
+			import appproxy
+			header_up X-Forwarded-Prefix /pi
+		}
+	}
+
+	redir /recipe /recipe/ 308
+	handle_path /recipe/* {
+		forward_auth https://192.168.1.86 {
+			import nuc_gate
+			uri /verify
+			copy_headers X-Auth-Email
+			# THE ORIGINAL PATH, NOT THE STRIPPED ONE.
+			#
+			# handle_path removes the prefix before this runs, so Caddy's
+			# own X-Forwarded-Uri arrived at the auth service as "/" for
+			# every app in a handle_path block. Two things broke, and only
+			# the harmless one was visible:
+			#
+			#  1. Signing in dumped you at the site root instead of the
+			#     page you asked for -- /auth/?next=/ rather than
+			#     ?next=/git/.
+			#  2. MUCH WORSE: app_for_uri() decides per-app permissions by
+			#     matching that path. Given "/" it matched nothing and
+			#     returned None, which means "being on the sign-in list is
+			#     the only gate" -- so the per-app toggles on /admin/people
+			#     did nothing at all for /git, /portainer, /status, /tools
+			#     and /pdf. Anyone who could sign in could reach Portainer,
+			#     which holds the Docker socket and is root-equivalent.
+			#
+			# Proven by the one block that does NOT strip: /logs uses
+			# `handle` and correctly produced ?next=/logs/ while every
+			# handle_path app produced ?next=/ (measured 2026-08-28).
+			#
+			# orig_uri is the path as the browser sent it, before any
+			# rewrite -- which is what both the redirect and the permission
+			# check have always meant to use.
+			header_up X-Forwarded-Uri {http.request.orig_uri}
+		}
+		reverse_proxy recipe-app:8004 {
+			import appproxy
+			header_up X-Forwarded-Prefix /recipe
+		}
+	}
+
+	# --- /recipe-gemini, kept only so old links still land -------------------
+	# The A/B twin lived here from 2026-09-04 until Jason called it on
+	# 2026-09-06 ("make gemnie-recipe /recipe"). /recipe IS the Gemini one
+	# now -- same container, one env flag -- so this block was an exact copy
+	# of the one above, forward_auth comment and all, pointing at a second
+	# container of the same image. Both are gone. A redirect costs two lines
+	# and means a bookmark or an open tab still works.
+	#
+	# handle_path, NOT a plain redir: handle_path strips the prefix before
+	# the inner directive runs, so {uri} here is the REST of the path plus
+	# any query ("/28?x=1"), and the target comes out /recipe/28?x=1. A
+	# plain `redir /recipe-gemini/* /recipe{uri}` looks equivalent and is
+	# not -- {uri} would still carry the old prefix and send people to
+	# /recipe/recipe-gemini/28.
+	redir /recipe-gemini /recipe/ 308
+	handle_path /recipe-gemini/* {
+		redir * /recipe{uri} 308
+	}
+
+	# --- NUC homelab ops tools, added 2026-08-27 -----------------------------
+	# Uptime Kuma and Dozzle now run on the NUC (192.168.1.86), NOT in this
+	# Docker Compose stack -- see share/nuc-homelab/. Per the plan's decision
+	# (share/nuc-homelab/README.md, "Decided 2026-08-26"), the NUC has no
+	# Caddy or SSO of its own -- this Caddy stays the one front door and
+	# reverse_proxy's straight to the NUC's LAN ports. Ops-only, so narrow who
+	# can reach these on /admin/people (see common::people::ALL_APPS's own
+	# comment) -- unlike the family-facing apps above, these default
+	# unrestricted like everything else until someone does that by hand.
+	# /status now lives on its own subdomain -- Kuma cannot be subpathed.
+	# The old address keeps working by pointing at the new one.
+	redir /status* https://status.home.example.net 308
+	handle_path /status-old-disabled/* {
+		forward_auth https://192.168.1.86 {
+			import nuc_gate
+			uri /verify
+			copy_headers X-Auth-Email
+			# THE ORIGINAL PATH, NOT THE STRIPPED ONE.
+			#
+			# handle_path removes the prefix before this runs, so Caddy's
+			# own X-Forwarded-Uri arrived at the auth service as "/" for
+			# every app in a handle_path block. Two things broke, and only
+			# the harmless one was visible:
+			#
+			#  1. Signing in dumped you at the site root instead of the
+			#     page you asked for -- /auth/?next=/ rather than
+			#     ?next=/git/.
+			#  2. MUCH WORSE: app_for_uri() decides per-app permissions by
+			#     matching that path. Given "/" it matched nothing and
+			#     returned None, which means "being on the sign-in list is
+			#     the only gate" -- so the per-app toggles on /admin/people
+			#     did nothing at all for /git, /portainer, /status, /tools
+			#     and /pdf. Anyone who could sign in could reach Portainer,
+			#     which holds the Docker socket and is root-equivalent.
+			#
+			# Proven by the one block that does NOT strip: /logs uses
+			# `handle` and correctly produced ?next=/logs/ while every
+			# handle_path app produced ?next=/ (measured 2026-08-28).
+			#
+			# orig_uri is the path as the browser sent it, before any
+			# rewrite -- which is what both the redirect and the permission
+			# check have always meant to use.
+			header_up X-Forwarded-Uri {http.request.orig_uri}
+		}
+		reverse_proxy 192.168.1.86:3001 {
+			import appproxy
+		}
+	}
+
+	# `handle`, NOT `handle_path` -- Dozzle runs with DOZZLE_BASE=/logs
+	# (share/nuc-homelab/docker-compose.yml), which makes /logs/ its real
+	# root and bakes the prefix into its own asset/route generation.
+	# Confirmed by hand: with the prefix stripped, "/" 404s inside the
+	# container; "/logs/" is what actually routes. Same story as Linkding's
+	# LD_CONTEXT_PATH before it was removed. Blank-page bug this fixes:
+	# without DOZZLE_BASE, Dozzle emitted root-absolute asset paths
+	# (/assets/...) that never reached it once loaded under a /logs prefix.
+	redir /logs /logs/ 308
+	handle /logs/* {
+		forward_auth https://192.168.1.86 {
+			import nuc_gate
+			uri /verify
+			copy_headers X-Auth-Email
+			# THE ORIGINAL PATH, NOT THE STRIPPED ONE.
+			#
+			# handle_path removes the prefix before this runs, so Caddy's
+			# own X-Forwarded-Uri arrived at the auth service as "/" for
+			# every app in a handle_path block. Two things broke, and only
+			# the harmless one was visible:
+			#
+			#  1. Signing in dumped you at the site root instead of the
+			#     page you asked for -- /auth/?next=/ rather than
+			#     ?next=/git/.
+			#  2. MUCH WORSE: app_for_uri() decides per-app permissions by
+			#     matching that path. Given "/" it matched nothing and
+			#     returned None, which means "being on the sign-in list is
+			#     the only gate" -- so the per-app toggles on /admin/people
+			#     did nothing at all for /git, /portainer, /status, /tools
+			#     and /pdf. Anyone who could sign in could reach Portainer,
+			#     which holds the Docker socket and is root-equivalent.
+			#
+			# Proven by the one block that does NOT strip: /logs uses
+			# `handle` and correctly produced ?next=/logs/ while every
+			# handle_path app produced ?next=/ (measured 2026-08-28).
+			#
+			# orig_uri is the path as the browser sent it, before any
+			# rewrite -- which is what both the redirect and the permission
+			# check have always meant to use.
+			header_up X-Forwarded-Uri {http.request.orig_uri}
+		}
+		reverse_proxy 192.168.1.86:8081 {
+			import appproxy
+		}
+	}
+
+	# --- scratch-map, the travel map, added 2026-08-28 ------------------------
+	# `handle`, NOT `handle_path` -- same reasoning as /logs above. The NUC runs
+	# a local fork with BASE_PATH=/scratch (nuc-homelab/scratch-map/docs/FORK.md),
+	# so the app generates /scratch/... links itself and the prefix must survive
+	# the proxy rather than being stripped off it.
+	#
+	# WHY A FORK RATHER THAN A PORT. Upstream hardcodes root-absolute assets and
+	# has no base-path setting -- the same wall DocuSeal and Uptime Kuma hit, and
+	# for those two the answer was a dedicated port. This app is ~500 lines of
+	# Express and Pug, so patching it was cheaper than spending a router port,
+	# and Jason asked for proxied paths over new ports.
+	#
+	# THE SSO GATE IS THE ONLY GATE FROM OUTSIDE. scratch-map has no
+	# authentication of its own -- none. Its port is on the NUC's LAN address
+	# (it has to be: Caddy runs on the other machine), so anyone already inside
+	# the house can reach 192.168.1.86:8093 directly and bypass this. That is
+	# true of uptime-kuma, dozzle and gitea too and is a property of the LAN,
+	# not of this app. What this block protects is the internet-facing side.
+	# Without forward_auth here, the family's travel history is public.
+	# --- /connect: link your Google Photos, self-service ---------------------
+	# gconnect on the NUC (see nuc-homelab/gconnect/app.py). The embedded
+	# sign-in screen is a noVNC websocket -- its own sub-route so the
+	# streaming bypasses none of the gate but keeps its upgrade headers.
+	redir /connect /connect/ 308
+	handle_path /connect/screen/* {
+		forward_auth https://192.168.1.86 {
+			import nuc_gate
+			uri /verify
+			copy_headers X-Auth-Email
+			header_up X-Forwarded-Uri {http.request.orig_uri}
+		}
+		reverse_proxy 192.168.1.86:6080
+	}
+	handle_path /connect/* {
+		forward_auth https://192.168.1.86 {
+			import nuc_gate
+			uri /verify
+			copy_headers X-Auth-Email
+			header_up X-Forwarded-Uri {http.request.orig_uri}
+		}
+		reverse_proxy 192.168.1.86:8094 {
+			import appproxy
+		}
+	}
+
+	redir /scratch /scratch/ 308
+	handle /scratch/* {
+		forward_auth https://192.168.1.86 {
+			import nuc_gate
+			uri /verify
+			copy_headers X-Auth-Email
+			# The original path, not the stripped one -- see /status above for
+			# the full account of what breaks without this. `handle` does not
+			# strip, but this stays explicit so the block reads the same as
+			# every other gated app and cannot be copied wrong.
+			header_up X-Forwarded-Uri {http.request.orig_uri}
+		}
+		reverse_proxy 192.168.1.86:8093 {
+			import appproxy
+		}
+	}
+
+	# --- NUC homelab, second batch, same 2026-08-27 -------------------------
+	# Gitea, Linkding, IT-Tools, Stirling-PDF. Same reasoning as /status and
+	# /logs above -- no Caddy/SSO on the NUC itself, this stays the one
+	# front door. Stirling-PDF's own built-in login is disabled
+	# (SECURITY_ENABLELOGIN=false in share/nuc-homelab/docker-compose.yml)
+	# so forward_auth here is its only gate, same as every other app.
+	#
+	# NOTE: SearXNG (/search) and Linkding (/links) were both here too --
+	# both removed 2026-08-28, Jason's call. SearXNG wanted to search HIS
+	# OWN content (recipes/KB/photos), and SearXNG only federates external
+	# search engines out of the box (see share/nuc-homelab/README.md's own
+	# note on this, flagged as real scoping work before this deploy even
+	# started) -- container removed entirely, not just unwired. Linkding
+	# removed on request, no reason given beyond "let's remove this
+	# container." Both containers and their compose entries are gone, not
+	# just this Caddyfile block -- see share/nuc-homelab/docker-compose.yml.
+	# --- git clone / push over HTTPS -----------------------------------------
+	# THIS MUST COME BEFORE THE /git BLOCK BELOW, and is deliberately NOT
+	# behind forward_auth.
+	#
+	# The SSO gate answers an unauthenticated request with a 303 to an HTML
+	# sign-in form. A browser follows that happily. A GIT CLIENT CANNOT --
+	# it has no way to fill in a login page, so `git clone` and `git push`
+	# over HTTPS failed for everyone, always, with a redirect it could not
+	# interpret. Measured 2026-08-28: info/refs returned 303 to /auth/.
+	# That is why the repository was only ever pushable from the NUC itself,
+	# straight at http://localhost:3000 with Caddy out of the picture.
+	#
+	# THESE THREE PATHS ARE STILL AUTHENTICATED -- by Gitea, which is the
+	# thing that actually knows who owns the repository. It answers with a
+	# 401 and Basic auth, which git DOES understand, and prompts for a
+	# username and password (or an access token). A private repo stays
+	# private; this only stops Caddy from intercepting the handshake with a
+	# login form meant for humans.
+	#
+	# The regex is deliberately narrow: only Gitea's three smart-HTTP
+	# endpoints, only under a *.git path. Everything else about /git -- the
+	# web UI, settings, the admin panel -- stays behind the household SSO.
+	# (The @git_smart_http block that used to sit here has moved INSIDE the
+	# /git handle below. It could never run from out here -- see the note in
+	# there. Left as a pointer so the next person looking for it finds it.)
+
+	handle /git/* {
+		route {
+			uri strip_prefix /git
+
+			# --- git push/fetch, BEFORE forward_auth ----------------------
+			# This used to be its own `handle @git_smart_http` block fifty
+			# lines above, and it never ran. Caddy would not order it ahead
+			# of this block whether it was written as handle_path or handle
+			# -- `caddy adapt` put /git/* first both ways -- so pushes 303'd
+			# to the sign-in page and git followed the redirect into HTML.
+			#
+			# `route` DOES preserve the order written inside it. So the
+			# bypass lives here now, as the first thing in the route, which
+			# is the only placement that actually guarantees it runs first.
+			#
+			# Paths are matched AFTER strip_prefix, hence no /git below.
+			#
+			# THE THREE header_up LINES ARE WHAT KEEP THIS FROM BEING A BACK
+			# DOOR. Gitea trusts X-Webauth-User as proof of identity. This is
+			# the one place under /git where forward_auth does not run, so a
+			# header arriving here is one a CLIENT chose to send -- without
+			# these,  git -c http.extraHeader="X-Webauth-User: Jason" push
+			# would be a push as Jason with no credential at all. Stripping
+			# them means the only thing that can authenticate is Gitea's own
+			# Basic auth, which is what was always doing it.
+			@smart_http path_regexp ^/[^/]+/[^/]+\.git/(info/refs|git-upload-pack|git-receive-pack)$
+			reverse_proxy @smart_http 192.168.1.86:3000 {
+				import appproxy
+				header_up -X-Webauth-User
+				header_up -X-Webauth-Email
+				header_up -X-Webauth-Fullname
+			}
+
+			forward_auth https://192.168.1.86 {
+				import nuc_gate
+				uri /verify
+				copy_headers X-Auth-Email
+				# The original path, not the stripped one -- see /status for the
+				# full account of what breaks without this.
+				header_up X-Forwarded-Uri {http.request.orig_uri}
+			}
+
+			# --- the household email -> Gitea's own username -----------------
+			# Added 2026-09-04, to end the second sign-in at /git.
+			#
+			# WHY A TRANSLATION TABLE AND NOT JUST THE EMAIL. Gitea's reverse
+			# proxy auth looks the person up by USERNAME (GetUserByName), not by
+			# email -- ENABLE_REVERSE_PROXY_EMAIL only changes which address an
+			# AUTO-REGISTERED account is given, it does not make the lookup
+			# search on email. Gitea's usernames here are "Jason" and "Robin"; the
+			# gate's identity is an email address. Something has to bridge the
+			# two, and Caddy is the only place that already knows both.
+			#
+			# THE DEFAULT IS DELIBERATELY EMPTY, and that is the safety property.
+			# Gitea trims this header and treats an empty value as "no header at
+			# all", so somebody signed into the house who has no Gitea account
+			# meets Gitea's own login page rather than being handed an account
+			# that is not theirs. Auto-registration is OFF on Gitea's side too,
+			# so an unmapped address cannot quietly grow a second, empty account
+			# either.
+			#
+			# WHEN SOMEBODY NEW NEEDS /git: create the Gitea account first, then
+			# add the line here. Two steps on purpose -- the one-step
+			# alternative is auto-registration, which is precisely how Jason's
+			# repositories would end up beside a duplicate account.
+			map {http.request.header.X-Auth-Email} {gitea_user} {
+				"user@example.com"       "Jason"
+				"user@example.com" "Robin"
+				default               ""
+			}
+
+			reverse_proxy 192.168.1.86:3000 {
+				import appproxy
+				# SET, never forwarded. Whatever a browser sent under this name is
+				# replaced by the value Caddy just computed -- same reasoning as
+				# X-Forwarded-User on /special.
+				header_up X-Webauth-User {gitea_user}
+				header_up -X-Webauth-Email
+				header_up -X-Webauth-Fullname
+			}
+		}
+	}
+
+	# Portainer -- the Docker UI, added 2026-08-28. Runs HERE on the main PC
+	# (ai-stack/docker-compose.web.yml), not the NUC, but manages both boxes
+	# via the NUC's portainer-agent. `handle_path` (strips the prefix) paired
+	# with the container's own --base-url=/portainer, same two-halves shape
+	# as Gitea's ROOT_URL above.
+	#
+	# Behind forward_auth like everything else AND keeps its own login on
+	# top -- the one app here holding the Docker socket, which is
+	# root-equivalent. See the service's comment in docker-compose.web.yml.
+	# Portainer's setup-timeout page link is emitted ROOT-ABSOLUTE
+	# (/timeout.html), so under the /portainer prefix it lands here at the
+	# domain root rather than inside the app. --base-url covers its assets
+	# and API but not this one link.
+	#
+	# THIS WAS A `redir /timeout.html /portainer/ 302` UNTIL 2026-08-28,
+	# AND THAT WAS AN INFINITE LOOP. The note here used to claim the image
+	# had no real timeout.html (a 404 at Portainer's own root). That was
+	# wrong -- it serves a real 200. So once Portainer entered the
+	# timed-out state, its root 307'd to /timeout.html, the redirect sent
+	# the browser back to /portainer/, and round it went forever. Signing
+	# in appeared to do nothing, which is exactly how it was reported.
+	#
+	# Proxying instead of redirecting shows Portainer's actual message and
+	# cannot loop, because this path now terminates at a real page.
+	#
+	# This does put a generic path in the main domain's root namespace,
+	# which is the same objection that killed the Kasm plan -- the
+	# difference is scale: one static page, versus proxying a live
+	# websocket endpoint for an app's entire runtime.
+	handle /timeout.html {
+		forward_auth https://192.168.1.86 {
+			import nuc_gate
+			uri /verify
+			copy_headers X-Auth-Email
+			# THE ORIGINAL PATH, NOT THE STRIPPED ONE.
+			#
+			# handle_path removes the prefix before this runs, so Caddy's
+			# own X-Forwarded-Uri arrived at the auth service as "/" for
+			# every app in a handle_path block. Two things broke, and only
+			# the harmless one was visible:
+			#
+			#  1. Signing in dumped you at the site root instead of the
+			#     page you asked for -- /auth/?next=/ rather than
+			#     ?next=/git/.
+			#  2. MUCH WORSE: app_for_uri() decides per-app permissions by
+			#     matching that path. Given "/" it matched nothing and
+			#     returned None, which means "being on the sign-in list is
+			#     the only gate" -- so the per-app toggles on /admin/people
+			#     did nothing at all for /git, /portainer, /status, /tools
+			#     and /pdf. Anyone who could sign in could reach Portainer,
+			#     which holds the Docker socket and is root-equivalent.
+			#
+			# Proven by the one block that does NOT strip: /logs uses
+			# `handle` and correctly produced ?next=/logs/ while every
+			# handle_path app produced ?next=/ (measured 2026-08-28).
+			#
+			# orig_uri is the path as the browser sent it, before any
+			# rewrite -- which is what both the redirect and the permission
+			# check have always meant to use.
+			header_up X-Forwarded-Uri {http.request.orig_uri}
+		}
+		reverse_proxy portainer:9000 {
+			import appproxy
+		}
+	}
+
+	redir /portainer /portainer/ 308
+	handle_path /portainer/* {
+		forward_auth https://192.168.1.86 {
+			import nuc_gate
+			uri /verify
+			copy_headers X-Auth-Email
+			# THE ORIGINAL PATH, NOT THE STRIPPED ONE.
+			#
+			# handle_path removes the prefix before this runs, so Caddy's
+			# own X-Forwarded-Uri arrived at the auth service as "/" for
+			# every app in a handle_path block. Two things broke, and only
+			# the harmless one was visible:
+			#
+			#  1. Signing in dumped you at the site root instead of the
+			#     page you asked for -- /auth/?next=/ rather than
+			#     ?next=/git/.
+			#  2. MUCH WORSE: app_for_uri() decides per-app permissions by
+			#     matching that path. Given "/" it matched nothing and
+			#     returned None, which means "being on the sign-in list is
+			#     the only gate" -- so the per-app toggles on /admin/people
+			#     did nothing at all for /git, /portainer, /status, /tools
+			#     and /pdf. Anyone who could sign in could reach Portainer,
+			#     which holds the Docker socket and is root-equivalent.
+			#
+			# Proven by the one block that does NOT strip: /logs uses
+			# `handle` and correctly produced ?next=/logs/ while every
+			# handle_path app produced ?next=/ (measured 2026-08-28).
+			#
+			# orig_uri is the path as the browser sent it, before any
+			# rewrite -- which is what both the redirect and the permission
+			# check have always meant to use.
+			header_up X-Forwarded-Uri {http.request.orig_uri}
+		}
+		reverse_proxy portainer:9000 {
+			import appproxy
+		}
+	}
+
+	# --- the log dashboard, under /grafana --------------------------------
+	# Loki has been collecting since 2026-08-20 and Grafana has been running
+	# beside it the whole time on 127.0.0.1:3001 with no route. The logs
+	# existed; there was no way to look at them. Added 2026-08-28, the same
+	# day the NUC finally started shipping its own.
+	#
+	# `handle`, not `handle_path`: Grafana is told to serve from /grafana
+	# (GF_SERVER_SERVE_FROM_SUB_PATH) and writes that prefix into its own
+	# links, so stripping it here would break every one of them -- the same
+	# two-halves arrangement Gitea and Portainer already use.
+	#
+	# host.docker.internal because Grafana runs in the PC's OTHER compose
+	# project and is published on loopback; Caddy cannot reach a sibling
+	# project by service name.
+	redir /grafana /grafana/ 308
+	handle /grafana* {
+		forward_auth https://192.168.1.86 {
+			import nuc_gate
+			uri /verify
+			copy_headers X-Auth-Email
+			header_up X-Forwarded-Uri {http.request.orig_uri}
+		}
+		# MOVED TO THE NUC 2026-09-06. Grafana and Loki were 689 MiB on
+		# the machine whose constraint is memory, and a log server
+		# belongs on the box that stays up rather than the one whose
+		# outages you want the logs to explain.
+		#
+		# 3003 AND NOT GRAFANA'S OWN PORT. Grafana trusts X-Auth-Email,
+		# creates unknown addresses, and makes them ADMIN. On the PC it
+		# was on loopback so only Caddy could reach it; on the NUC the
+		# port has to be on the LAN. 3003 is an nginx sidecar that
+		# blanks that header unless the connection came from this
+		# machine -- see logging/nuc/grafana-proxy.nginx.conf. Pointing
+		# this at Grafana directly would put an admin account on the
+		# household log server one curl away from any device in the
+		# house. (3003, not 3001: Uptime Kuma holds 3001 on the NUC.)
+		reverse_proxy 192.168.1.86:3003 {
+			import appproxy
+		}
+	}
+
+	# --- paperless-ngx, under /paperless -----------------------------------
+	# Scan a document, get a searchable archive. Started 2026-08-28 -- it had
+	# been defined but unstartable: no Redis (which Paperless requires, not
+	# prefers) and a media volume pointing at a Synology share that was never
+	# mounted on this box.
+	#
+	# `handle`, not `handle_path`: PAPERLESS_FORCE_SCRIPT_NAME=/paperless makes
+	# Paperless write that prefix into its own links, so stripping it here
+	# would break every one. Same two-halves arrangement as Gitea, Portainer
+	# and Grafana.
+	#
+	# Its port is published on the NUC's LAN address, not loopback -- this
+	# Caddy runs on the other machine and could not otherwise reach it. Port
+	# 8000 is not forwarded on the router, so from outside the house this
+	# block, and the sign-in in front of it, remain the only way in.
+	redir /paperless /paperless/ 308
+	# --- SHARE LINKS, AND ONLY SHARE LINKS -----------------------------------
+	#
+	# Jason, 2026-09-06: "I want this so that even if she shares with chat
+	# gpt or my mom sets up information it hits to the person needing it."
+	#
+	# A share link is meant for somebody outside the household -- a chat, a
+	# supervisor, a nominator -- who cannot complete an SSO sign-in and
+	# should not need an account. Under the block below it 303'd them to a
+	# login they could never pass.
+	#
+	# THIS IS THE NARROWEST HOLE THAT DOES THE JOB, and it needs to be,
+	# because the archive holds 85 documents including psychiatric
+	# evaluations, medical progress notes and a 1099-R. What is exempt:
+	#
+	#   /paperless/share/<slug>   a document somebody deliberately shared
+	#
+	# What is NOT: the document list, search, the API, the dashboard, and
+	# every other path -- all still behind forward_auth below. There is no
+	# route from a share link to browsing anything else, because the only
+	# thing this block can reach is a slug that already exists.
+	#
+	# THE SLUG IS THE CREDENTIAL. Paperless mints a random one per link and
+	# can expire it. Anyone holding the URL can open that ONE document, so
+	# treat a share link like the document itself -- and set an expiry.
+	# Ordered BEFORE the gated block: Caddy takes the first match.
+	handle /paperless/share/* {
+		reverse_proxy 192.168.1.86:8000 {
+			import appproxy
+			# No X-Auth-Email is set here, deliberately. Paperless treats a
+			# share link as anonymous-by-design; sending an identity would
+			# make the link act as whoever Caddy last saw.
+			header_up -X-Auth-Email
+		}
+	}
+
+	handle /paperless* {
+		forward_auth https://192.168.1.86 {
+			import nuc_gate
+			uri /verify
+			copy_headers X-Auth-Email
+			header_up X-Forwarded-Uri {http.request.orig_uri}
+		}
+		reverse_proxy 192.168.1.86:8000 {
+			import appproxy
+		}
+	}
+
+	# --- /dashboard -- one page listing every ops tool ----------------------
+	# Added 2026-08-28. Cards only: it LINKS to /status, /logs, /grafana,
+	# /portainer, /paperless, /git, /tools and /pdf, and moves none of them.
+	# Re-pathing those under /dashboard/* would mean changing five apps' base
+	# URLs and rebuilding IT-Tools from source, to change what the address bar
+	# says. See dashboard_sections() in rust/landing for the full reasoning.
+	#
+	# Served by the landing app, but unlike the rest of that app it sits behind
+	# forward_auth -- the front page is public, and a menu of the house's
+	# admin tools is not.
+	# --- /portfolio: public, deliberately -------------------------------------
+	# NO forward_auth. It exists to be read by somebody who has never signed in
+	# and never will, which is the one page on this host where that is the point.
+	# The previous front page, kept reachable after the portfolio took over /.
+	# --- the garden's second pass -------------------------------------------
+	# MUST COME BEFORE `handle /garden*` BELOW. Caddy tries handle blocks in
+	# the order they are written, not longest-match-first, so putting this
+	# after would mean /garden* swallowed /garden-review and the page 404'd
+	# through the proxy while working perfectly on the LAN.
+	#
+	# The moderation queue for Robin's catalogue: what he has approved, before
+	# it settles. Behind the household sign-in like every other instrument
+	# panel, and the service checks the address again on its own side --
+	# being signed in to the house is not the same as being this
+	# catalogue's administrator.
+	#
+	# handle_path strips the prefix, so the service sees /review and
+	# /api/review and does not need to know where it is mounted. The page
+	# derives the mount from its own URL for the links it writes.
+	handle_path /garden-review* {
+		forward_auth https://192.168.1.86 {
+			import nuc_gate
+			uri /verify
+			copy_headers X-Auth-Email
+			header_up X-Forwarded-Uri {http.request.orig_uri}
+		}
+		# RETIRED 2026-10-25: Robin's Garden is not served from here.
+		respond "Robin's Garden moved." 410
+	}
+	redir /garden-review /garden-review/review 308
+
+	# The garden project page, also reachable without the /jason prefix --
+	# it is linked from Robin's own home page.
+	handle /garden* {
+		reverse_proxy landing:8010 {
+			import appproxy
+		}
+	}
+
+	handle /welcome* {
+		reverse_proxy landing:8010 {
+			import appproxy
+		}
+	}
+
+	handle /portfolio* {
+		reverse_proxy landing:8010 {
+			import appproxy
+		}
+	}
+
+	# The Engine Bay: tachometer dials for the host (CPU, RAM, VRAM, GPU
+	# temp, network, ping, drives). Served by the metrics recorder; behind
+	# the sign-in like any other instrument panel.
+	handle /engine* {
+		forward_auth https://192.168.1.86 {
+			import nuc_gate
+			uri /verify
+			copy_headers X-Auth-Email
+			header_up X-Forwarded-Uri {http.request.orig_uri}
+		}
+		reverse_proxy metrics:8000 {
+			import appproxy
+		}
+	}
+
+	# The privacy page. PUBLIC on purpose -- it exists precisely for someone
+	# who has NOT signed in and wants to know what signing in means. Linked
+	# from the portfolio's footer and from every signed-in page's footer.
+	handle /privacy* {
+		reverse_proxy landing:8010 {
+			import appproxy
+		}
+	}
+
+	# --- /special: the room camera -------------------------------------------
+	# "handle", NOT "handle_path". Frigate is told its own base path with
+	# FRIGATE_BASE_PATH and builds its links to match, so the prefix has to
+	# survive the proxy rather than be stripped off it -- same arrangement as
+	# /logs and /scratch.
+	#
+	# X-Ingress-Path is the half people miss. Frigate documents it as the
+	# PREFERRED way to set the base path, and its API endpoints use it even
+	# when the environment variable is also set. Both, or some routes break.
+	#
+	# GATED, and this one deserves it more than most: it is a camera in a
+	# bedroom. Narrow it to yourself on /admin/people -- it defaults
+	# unrestricted like every new app until somebody does that by hand.
+	redir /special /special/ 308
+	handle /special/* {
+		forward_auth https://192.168.1.86 {
+			import nuc_gate
+			uri /verify
+			copy_headers X-Auth-Email
+			header_up X-Forwarded-Uri {http.request.orig_uri}
+		}
+		reverse_proxy 192.168.1.86:5001 {
+			import appproxy
+			header_up X-Ingress-Path /special
+			# Who Caddy just authenticated. Frigate is configured to trust this
+			# instead of showing its own login page -- see proxy.header_map in
+			# its config. Set here, so a browser cannot supply its own.
+			header_up X-Forwarded-User {http.request.header.X-Auth-Email}
+		}
+	}
+
+	# --- /looks: pick your own start-page look ---------------------------------
+	# GATED like /home, and for the same reason: it needs to know who is asking.
+	# It writes only to the looks store, never to the account list -- see
+	# rust/landing/src/looks.rs for why those are two different files.
+	handle /looks* {
+		forward_auth https://192.168.1.86 {
+			import nuc_gate
+			uri /verify
+			copy_headers X-Auth-Email
+			header_up X-Forwarded-Uri {http.request.orig_uri}
+		}
+		reverse_proxy landing:8010 {
+			import appproxy
+		}
+	}
+
+	# --- /home: each person sees only their own things ------------------------
+	# GATED, and that gate is what supplies the identity. Caddy runs
+	# forward_auth first and copies the result in as X-Auth-Email; the landing
+	# app reads that header and draws only the cards that account can open.
+	# A browser cannot forge it -- whatever a client sends is replaced here.
+	#
+	# HIDING A CARD IS NOT WHAT PROTECTS IT. Every path those cards point at is
+	# separately gated further down this file, and still refuses somebody who
+	# types the URL. This page decides what is OFFERED, not what is allowed.
+	# --- /find: one box for recipes, workouts, documents and code -------------
+	# GATED, and the gate is what supplies the identity. The search filters on
+	# the address forward_auth puts here; the page itself neither sends nor sees
+	# an owner, so there is nothing for a browser to claim to be.
+	#
+	# handle_path, so the app sees / and /api/search. Its own links are
+	# relative, which is what makes that safe -- the base-URL bug that broke
+	# Stirling under /pdf/ comes from an app building ABSOLUTE links from a
+	# root it no longer has.
+	redir /find /find/ 308
+	handle_path /find/* {
+		forward_auth https://192.168.1.86 {
+			import nuc_gate
+			uri /verify
+			copy_headers X-Auth-Email
+			header_up X-Forwarded-Uri {http.request.orig_uri}
+		}
+		reverse_proxy 192.168.1.86:8087 {
+			import appproxy
+		}
+	}
+
+	# --- /study: NCLEX-RN revision for Sashin --------------------------------
+	# Jason, 2026-09-10: "I want to help my new partner help pass the NCLEX-RN".
+	#
+	# GATED, and the gate supplies the identity the same way /find's does.
+	# Progress is keyed on the address forward_auth puts here, so Sashin's
+	# review history is his -- the page never sends a person and there is
+	# nothing for a browser to claim to be. Whether he can reach this at all is
+	# decided by the auth service's app list, not here.
+	#
+	# handle_path, so the app sees / and /api/decks. Its fetches are relative
+	# ('api/decks', not '/api/decks'), which is what makes the strip safe --
+	# and why the redir above it matters: without the trailing slash a relative
+	# fetch from /study resolves to /api/decks and misses this block entirely.
+	redir /study /study/ 308
+	handle_path /study/* {
+		forward_auth https://192.168.1.86 {
+			import nuc_gate
+			uri /verify
+			copy_headers X-Auth-Email
+			header_up X-Forwarded-Uri {http.request.orig_uri}
+		}
+		reverse_proxy 192.168.1.86:8088 {
+			import appproxy
+		}
+	}
+
+	# --- /exam/: the weekly practice paper. NO GATE, like /s/ ------------------
+	# Jason, 2026-09-10: "send him an email every Saturday at 9pm est to have
+	# him to go over a shortner link to do a practical exam of 10 questions".
+	#
+	# UNGATED ON PURPOSE, and narrowly. The token in the URL is the
+	# authorisation: it was minted by an admin, emailed to one address, names
+	# exactly ten questions, expires in seven days, can be revoked, and is
+	# stored only as a SHA-256 -- so reading the database tells you that exams
+	# were set and lets you sit none of them.
+	#
+	# The paper's own fetches live under this same prefix (/exam/{token}/
+	# questions and /answer) SPECIFICALLY so that one rule opens one subtree.
+	# An earlier cut put them under /api/exam/*, which would have meant a
+	# second ungated matcher sitting beside /api/progress -- one typo away
+	# from publishing somebody's history.
+	#
+	# NOT handle_path: the app's route is /exam/{token}, so the prefix stays.
+	handle /exam/* {
+		reverse_proxy 192.168.1.86:8088 {
+			import appproxy
+		}
+	}
+
+	# --- /read/: Kavita, the EPUB and PDF reader ------------------------------
+	# Jason, 2026-09-10: "I would like a PDF reader and an epub reader".
+	#
+	# NOT handle_path, and that distinction is the whole reason this works.
+	# Kavita is an Angular SPA: strip the prefix and it serves an index.html
+	# whose asset and API URLs are all rooted at /, which 404 against this
+	# site. That is exactly how Stirling broke under /pdf/.
+	#
+	# So the prefix SURVIVES, and Kavita is told to expect it -- BaseUrl is
+	# set to "/read/" in its appsettings.json. The app then builds its own
+	# links correctly and there is nothing to rewrite.
+	#
+	# GATED, but Kavita also keeps its own login, and that is deliberate
+	# rather than lazy. Kavita has its own user system with its own
+	# per-library permissions; the household gate cannot express those. Two
+	# doors is the honest arrangement until its OIDC (0.8.8+) is pointed at
+	# /auth/oidc, which collapses them into one.
+	handle /read/* {
+		forward_auth https://192.168.1.86 {
+			import nuc_gate
+			uri /verify
+			copy_headers X-Auth-Email
+			header_up X-Forwarded-Uri {http.request.orig_uri}
+		}
+		reverse_proxy 192.168.1.86:8089 {
+			import appproxy
+		}
+	}
+
+	# --- /audiobookshelf: the player for narrate.py's output ------------------
+	# /listen redirects here. Jason asked for /listen and that is the name
+	# worth keeping, but this app cannot live under it: "/audiobookshelf" is
+	# compiled into its client HTML, so any other prefix serves a page whose
+	# assets all 404. A redirect keeps the short name honest; a rewrite would
+	# have kept it working until the next release.
+	redir /listen /audiobookshelf/ 308
+	redir /listen/* /audiobookshelf{uri} 308
+
+	# Jason, 2026-09-10: "have a reader and an audio book that can use TTS of
+	# voice models I have to read aloud documents too".
+	#
+	# handle, not handle_path: the prefix is what the app expects to see.
+	#
+	# By service name, not 127.0.0.1: Caddy is a container, so loopback is
+	# its own, not the host's. Both live in docker-compose.web.yml, so the
+	# compose network resolves this.
+	# TWO PATHS UNGATED, and both have to be. Added 2026-09-11 when
+	# Audiobookshelf became the last app to get SSO.
+	#
+	# /audiobookshelf/auth/*  is ABS's OWN OpenID flow. Gating it is
+	# circular -- you would have to pass the household login in order to
+	# reach the household login -- and the callback arrives from the
+	# provider carrying a one-time code, not a session cookie, so it is
+	# bounced to a sign-in page and the whole exchange dies at the last
+	# step.
+	#
+	# /audiobookshelf/api/*  is what the PHONE APP speaks. It holds a
+	# bearer token and has no browser, so a redirect to an HTML login is
+	# not something it can answer; SSO would appear to work on the web and
+	# fail silently on every phone. Confirmed by hand: a request carrying a
+	# perfectly valid API key got 303 to /auth/ instead of JSON.
+	#
+	# What protects them is ABS's own auth, which is a real token system,
+	# and it is now backed by the household provider -- so the credentials
+	# are the same ones the gate would have asked for. Same trade already
+	# made for ntfy, Jellyfin and n8n's OAuth callback, for the same
+	# reason each time: token clients cannot complete a browser redirect.
+	handle /audiobookshelf/auth* {
+		reverse_proxy audiobookshelf:80 {
+			import appproxy
+		}
+	}
+	handle /audiobookshelf/api* {
+		reverse_proxy audiobookshelf:80 {
+			import appproxy
+		}
+	}
+
+	handle /audiobookshelf* {
+		forward_auth https://192.168.1.86 {
+			import nuc_gate
+			uri /verify
+			copy_headers X-Auth-Email
+			header_up X-Forwarded-Uri {http.request.orig_uri}
+		}
+		reverse_proxy audiobookshelf:80 {
+			import appproxy
+		}
+	}
+
+	# --- /s/: share links. THE ONLY ROUTE ON THIS SITE WITH NO GATE -----------
+	# Jason, 2026-09-07: "allows somebody to view a recipe on my site without
+	# them having to get a login just to view that".
+	#
+	# NO forward_auth HERE, deliberately and uniquely. The token in the URL is
+	# the authorisation, and it was minted from behind the gate by somebody who
+	# could already open that one document. What keeps this narrow is on the
+	# other side: a token names exactly one record, is checked for expiry and
+	# revocation on every single request, and is stored only as a hash -- so
+	# reading the database gives you a list of what was shared and the ability
+	# to open none of it.
+	#
+	# NOT handle_path. The app's own route is /s/{token}, so the prefix has to
+	# survive.
+	handle /s/* {
+		reverse_proxy 192.168.1.86:8087 {
+			import appproxy
+		}
+	}
+
+	# --- /all: every door in the house on one page ----------------------------
+	# Jason, 2026-09-10: "make a section called /all that has all the cards and
+	# links to everything".
+	#
+	# Same gate and same app as /home, because it is the same cards -- filtered
+	# by the same grants, just never collapsed into one unlabelled shelf. It is
+	# NOT in ALL_APPS on purpose: an index of what you can already reach should
+	# not be a thing you can separately be refused.
+	handle /all* {
+		forward_auth https://192.168.1.86 {
+			import nuc_gate
+			uri /verify
+			copy_headers X-Auth-Email
+			header_up X-Forwarded-Uri {http.request.orig_uri}
+		}
+		reverse_proxy landing:8010 {
+			import appproxy
+		}
+	}
+
+	handle /home* {
+		forward_auth https://192.168.1.86 {
+			import nuc_gate
+			uri /verify
+			copy_headers X-Auth-Email
+			header_up X-Forwarded-Uri {http.request.orig_uri}
+		}
+		reverse_proxy landing:8010 {
+			import appproxy
+		}
+	}
+	handle /dashboard* {
+		forward_auth https://192.168.1.86 {
+			import nuc_gate
+			uri /verify
+			copy_headers X-Auth-Email
+			header_up X-Forwarded-Uri {http.request.orig_uri}
+		}
+		reverse_proxy landing:8010 {
+			import appproxy
+		}
+	}
+
+	# DocuSeal is NOT proxied here, deliberately (2026-08-28).
+	#
+	# It cannot be served from a path: it ignores RAILS_RELATIVE_URL_ROOT
+	# (tested -- /pdf-sign/ returned its own 404) and stripping the prefix
+	# breaks it the other way, because its assets are root-absolute. Same shape
+	# as the /websockify problem that killed the Kasm plan.
+	#
+	# Jason's call: link straight to it on the LAN instead of giving it a
+	# hostname. The card on /jason points at http://192.168.1.86:3002. That
+	# means it works at home and nowhere else, which for a document-signing
+	# tool is a reasonable place to draw the line -- and it is the honest
+	# alternative to a proxy arrangement that does not work.
+
+	redir /tools /tools/ 308
+	handle_path /tools/* {
+		forward_auth https://192.168.1.86 {
+			import nuc_gate
+			uri /verify
+			copy_headers X-Auth-Email
+			# THE ORIGINAL PATH, NOT THE STRIPPED ONE.
+			#
+			# handle_path removes the prefix before this runs, so Caddy's
+			# own X-Forwarded-Uri arrived at the auth service as "/" for
+			# every app in a handle_path block. Two things broke, and only
+			# the harmless one was visible:
+			#
+			#  1. Signing in dumped you at the site root instead of the
+			#     page you asked for -- /auth/?next=/ rather than
+			#     ?next=/git/.
+			#  2. MUCH WORSE: app_for_uri() decides per-app permissions by
+			#     matching that path. Given "/" it matched nothing and
+			#     returned None, which means "being on the sign-in list is
+			#     the only gate" -- so the per-app toggles on /admin/people
+			#     did nothing at all for /git, /portainer, /status, /tools
+			#     and /pdf. Anyone who could sign in could reach Portainer,
+			#     which holds the Docker socket and is root-equivalent.
+			#
+			# Proven by the one block that does NOT strip: /logs uses
+			# `handle` and correctly produced ?next=/logs/ while every
+			# handle_path app produced ?next=/ (measured 2026-08-28).
+			#
+			# orig_uri is the path as the browser sent it, before any
+			# rewrite -- which is what both the redirect and the permission
+			# check have always meant to use.
+			header_up X-Forwarded-Uri {http.request.orig_uri}
+		}
+		reverse_proxy 192.168.1.86:8082 {
+			import appproxy
+		}
+	}
+
+	# --- Spring's sign-in link, which it writes at the wrong depth -------
+	#
+	# Jason, 2026-09-06: "/oauth2/authorization/household still isn't
+	# working." It 404d, and it was never going to do anything else.
+	#
+	# /oauth2/authorization/<registration> is not an IdP endpoint -- no
+	# identity provider serves it. It is Spring Security's login-INITIATION
+	# path, served by the app doing the signing in. That app is Stirling
+	# PDF, which is Spring Boot and lives at /pdf/.
+	#
+	# Stirling knows its public base URL well enough to register the
+	# callback correctly (OIDC_CLIENTS has /pdf/login/oauth2/code/household)
+	# but writes the link on its own login page as a site-absolute path,
+	# ignoring the prefix. So the one button the entire SSO integration
+	# hangs off pointed at the top of the site, where nothing is listening.
+	#
+	# 308 AND NOT A REWRITE. A rewrite would leave the browser's URL at the
+	# root while Stirling built its state cookie and callback from the
+	# prefix -- three components disagreeing about where the app is. A real
+	# redirect puts the browser on /pdf/ first, so they agree.
+	#
+	# The wildcard is deliberate: the bug is Spring's path handling, not the
+	# name "household". A second registration would break identically.
+	# {uri} is the whole path and query, so this lands on
+	# /pdf/oauth2/authorization/household with any state parameters intact.
+	redir /oauth2/authorization/* /pdf{uri} 308
+
+	redir /pdf /pdf/ 308
+	handle_path /pdf/* {
+		forward_auth https://192.168.1.86 {
+			import nuc_gate
+			uri /verify
+			copy_headers X-Auth-Email
+			# THE ORIGINAL PATH, NOT THE STRIPPED ONE.
+			#
+			# handle_path removes the prefix before this runs, so Caddy's
+			# own X-Forwarded-Uri arrived at the auth service as "/" for
+			# every app in a handle_path block. Two things broke, and only
+			# the harmless one was visible:
+			#
+			#  1. Signing in dumped you at the site root instead of the
+			#     page you asked for -- /auth/?next=/ rather than
+			#     ?next=/git/.
+			#  2. MUCH WORSE: app_for_uri() decides per-app permissions by
+			#     matching that path. Given "/" it matched nothing and
+			#     returned None, which means "being on the sign-in list is
+			#     the only gate" -- so the per-app toggles on /admin/people
+			#     did nothing at all for /git, /portainer, /status, /tools
+			#     and /pdf. Anyone who could sign in could reach Portainer,
+			#     which holds the Docker socket and is root-equivalent.
+			#
+			# Proven by the one block that does NOT strip: /logs uses
+			# `handle` and correctly produced ?next=/logs/ while every
+			# handle_path app produced ?next=/ (measured 2026-08-28).
+			#
+			# orig_uri is the path as the browser sent it, before any
+			# rewrite -- which is what both the redirect and the permission
+			# check have always meant to use.
+			header_up X-Forwarded-Uri {http.request.orig_uri}
+		}
+		reverse_proxy 192.168.1.86:8083 {
+			import appproxy
+		}
+	}
+
+	# --- a shared recipe link, no account needed -----------------------------
+	# Jason's own request (2026-08-25): "share the links to a certain recipe
+	# to a random person without a login... 2 day temp access." DELIBERATELY
+	# NO forward_auth here, unlike every other block in this file -- the whole
+	# point is that whoever gets sent this link has no account on this site at
+	# all. Kitchen checks the token itself, on every request (store.share_get,
+	# main.py's shared_recipe()/shared_photo()), because nothing upstream of
+	# it is checking anything here. Goes straight to kitchen:8003, not through
+	# /kitchen/*'s own gated block above -- see main.py's own comment on
+	# these routes for exactly what a guest can and cannot see through them.
+	handle /share/* {
+		reverse_proxy kitchen:8003 {
+			import appproxy
+		}
+	}
+	handle_path /kitchen/* {
+		# 64MB because of the paste box and the photo uploads. A recipe pasted
+		# straight out of a page brings its base64 images with it, and a phone
+		# photo of the finished dish is several megabytes on its own.
+		request_body {
+			max_size 64MB
+		}
+		forward_auth https://192.168.1.86 {
+			import nuc_gate
+			uri /verify
+			copy_headers X-Auth-Email
+			# THE ORIGINAL PATH, NOT THE STRIPPED ONE.
+			#
+			# handle_path removes the prefix before this runs, so Caddy's
+			# own X-Forwarded-Uri arrived at the auth service as "/" for
+			# every app in a handle_path block. Two things broke, and only
+			# the harmless one was visible:
+			#
+			#  1. Signing in dumped you at the site root instead of the
+			#     page you asked for -- /auth/?next=/ rather than
+			#     ?next=/git/.
+			#  2. MUCH WORSE: app_for_uri() decides per-app permissions by
+			#     matching that path. Given "/" it matched nothing and
+			#     returned None, which means "being on the sign-in list is
+			#     the only gate" -- so the per-app toggles on /admin/people
+			#     did nothing at all for /git, /portainer, /status, /tools
+			#     and /pdf. Anyone who could sign in could reach Portainer,
+			#     which holds the Docker socket and is root-equivalent.
+			#
+			# Proven by the one block that does NOT strip: /logs uses
+			# `handle` and correctly produced ?next=/logs/ while every
+			# handle_path app produced ?next=/ (measured 2026-08-28).
+			#
+			# orig_uri is the path as the browser sent it, before any
+			# rewrite -- which is what both the redirect and the permission
+			# check have always meant to use.
+			header_up X-Forwarded-Uri {http.request.orig_uri}
+		}
+		reverse_proxy kitchen:8003 {
+			import appproxy
+			header_up X-Forwarded-Prefix /kitchen
+		}
+	}
+
+	# --- the family photos, under /legacy ------------------------------------
+	# WAS peeweelegacy.ddns.net. Static files, so this needed no app changes.
+	#
+	# Still not indexed: robots.txt at the site root covers the whole host, and
+	# this header says no again for the crawlers that ignore robots.txt.
+	# Anyone with the link can look; nobody stumbles across it in a search.
+	# THIS USED TO BE `file_server browse` AND THAT WAS A MISTAKE.
+	# It served ../Legacy as a public directory listing: no password, and every
+	# file in it enumerable and downloadable by anyone who had the link. The
+	# comment here used to argue that a plain listing was "genuinely the right
+	# interface for a pile of family photos". It is not, once the pile is
+	# hundreds of 9MB photos of your family.
+	#
+	# Now a Rust app serves it: a password, and ONLY the folders named in
+	# legacy.json exist as URLs. Caddy no longer mounts the photo folder at
+	# all, so even a routing mistake here cannot expose it.
+	redir /legacy /legacy/ 308
+	handle_path /legacy/* {
+		reverse_proxy legacy:8012 {
+			import appproxy
+			header_up X-Forwarded-Prefix /legacy
+		}
+	}
+
+	# --- the admin, under {$ADMIN_PATH} --------------------------------------
+	# Uploads JSON site data. It is the only thing in the stack that can WRITE
+	# what the sites display, so it is the one path here worth being careful
+	# about.
+	#
+	# WHY THE PATH IS A VARIABLE
+	# It defaults to /admin, which every scanner on the internet tries within
+	# minutes of a host appearing in certificate transparency logs. They will
+	# never get past the password, but they will fill your logs and they will
+	# trip the lockout -- which locks YOU out too, because the real client IP
+	# is unavailable behind Docker Desktop's NAT (see the note in `appproxy`),
+	# so the lockout has to be global to be honest.
+	#
+	# Setting ADMIN_PATH in .env to something unguessable, e.g.
+	#     ADMIN_PATH=/admin-a7f3c2e9
+	# means scanners never find it, so they never trip the lockout, so the
+	# lockout is there for an actual attacker rather than for background
+	# noise. Same reasoning as the Koalendar webhook path above. It is not a
+	# password and is not a substitute for one -- the password is still what
+	# protects this. It just keeps the noise off.
+	#
+	# handle_path strips the prefix, so the app itself always sees "/" and does
+	# not need to know where it is mounted. Its links are all relative, which
+	# is what makes that work.
+	# --- the tables editor, under {$ADMIN_PATH}/tables -----------------------
+	# MUST COME BEFORE the {$ADMIN_PATH}/* block below. Caddy tries handle
+	# blocks in the order they are written, not longest-match-first, so putting
+	# this second would mean /admin/* swallowed it and the editor was never
+	# reachable at all.
+	#
+	# It has no password of its own. forward_auth asks the Rust admin whether
+	# this visitor is signed in, and a "no" is answered with the admin's own
+	# sign-in redirect - so the argon2 password next door is the only door, and
+	# Streamlit never sees a byte from anyone who has not come through it.
+	handle {$ADMIN_PATH:/admin}/tables* {
+		forward_auth admin:8011 {
+			uri /verify
+		}
+		request_body {
+			max_size 8MB
+		}
+		reverse_proxy tables:8501 {
+			# DELIBERATELY NOT `import appproxy` HERE, and this is the fix for
+			# a real bug: the page loaded, every asset returned 200, and the
+			# websocket returned 400, so Streamlit sat at "Please wait..."
+			# forever and the app looked broken when it was fine. A handshake
+			# straight at the container answered 101 Switching Protocols.
+			#
+			# The cause was TWO `transport http` blocks in one reverse_proxy --
+			# one arriving via the snippet, one declared here for the long
+			# timeout a websocket needs. This is the only route on the machine
+			# that needs a different transport from the snippet, so it spells
+			# out what it needs instead of importing and then contradicting.
+			#
+			# The Connection and Upgrade header_up lines are gone too. They are
+			# Caddy v1 advice; v2 proxies websockets natively and setting them
+			# by hand only creates a second opinion about the same header.
+			header_up -X-Real-IP
+			header_up -True-Client-IP
+			header_up -X-Client-IP
+			header_up -X-Originating-IP
+			header_up -X-Forwarded-Host
+			header_up -X-Host
+			header_up -Forwarded
+			header_up X-Forwarded-For {remote_host}
+			header_up X-Forwarded-Proto {scheme}
+			# ZERO, not 300s. A Streamlit websocket is open for as long as the
+			# tab is, and a read timeout closes it mid-session -- which shows
+			# up as the page going dead after a few minutes rather than as an
+			# error anybody could act on.
+			transport http {
+				read_timeout 0
+				write_timeout 0
+			}
+		}
+	}
+
+	redir {$ADMIN_PATH:/admin} {$ADMIN_PATH:/admin}/ 308
+	handle_path {$ADMIN_PATH:/admin}/* {
+		request_body {
+			# Matches ADMIN_MAX_UPLOAD_MB. Caddy rejects anything larger before
+			# it ever reaches the app, so a huge upload cannot tie up the
+			# container's memory.
+			max_size 8MB
+		}
+		reverse_proxy admin:8011 {
+			import appproxy
+			# WHERE THE APP LIVES, told to it explicitly.
+			#
+			# handle_path strips the prefix, so without this the app sees "/people"
+			# while the browser sees "/admin/people" - and every link it writes is
+			# relative to the wrong thing. It used to build relative links to cope,
+			# which broke the moment a POST rendered a page: the browser's URL
+			# became /admin/people/add, and the next form on that page resolved to
+			# /admin/people/people/password. A 404 that only appeared on the SECOND
+			# submit, which reads as anything but a URL problem.
+			#
+			# Passed as a header rather than baked in, so changing ADMIN_PATH moves
+			# the app without rebuilding it.
+			header_up X-Forwarded-Prefix {$ADMIN_PATH:/admin}
+		}
+	}
+
+	# --- the landing page (Rust) ---------------------------------------------
+	# This used to be `php_fastcgi php:9000`. It's now a proxy to the `landing`
+	# container. To roll back: put the php_fastcgi block back, and start with
+	# `--profile php-fallback`.
+	handle / {
+		reverse_proxy landing:8010 {
+			import appproxy
+		}
+	}
+	handle /jason/* {
+		reverse_proxy landing:8010 {
+			import appproxy
+		}
+	}
+
+	# --- /jason with no trailing slash ---------------------------------------
+	# `handle /jason/*` does NOT match a bare `/jason`. Without this line that
+	# request falls through to the catch-all below and 404s, even though the
+	# landing app has a route for it.
+	redir /jason /jason/ 308
+
+	# --- everything else: static files ---------------------------------------
+	# ORDER MATTERS. This catch-all must come last, or it swallows /casey and
+	# /mama before they're ever matched. That's the exact bug the old Pi
+	# Caddyfile warned about.
+	#
+	# THE ROOT HERE USED TO BE /srv/www, WHICH WAS THE WHOLE www FOLDER.
+	# That folder contains ai-stack, and ai-stack contains .env -- the Twilio
+	# auth token, the LiteLLM master key, every API key. `file_server` will not
+	# LIST a directory without `browse`, but it will happily SERVE any path you
+	# name, and /ai-stack/.env is a name anyone can guess. It also exposed
+	# Casey/app, Booking/app and Mom in full.
+	#
+	# So the root is now a folder that exists only to be public. Nothing else on
+	# this machine is reachable through the web server. If you want a file on
+	# the internet, put it in ai-stack\web\public\ and it appears at the root of
+	# the site; nothing outside that folder can leak, because nothing outside it
+	# is mounted.
+	# --- the app download ----------------------------------------------------
+	# ONE FILE, ONE URL, FOREVER. Versioned filenames existed only to defeat
+	# browser caching, and they cost a permanent link: every release moved the
+	# URL, and a bookmark from last week 404s. This solves the caching part
+	# properly instead -- no-cache means "revalidate before reusing", not
+	# "never store", so a repeat download is a 304 when nothing changed and
+	# the new bytes when something did.
+	#
+	# The version is inside the APK and printed on the sign-in screen, which
+	# is the honest place for it: the filename was never evidence of what
+	# actually installed.
+	handle /apps/* {
+		root * /srv/public
+		header Cache-Control "no-cache, must-revalidate"
+		file_server
+	}
+
+	handle {
+		root * /srv/public
+
+		# Defence in depth, not the main defence. There is no PHP interpreter in
+		# the chain any more, so a .php file would be served as PLAIN TEXT.
+		@php path *.php
+		respond @php 404
+
+		# Dotfiles: .env, .git, .htpasswd. Nothing should ever be in the public
+		# folder starting with a dot, and if something is, this is the line that
+		# means it was a mistake rather than an incident.
+		@dot path */.*
+		respond @dot 404
+
+		file_server
+	}
+}
+
+# =============================================================================
+#  example.org:9443 â€” Mealie, the recipe library
+#
+#  WHY THIS IS A PORT AND NOT A PATH
+#  ---------------------------------
+#  It is the one app here that could not go under a prefix. Mealie's frontend
+#  requests its assets from absolute "/..." paths, so behind `handle_path
+#  /recipes/*` the HTML loads and every script, stylesheet and API call 404s:
+#  a blank page with a console full of errors. That is not a proxy setting
+#  anyone has missed -- upstream has declined subpath hosting for years, and
+#  the workarounds all involve rewriting the app's built assets.
+#
+#  So it needs the root of something. The two ways to give it one are a second
+#  hostname or a second port, and a port needs no new DNS record and no change
+#  to the dynamic-DNS updater. Caddy already holds a certificate for
+#  example.org, and a certificate covers the NAME, not the port --
+#  so https on 9443 is trusted with nothing extra to obtain or renew.
+#
+#  THE ONE THING THIS COSTS YOU: port 9443 must be forwarded on the router,
+#  alongside 80 and 443, or this is LAN-only. Let's Encrypt does not care --
+#  the certificate is issued over port 80 for the hostname and simply reused
+#  here -- so a forgotten forward shows up as "works at home, not on mobile
+#  data", never as a certificate error.
+# =============================================================================
+#  RETIRED 2026-09-06 -- Authentik on :9443
+#
+#  Four containers (server, worker, its own postgres, its own redis) for an
+#  identity provider with two applications configured: Stirling-PDF and
+#  Immich. Measured that day, BOTH authenticate somewhere else:
+#      stirling-pdf  SECURITY_OAUTH2_ISSUER   = .../auth/oidc
+#      immich        oauth.issuerUrl          = .../auth/oidc  (enabled)
+#  Both point at this house's own Rust auth service. Authentik's copies were
+#  stale. Its last event of any kind was 2026-08-31; thirty-day totals were
+#  four logins and seven failures, which is nobody.
+#
+#  Containers stopped, not removed -- the database volume is untouched, so
+#  the two application definitions are still there if it is ever wanted as a
+#  fallback provider. It was not wired to be one, which is why it was cost
+#  without cover.
+# =============================================================================
+## =============================================================================
+# example.org:9443 {
+# 	import common
+#
+# 	# =========================================================================
+# 	#  authentik — the identity provider
+# 	#
+# 	#  WAS MEALIE UNTIL 2026-08-28. Mealie's container died three days earlier
+# 	#  (exit 137) and nothing noticed: this port kept answering, kept asking
+# 	#  for a login, and forwarded every visitor to a backend that was gone.
+# 	#  Jason confirmed he had moved off it. So the router forward already
+# 	#  existed, the certificate for this hostname already covered it, and the
+# 	#  port cost nothing to reclaim.
+# 	#
+# 	#  A PORT AND NOT A PATH, because Authentik expects to own the root of a
+# 	#  hostname and has no subpath deployment -- the same wall DocuSeal and
+# 	#  Uptime Kuma hit. scratch-map was forkable; this is not.
+# 	#
+# 	#  NO forward_auth HERE, DELIBERATELY, AND THIS IS THE EASY THING TO GET
+# 	#  WRONG. Every other site block on this file gates itself behind the auth
+# 	#  service. This one must not: it IS the login. Putting a gate in front of
+# 	#  the sign-in page is how an estate locks itself out of itself, and the
+# 	#  Rust auth service cannot authenticate for the thing meant to replace it.
+# 	#  Authentik does its own authentication, and its own authorization, from
+# 	#  the admin panel at /if/admin/.
+# 	# =========================================================================
+# 	reverse_proxy authentik-server:9000 {
+# 		import appproxy
+# 		# Authentik reads these to build absolute URLs and to record who was
+# 		# actually at the other end. Without the real client address every
+# 		# login in the audit log reads as coming from the proxy, and its own
+# 		# brute-force protection counts the whole house as one attacker.
+# 		header_up X-Forwarded-Proto https
+# 		header_up X-Forwarded-Host {host}
+# 		header_up X-Real-IP {remote_host}
+# 	}
+# }
+
+# =============================================================================
+#  example.org:9444 — OTOBO, the ticket queue console
+#
+#  Own port, same as Mealie/Peppermint before it, and the same reason: keep
+#  this off the main domain's path space so nothing about /_next-style asset
+#  paths or Perl script paths can collide. OTOBO's own URLs already start
+#  with /otobo/ (index.pl, customer.pl, nph-genericinterface.pl) so it would
+#  probably survive a path prefix too, but there is no upside to testing that
+#  when :9444 already works, has TLS, and is already forwarded on the router.
+#
+#  NO SSO HAND-OFF, same choice as Peppermint had. OTOBO keeps its own login.
+#  forward_auth below is the first door: you must already be signed into the
+#  site, THEN OTOBO asks for its own agent password. A bare OTOBO login with
+#  no gate in front is a password-guessing target the moment it is reachable
+#  from anywhere but this PC.
+#
+#  FORWARD THIS PORT ON THE ROUTER TOO if you want it reachable off your home
+#  network, same as 9443.
+# =============================================================================
+# DISABLED 2026-08-28, Jason's call: "i dont want that ticket system".
+# OTOBO is behind a compose profile now (docker-compose.web.yml) and nothing
+# listens on 5000, so this block would answer every request with a 502.
+# Commented rather than deleted: the port is still forwarded on the router
+# and this is the record of what used to answer on it. To bring it back,
+# start the stack with --profile otobo and uncomment the block below.
+#
+# WORTH DOING SEPARATELY: close 9444 on the router. A forwarded port with
+# nothing behind it is not dangerous today, but it is an invitation to
+# forget what it was for.
+# example.org:9444 {
+# 	import common
+#
+# 	redir /auth /auth/ 308
+# 	handle_path /auth/* {
+# 		reverse_proxy auth:8013 {
+# 			import appproxy
+# 		}
+# 	}
+#
+# 	handle {
+# 		forward_auth auth:8013 {
+# 			uri /verify
+# 			copy_headers X-Auth-Email
+# 			# THE ORIGINAL PATH, NOT THE STRIPPED ONE.
+# 			#
+# 			# handle_path removes the prefix before this runs, so Caddy's
+# 			# own X-Forwarded-Uri arrived at the auth service as "/" for
+# 			# every app in a handle_path block. Two things broke, and only
+# 			# the harmless one was visible:
+# 			#
+# 			#  1. Signing in dumped you at the site root instead of the
+# 			#     page you asked for -- /auth/?next=/ rather than
+# 			#     ?next=/git/.
+# 			#  2. MUCH WORSE: app_for_uri() decides per-app permissions by
+# 			#     matching that path. Given "/" it matched nothing and
+# 			#     returned None, which means "being on the sign-in list is
+# 			#     the only gate" -- so the per-app toggles on /admin/people
+# 			#     did nothing at all for /git, /portainer, /status, /tools
+# 			#     and /pdf. Anyone who could sign in could reach Portainer,
+# 			#     which holds the Docker socket and is root-equivalent.
+# 			#
+# 			# Proven by the one block that does NOT strip: /logs uses
+# 			# `handle` and correctly produced ?next=/logs/ while every
+# 			# handle_path app produced ?next=/ (measured 2026-08-28).
+# 			#
+# 			# orig_uri is the path as the browser sent it, before any
+# 			# rewrite -- which is what both the redirect and the permission
+# 			# check have always meant to use.
+# 			header_up X-Forwarded-Uri {http.request.orig_uri}
+# 		}
+#
+# 		reverse_proxy otobo:5000 {
+# 			import appproxy
+# 		}
+# 	}
+# }
+
+# =============================================================================
+#  example.org:9445 — Tandoor Recipes (being evaluated to replace
+#  Mealie, see .env.example's TANDOOR section for why)
+#
+#  Own port, same reasoning as Mealie and OTOBO: a Django app with its own
+#  asset paths, no upside to testing whether it tolerates a path prefix when
+#  a free port is right there. :9443 is Mealie, :9444 is OTOBO, :9445 is next.
+#
+#  SSO HAND-OFF NOW WIRED, same shape as Mealie's own block above. Tandoor's
+#  auth turned out to be a Django session cookie (`sessionid`), not a bearer
+#  token -- see Kitchen/app/handoff_tandoor.py's docstring for how that was
+#  confirmed and why. /kitchen/library now mints a Tandoor session instead of
+#  a Mealie one, so this is the same @needs_handoff pattern with the cookie
+#  name swapped.
+#
+#  FORWARD PORT 9445 ON THE ROUTER TOO if you want it reachable off the LAN.
+# =============================================================================
+example.org:9445 {
+	import common
+
+	redir /auth /auth/ 308
+	handle /auth/* {
+		reverse_proxy https://192.168.1.86 {
+			import nuc_signin
+		}
+	}
+
+	# --- kitshn (and any other real Tandoor client), unauthenticated at
+	# THIS layer, on purpose -----------------------------------------------
+	# Jason's own request (2026-08-24): set up the real kitshn app
+	# (play.google.com/store/apps/details?id=de.kitshn.android) for Mama
+	# and Casey. A native app has no way to hold the site's own SSO cookie --
+	# it logs in directly against Tandoor's own real accounts (Settings >
+	# API Tokens, or its normal username/password), which is a perfectly
+	# real gate on its own. Putting forward_auth in front of THAT login
+	# request would 401 it before Tandoor ever saw it -- confirmed live
+	# this session that forward_auth gates the whole port unconditionally,
+	# and the @needs_handoff redirect below only fires for a browser
+	# (`Accept: text/html`), never a JSON API call, so a native app would
+	# have gotten forward_auth's bare 401 with no way to recover from it.
+	# /media/* is exempted too -- recipe/step photos the app needs to
+	# actually show a recipe, same reasoning. Tandoor's own account system
+	# (already real, already provisioned for Jason/Mama/Casey) is what
+	# decides who sees what through here, exactly as it's designed to.
+	handle /api/* {
+		request_body {
+			max_size 64MB
+		}
+		reverse_proxy tandoor:80 {
+			import appproxy
+		}
+	}
+	handle /media/* {
+		reverse_proxy tandoor:80 {
+			import appproxy
+		}
+	}
+
+	handle {
+		# Recipe photos again -- same allowance as Mealie's own block.
+		request_body {
+			max_size 64MB
+		}
+
+		forward_auth https://192.168.1.86 {
+			import nuc_gate
+			uri /verify
+			copy_headers X-Auth-Email
+			# THE ORIGINAL PATH, NOT THE STRIPPED ONE.
+			#
+			# handle_path removes the prefix before this runs, so Caddy's
+			# own X-Forwarded-Uri arrived at the auth service as "/" for
+			# every app in a handle_path block. Two things broke, and only
+			# the harmless one was visible:
+			#
+			#  1. Signing in dumped you at the site root instead of the
+			#     page you asked for -- /auth/?next=/ rather than
+			#     ?next=/git/.
+			#  2. MUCH WORSE: app_for_uri() decides per-app permissions by
+			#     matching that path. Given "/" it matched nothing and
+			#     returned None, which means "being on the sign-in list is
+			#     the only gate" -- so the per-app toggles on /admin/people
+			#     did nothing at all for /git, /portainer, /status, /tools
+			#     and /pdf. Anyone who could sign in could reach Portainer,
+			#     which holds the Docker socket and is root-equivalent.
+			#
+			# Proven by the one block that does NOT strip: /logs uses
+			# `handle` and correctly produced ?next=/logs/ while every
+			# handle_path app produced ?next=/ (measured 2026-08-28).
+			#
+			# orig_uri is the path as the browser sent it, before any
+			# rewrite -- which is what both the redirect and the permission
+			# check have always meant to use.
+			header_up X-Forwarded-Uri {http.request.orig_uri}
+		}
+
+		# --- the sign-in hand-off ---------------------------------------------
+		# REPOINTED 2026-09-04. This used to send a cookie-less browser to
+		# https://example.org/kitchen/library, where Kitchen logged in
+		# to Tandoor on their behalf using a per-person password it keeps in its
+		# own tandoor_users table (Kitchen/app/handoff_tandoor.py).
+		#
+		# THAT MECHANISM IS DEAD, and not because of this change: the accounts it
+		# holds passwords for no longer exist. Tandoor had been silently running
+		# on SQLite, in a file inside its own container, on no volume -- see
+		# DB_ENGINE in docker-compose.web.yml for the full account -- and the
+		# 2026-08-31 restart took every account and every recipe with it.
+		#
+		# Tandoor now signs people in against the household's own OIDC issuer,
+		# so the hand-off is one hop instead of three: this redirect starts the
+		# flow, SOCIALACCOUNT_LOGIN_ON_GET makes allauth skip its confirmation
+		# page, and the issuer already holds the signed-in cookie and bounces
+		# straight back. No password is stored anywhere for it.
+		#
+		# `not path /accounts/*` IS LOAD-BEARING. Without it this matcher eats
+		# the very flow it is trying to start: /accounts/oidc/household/login/
+		# and its /login/callback/ are both HTML GETs that arrive with no
+		# sessionid cookie -- the callback is what SETS that cookie. The symptom
+		# is a redirect loop that never reaches Tandoor at all.
+		@needs_handoff {
+			not header_regexp Cookie "sessionid="
+			not path /accounts/*
+			method GET
+			header Accept *text/html*
+		}
+		redir @needs_handoff /accounts/oidc/household/login/?process=login&next={uri} 302
+
+		reverse_proxy tandoor:80 {
+			import appproxy
+
+			# Tandoor's own AI import calls LiteLLM the same way Mealie's does
+			# -- same long-read-timeout reasoning as the Mealie block above.
+		}
+	}
+}
+
+# =============================================================================
+#  garden.example.org -- a SEPARATE project, added 2026-08-28. See
+#  ~/.claude/plans/happy-yawning-wilkes.md for the full phased rewrite plan.
+#
+#  DIFFERENT HOSTNAME, not a path under example.org, so this is
+#  its own top-level site block -- Caddy already handles multi-domain TLS
+#  via SNI (same mechanism that already serves example.org),
+#  and this rides the exact same NUC-relay infrastructure with zero new
+#  router ports: the router already forwards 80/443 to the NUC's
+#  haproxy-relay, which already forwards straight through to THIS Caddy
+#  regardless of which hostname the request is for.
+#
+#  Phase 1 only right now (see the plan) -- a skeleton Rust app on the NUC
+#  with just /healthz proving DNS -> relay -> Caddy -> app -> the imported
+#  MariaDB works end to end. No forward_auth here yet: this is a public
+#  garden site, not a household admin tool -- auth only gates write paths,
+#  once those exist (phase 3).
+# =============================================================================
+garden.example.org {
+	# The Streamlit plant-admin tool. nginx does basic auth (its own
+	# .htpasswd) and proxies to Streamlit, which is configured with
+	# baseUrlPath="streamlit" so the prefix stays intact -- hence
+	# `handle`, NOT `handle_path`.
+	#
+	# BEHIND THE HOUSEHOLD SIGN-IN SINCE 2026-09-19, on Jason's
+	# instruction. The site around it stays public -- catalogue, gallery
+	# and blog are for anybody -- but the admin tool is not part of that,
+	# and it was previously protected by a basic-auth password and
+	# nothing else.
+	#
+	# TWO GATES IN SERIES, ON PURPOSE AND TEMPORARILY. The basic-auth
+	# sidecar is still there: you pass the household door, then the
+	# password you already know. Two gates cannot lock anybody out that
+	# one would not, and it is the same ordering that just worked for
+	# connection.php -- prove the new door in anger, THEN remove the old
+	# one. Retiring the sidecar is on the garden's TODO.
+	#
+	# WEBSOCKETS: Streamlit holds one open for the life of the tab, and
+	# forward_auth runs on the upgrade request like any other. An expiring
+	# session therefore drops the socket and the page reconnects through
+	# sign-in. That is correct, and it is worth knowing before somebody
+	# reports it as the tool going dead.
+	# --- /beds: where Robin draws his garden ------------------------------
+	# The bed planner (garden-ingest /plan). On HIS hostname, not the admin
+	# one, because it is his garden -- the same service already answers at
+	# example.org/garden-review for the approval queue.
+	#
+	# redir THEN handle_path, and the pair matters. handle_path strips
+	# /beds, so the service sees /plan and the page's own fetches land back
+	# on /beds/api/... which strips to /api/... The page derives that prefix
+	# from its own URL, so this mounts anywhere without a code change.
+	#
+	# The service checks the address AGAIN on its own side: being signed in
+	# to the household is not the same as being allowed to redraw a garden.
+	# /checkup rides the same mount as /beds: one handle_path prefix, and
+	# both pages derive their own base from their URL. A second block would
+	# be a second thing to keep in step for no gain.
+	redir /checkup /beds/checkup 308
+	# /spend rides the same mount for the same reason: the receipts
+	# page derives its own base from its URL, so it needs a short way in
+	# and nothing else.
+	redir /spend /beds/spend 308
+	# /diagnose -- point the camera at a plant. Same mount, same
+	# reason: one page both the site and Robin's app use.
+	redir /diagnose /beds/diagnose 308
+	redir /tagscan /beds/tag 308
+	redir /wiki-queue /beds/wiki-queue 308
+	redir /beds /beds/plan 308
+	handle_path /beds* {
+		forward_auth https://192.168.1.86 {
+			import nuc_gate
+			uri /verify
+			copy_headers X-Auth-Email
+			header_up X-Forwarded-Uri {http.request.orig_uri}
+		}
+		# RETIRED 2026-10-25: Robin's Garden is not served from here.
+		respond "Robin's Garden moved." 410
+	}
+
+	handle /streamlit* {
+		forward_auth https://192.168.1.86 {
+			import nuc_gate
+			uri /verify
+			copy_headers X-Auth-Email
+			header_up X-Forwarded-Uri {http.request.orig_uri}
+		}
+		# RETIRED 2026-10-25: Robin's Garden is not served from here.
+		respond "Robin's Garden moved." 410
+	}
+
+	# --- GARDEN_SSO (2026-09-18) --------------------------------------
+	# The household sign-in, on this hostname too. forward_auth's redirect
+	# is relative, so somebody sent to /auth/ must find it HERE rather than
+	# on example.org.
+	redir /auth /auth/ 308
+	handle /auth/* {
+		reverse_proxy https://192.168.1.86 {
+			import nuc_signin
+		}
+	}
+
+	# THE SITE STAYS PUBLIC. Only the door marked "sign in" runs
+	# forward_auth. Everything else -- catalogue, gallery, blog, the
+	# dashboard -- is reachable by anybody, which is what it has always
+	# been and what Jason asked to keep.
+	#
+	# A visitor who hits /sso-login is bounced to the household sign-in,
+	# comes back with a verified X-Auth-Email, and connection.php turns
+	# that into a session (see its GARDEN_SSO_BLOCK). The old password
+	# form still works underneath while this is proven.
+	@ssologin path /sso-login /sso-login/*
+	handle @ssologin {
+		forward_auth https://192.168.1.86 {
+			import nuc_gate
+			uri /verify
+			copy_headers X-Auth-Email
+			header_up X-Forwarded-Uri {http.request.orig_uri}
+		}
+		# RETIRED 2026-10-25: Robin's Garden is not served from here.
+		respond "Robin's Garden moved." 410
+	}
+
+	# Everything else: the original PHP site (php:8.3-apache on the NUC),
+	# restored 2026-08-28 rather than rewritten -- see the long note on
+	# garden-php in share/nuc-homelab/docker-compose.yml. The Rust
+	# port that briefly served this hostname is still running on :8021 for
+	# comparison, but is no longer wired to anything.
+	handle {
+		# A CLIENT MAY NOT CLAIM TO BE ANYBODY. connection.php trusts
+		# X-Auth-Email, so the public half of the site must never be able
+		# to carry one in from outside.
+		request_header -X-Auth-Email
+		# RETIRED 2026-10-25: Robin's Garden is not served from here.
+		respond "Robin's Garden moved." 410
+	}
+}
+
+# =============================================================================
+#  example.org:9444 — DocuSeal, the document signing tool
+#
+#  WHY A PORT AND NOT A PATH. DocuSeal cannot be served from a subpath: it
+#  ignores RAILS_RELATIVE_URL_ROOT (tested -- /pdf-sign/ returned its own 404)
+#  and stripping the prefix breaks it the other way, because its assets are
+#  root-absolute. At the root of a port it has no prefix to cope with and
+#  simply works.
+#
+#  WHY THIS COSTS NOTHING. A TLS certificate is issued per HOSTNAME, not per
+#  port, so Caddy's existing certificate for example.org serves
+#  this without a new DNS entry, a new hostname, or a paid domain. That
+#  matters here: the No-IP account is the free tier.
+#
+#  9444 WAS OTOBO'S. Otobo was retired on 2026-08-28 and this port went spare,
+#  which is the only reason this arrangement is free -- the router forward
+#  already existed. It needs re-opening: external 9444 -> 192.168.1.86.
+#
+#  The relay's ft_otobo frontend on the NUC is renamed to ft_docuseal to match.
+# =============================================================================
+example.org:9444 {
+	import common
+
+	# --- sign in, ON THIS PORT TOO ------------------------------------------
+	# Same reasoning as the :9443 block: forward_auth's redirect is relative,
+	# so an unauthenticated arrival here is sent to
+	# https://example.org:9444/auth/ . Without this block that path
+	# falls through to DocuSeal, which answers 404 -- a sign-in link that 404s,
+	# which reads as the auth service being broken when it is fine.
+	#
+	# The session cookie needs nothing: cookies are scoped by host and ignore
+	# the port, so signing in on any port signs you in on all of them.
+	redir /auth /auth/ 308
+	handle /auth/* {
+		reverse_proxy https://192.168.1.86 {
+			import nuc_signin
+		}
+	}
+
+	# --- everything else is DocuSeal ----------------------------------------
+	handle {
+		# Signed documents and their attachments. 64MB matches what the other
+		# upload-heavy sites here allow.
+		request_body {
+			max_size 64MB
+		}
+
+		forward_auth https://192.168.1.86 {
+			import nuc_gate
+			uri /verify
+			copy_headers X-Auth-Email
+			header_up X-Forwarded-Uri {http.request.orig_uri}
+		}
+
+		# DocuSeal keeps its own account system behind this gate, the same way
+		# Portainer does. For something holding signed documents that is the
+		# right way round: the household sign-in says who is in the house, and
+		# DocuSeal says who may sign.
+		reverse_proxy 192.168.1.86:3002 {
+			import appproxy
+		}
+	}
+}
+
+# =============================================================================
+#  photos.home.example.net -- Immich
+#
+#  ITS OWN HOSTNAME, NOT A PATH, AND NOT BEHIND THE HOUSEHOLD SIGN-IN. Both of
+#  those are deliberate and both are worth explaining, because they look like
+#  exceptions to how everything else here works.
+#
+#  Not a path: Immich has no base-path setting. Same wall Uptime Kuma and
+#  Authentik hit. DuckDNS hands out wildcard subdomains for free, so this costs
+#  a line here and nothing else -- no router change, no second certificate to
+#  manage, Caddy gets one automatically.
+#
+#  NOT BEHIND forward_auth, which is the important one. The phone app
+#  authenticates with its own token and cannot complete a browser sign-in
+#  against our gate; putting the SSO in front would break photo backup on every
+#  phone while leaving the website working, which is a confusing way to fail.
+#  So Immich does its own authentication -- and it is not a downgrade: separate
+#  accounts, real sessions, and each person can only see their own library.
+#
+#  The practical consequence is that this hostname is reachable from the
+#  internet with Immich's own login as the only gate. That is the same
+#  arrangement as any hosted photo service, and it is why the accounts on it
+#  want real passwords rather than household ones.
+# =============================================================================
+photos.home.example.net {
+	encode zstd gzip
+
+	# Photos and video are large and phones upload them whole. The default cap
+	# is a few megabytes, which would reject essentially every video and a good
+	# number of raw files -- and it fails as a bare 413 with no explanation on
+	# the phone.
+	request_body {
+		max_size 50GB
+	}
+
+	reverse_proxy 192.168.1.86:2283 {
+		import appproxy
+		# Immich streams uploads and long-polls for job status. The default
+		# read timeout cuts a slow upload off mid-file, and the retry then
+		# starts again from nothing.
+		transport http {
+			read_timeout 900s
+			write_timeout 900s
+		}
+	}
+
+	log {
+		output file /var/log/caddy/immich.log {
+			roll_size 10MB
+			roll_keep 5
+		}
+	}
+}
+
+# =============================================================================
+#  peewee.home.example.net -- The First Voice: the Peewee Harris
+#  tribute. Added 2026-08-31.
+#
+#  A STATIC SITE, deliberately. The photographs under /legacy stay behind
+#  their password; this is the SHAREABLE face of the same story -- smaller
+#  copies of the photos, the family-reviewed stories, and the narration
+#  audio the phone line plays. Nothing here can write anything, so there is
+#  nothing here to protect beyond bandwidth.
+#
+#  Not indexed: this is for the family to hand out, not for searches to
+#  stumble into. Same posture as /legacy.
+# =============================================================================
+peewee.home.example.net {
+	root * /srv/public/peewee
+	# /live is the skip-the-intro door: same page, the JS reads the path
+	rewrite /live /index.html
+	# The page itself must always revalidate: a phone that caches
+	# index.html replays an OLD cinematography against new assets
+	# (caught live 2026-09-01). Media stays cacheable.
+	@page path / /index.html
+	header @page Cache-Control "no-cache"
+	# The manifests are the SAME hazard as the page (2026-09-02):
+	# stations.json is the dial itself -- who is on it, which tellings
+	# exist, and now which paragraph clips a telling is made of. A
+	# heuristically cached copy leaves a returning visitor playing a
+	# shape of the show that no longer exists. Revalidate; the audio
+	# and photographs they point at stay cacheable.
+	@manifest path /data/*.json
+	header @manifest Cache-Control "no-cache"
+	# THE NARRATION IS THE THIRD THING WITH THIS HAZARD, and it was
+	# missed twice. A story under people/ is re-rendered whenever its
+	# text changes, at the SAME path -- so a browser holding an old copy
+	# plays the old telling and there is no way for the listener to know.
+	# Jason hit exactly that on 2026-09-19: he asked for a rewritten
+	# Pee-Wee story, got the previous one, and reasonably concluded the
+	# rewrite had not happened.
+	#
+	# These files carried NO Cache-Control at all, which is worse than a
+	# long one: with nothing set, a browser applies a heuristic -- about
+	# a tenth of the file's age -- so the staleness window grows the
+	# longer a telling has stood, and is invisible in the config.
+	#
+	# no-cache is not "do not cache": it is "revalidate first". The
+	# browser keeps the bytes and asks; unchanged audio comes back 304
+	# with no body. A 600KB story costs one round trip, and a changed
+	# one is actually heard.
+	@narration path /people/*
+	header @narration Cache-Control "no-cache"
+	file_server
+	header X-Robots-Tag "noindex, nofollow"
+	header -Server
+	encode gzip
+}
+
+# =============================================================================
+#  bloodline.home.example.net -- the family, told in the first person.
+#
+#  NO forward_auth, BY JASON'S WORD (2026-09-03): "no sso for /bloodline just
+#  a subdomain". So this block is the only thing between the internet and the
+#  page -- which is why it serves STATIC FILES ONLY and reaches no service,
+#  no database and no API. There is nothing here to inject into.
+#
+#  ONE BLOCK, NOT ONE PER PERSON. Jason's note was "each member I add will be
+#  a / new caddy proxy"; the URLs he wants are /<name>, and try_files gives
+#  him exactly those from a single block. Adding an ancestor is then a line of
+#  JSON -- no Caddyfile edit, no validate, no reload, and no chance of the
+#  proxy list drifting out of step with the family.
+#
+#  noindex because a living family's history is not for a search engine, and
+#  nobody here consented to being findable.
+# =============================================================================
+bloodline.home.example.net {
+	root * /srv/public/bloodline
+	# A PERSON'S PAGE IS A SLUG, AND NOTHING ELSE IS (tightened 2026-09-04
+	# after a ZAP baseline scan). The old rule fell back to index.html for
+	# ANY path, so /robots.txt, /sitemap.xml and /nonsense all answered
+	# 200 with the family tree. Not a leak -- Caddy normalises, and every
+	# traversal variant was checked and returns the page rather than a
+	# file -- but a site where nothing is ever missing cannot say when
+	# something is. Only slug-shaped paths fall back now; the rest 404.
+	@slug path_regexp ^/[a-z0-9][a-z0-9-]*/?$
+	handle @slug {
+		try_files {path} {path}/ {path}.html /index.html
+		file_server
+	}
+	handle {
+		file_server
+	}
+	header X-Robots-Tag "noindex, nofollow, noarchive"
+	header -Server
+	# A static, script-light page can afford a strict policy, and the
+	# cheapest time to set one is before anything is built on top of it.
+	header Content-Security-Policy "default-src 'none'; img-src 'self' data:; media-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'self' 'unsafe-inline'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+	header X-Content-Type-Options "nosniff"
+	header Referrer-Policy "no-referrer"
+	# The rest of what ZAP asked for, 2026-09-04. HSTS was the one that
+	# mattered: without it a first visit over http is downgradeable.
+	header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+	header Permissions-Policy "geolocation=(), microphone=(), camera=(), payment=(), usb=(), interest-cohort=()"
+	header Cross-Origin-Opener-Policy "same-origin"
+	header Cross-Origin-Resource-Policy "same-origin"
+	header Cross-Origin-Embedder-Policy "require-corp"
+	@page path / /index.html
+	header @page Cache-Control "no-cache"
+	@data path /data/*.json
+	header @data Cache-Control "no-cache"
+	encode gzip
+}
+
+# =============================================================================
+#  studio.home.example.net -- Pee-Wee Studio, the workbench.
+#
+#  NO forward_auth HERE, BY JASON'S EXPLICIT CHOICE (2026-08-31): he wants the
+#  Studio working alongside everything without an SSO wall. This block is the
+#  only thing between the internet and a tool that edits the memorial site,
+#  and it deliberately adds none. If that choice is ever revisited, a one-line
+#  basic_auth here is the smallest wall that is not SSO.
+# =============================================================================
+# =============================================================================
+#  Pee-Wee Studio -- the tool that EDITS the tribute. Gated, as of 2026-09-15.
+#
+#  It was a bare reverse_proxy: no forward_auth, 200 to anyone on the
+#  internet. Every other gated surface in this file answers 303 to an
+#  unauthenticated probe; this one answered with the app. Streamlit has no
+#  authentication of its own, so nothing behind it was checking either.
+#
+#  WHAT THAT REACHED. The container mounts the live tribute READ-WRITE:
+#      web/public/peewee -> /site   rw
+#      peewee-tools      -> /tools  rw
+#  So the console that manages the memorial to Edward "Pee-Wee" Harris was
+#  editable by anyone who found the hostname. noindex keeps it out of search
+#  results; it is not access control, and a subdomain is not a secret --
+#  every certificate issued for it is published in the CT logs.
+#
+#  Found by asking every app on /home for its status code and noticing this
+#  was the only gated-looking one that returned 200.
+# =============================================================================
+studio.home.example.net {
+	header X-Robots-Tag "noindex, nofollow"
+	header -Server
+
+	# The sign-in callback must NOT be behind the gate it serves, or the
+	# redirect loops -- same shape as every other subdomain here.
+	handle /__sso* {
+		reverse_proxy https://192.168.1.86 {
+			import nuc_signin
+		}
+	}
+
+	handle {
+		forward_auth https://192.168.1.86 {
+			import nuc_gate
+			uri /verify
+			copy_headers X-Auth-Email
+			header_up X-Forwarded-Uri {http.request.orig_uri}
+			header_up X-Forwarded-Host {host}
+		}
+		reverse_proxy peewee-studio:8501
+	}
+}
+
+# =============================================================================
+#  docuseal.home.example.net -- the same service that lived on
+#  example.org:9444, moved to a subdomain on plain 443 so the
+#  router forward for :9444 can close (2026-08-31: the router goes down to
+#  80 and 443 and nothing else). The old port block remains above but the
+#  router no longer forwards its port, so it serves only the LAN.
+# =============================================================================
+#  RETIRED 2026-09-06 -- docuseal.home.example.net
+#
+#  Jason: "I don't need the PDF signing since I have the one thats wired into
+#  career." Nothing was ever signed with it: the docuseal database had no
+#  tables at all. The only traffic in its final week was five foreign IP
+#  addresses hitting the dashboard -- 8.211.174.175, 123.160.223.75,
+#  47.251.90.48, 84.239.14.183, 154.47.20.230 -- so withdrawing the hostname
+#  closes a door that was serving scanners and nobody else.
+#
+#  Containers stopped, not removed. The block below is commented rather than
+#  cut so that if it ever comes back, the reasoning about how it was wired
+#  is still here rather than needing to be worked out again.
+# =============================================================================
+## =============================================================================
+# docuseal.home.example.net {
+# 	import common
+#
+# 	# --- sign in, ON THIS PORT TOO ------------------------------------------
+# 	# Same reasoning as the :9443 block: forward_auth's redirect is relative,
+# 	# so an unauthenticated arrival here is sent to
+# 	# https://example.org:9444/auth/ . Without this block that path
+# 	# falls through to DocuSeal, which answers 404 -- a sign-in link that 404s,
+# 	# which reads as the auth service being broken when it is fine.
+# 	#
+# 	# The session cookie needs nothing: cookies are scoped by host and ignore
+# 	# the port, so signing in on any port signs you in on all of them.
+# 	redir /auth /auth/ 308
+# 	handle_path /auth/* {
+# 		reverse_proxy auth:8013 {
+# 			import appproxy
+# 		}
+# 	}
+#
+# 	# --- everything else is DocuSeal ----------------------------------------
+# 	handle {
+# 		# Signed documents and their attachments. 64MB matches what the other
+# 		# upload-heavy sites here allow.
+# 		request_body {
+# 			max_size 64MB
+# 		}
+#
+# 		forward_auth auth:8013 {
+# 			uri /verify
+# 			copy_headers X-Auth-Email
+# 			header_up X-Forwarded-Uri {http.request.orig_uri}
+# 		}
+#
+# 		# DocuSeal keeps its own account system behind this gate, the same way
+# 		# Portainer does. For something holding signed documents that is the
+# 		# right way round: the household sign-in says who is in the house, and
+# 		# DocuSeal says who may sign.
+# 		reverse_proxy 192.168.1.86:3002 {
+# 			import appproxy
+# 		}
+# 	}
+# }
+
+# =============================================================================
+#  tandoor.home.example.net -- the same service that lived on
+#  example.org:9445, moved to a subdomain on plain 443 so the
+#  router forward for :9445 can close (2026-08-31: the router goes down to
+#  80 and 443 and nothing else). The old port block remains above but the
+#  router no longer forwards its port, so it serves only the LAN.
+# =============================================================================
+tandoor.home.example.net {
+	import common
+
+	redir /auth /auth/ 308
+	handle /auth/* {
+		reverse_proxy https://192.168.1.86 {
+			import nuc_signin
+		}
+	}
+
+	# --- kitshn (and any other real Tandoor client), unauthenticated at
+	# THIS layer, on purpose -----------------------------------------------
+	# Jason's own request (2026-08-24): set up the real kitshn app
+	# (play.google.com/store/apps/details?id=de.kitshn.android) for Mama
+	# and Casey. A native app has no way to hold the site's own SSO cookie --
+	# it logs in directly against Tandoor's own real accounts (Settings >
+	# API Tokens, or its normal username/password), which is a perfectly
+	# real gate on its own. Putting forward_auth in front of THAT login
+	# request would 401 it before Tandoor ever saw it -- confirmed live
+	# this session that forward_auth gates the whole port unconditionally,
+	# and the @needs_handoff redirect below only fires for a browser
+	# (`Accept: text/html`), never a JSON API call, so a native app would
+	# have gotten forward_auth's bare 401 with no way to recover from it.
+	# /media/* is exempted too -- recipe/step photos the app needs to
+	# actually show a recipe, same reasoning. Tandoor's own account system
+	# (already real, already provisioned for Jason/Mama/Casey) is what
+	# decides who sees what through here, exactly as it's designed to.
+	handle /api/* {
+		request_body {
+			max_size 64MB
+		}
+		reverse_proxy tandoor:80 {
+			import appproxy
+		}
+	}
+	handle /media/* {
+		reverse_proxy tandoor:80 {
+			import appproxy
+		}
+	}
+
+	handle {
+		# Recipe photos again -- same allowance as Mealie's own block.
+		request_body {
+			max_size 64MB
+		}
+
+		forward_auth https://192.168.1.86 {
+			import nuc_gate
+			uri /verify
+			copy_headers X-Auth-Email
+			# THE ORIGINAL PATH, NOT THE STRIPPED ONE.
+			#
+			# handle_path removes the prefix before this runs, so Caddy's
+			# own X-Forwarded-Uri arrived at the auth service as "/" for
+			# every app in a handle_path block. Two things broke, and only
+			# the harmless one was visible:
+			#
+			#  1. Signing in dumped you at the site root instead of the
+			#     page you asked for -- /auth/?next=/ rather than
+			#     ?next=/git/.
+			#  2. MUCH WORSE: app_for_uri() decides per-app permissions by
+			#     matching that path. Given "/" it matched nothing and
+			#     returned None, which means "being on the sign-in list is
+			#     the only gate" -- so the per-app toggles on /admin/people
+			#     did nothing at all for /git, /portainer, /status, /tools
+			#     and /pdf. Anyone who could sign in could reach Portainer,
+			#     which holds the Docker socket and is root-equivalent.
+			#
+			# Proven by the one block that does NOT strip: /logs uses
+			# `handle` and correctly produced ?next=/logs/ while every
+			# handle_path app produced ?next=/ (measured 2026-08-28).
+			#
+			# orig_uri is the path as the browser sent it, before any
+			# rewrite -- which is what both the redirect and the permission
+			# check have always meant to use.
+			header_up X-Forwarded-Uri {http.request.orig_uri}
+		}
+
+		# --- the sign-in hand-off ---------------------------------------------
+		# REPOINTED 2026-09-04. This used to send a cookie-less browser to
+		# https://example.org/kitchen/library, where Kitchen logged in
+		# to Tandoor on their behalf using a per-person password it keeps in its
+		# own tandoor_users table (Kitchen/app/handoff_tandoor.py).
+		#
+		# THAT MECHANISM IS DEAD, and not because of this change: the accounts it
+		# holds passwords for no longer exist. Tandoor had been silently running
+		# on SQLite, in a file inside its own container, on no volume -- see
+		# DB_ENGINE in docker-compose.web.yml for the full account -- and the
+		# 2026-08-31 restart took every account and every recipe with it.
+		#
+		# Tandoor now signs people in against the household's own OIDC issuer,
+		# so the hand-off is one hop instead of three: this redirect starts the
+		# flow, SOCIALACCOUNT_LOGIN_ON_GET makes allauth skip its confirmation
+		# page, and the issuer already holds the signed-in cookie and bounces
+		# straight back. No password is stored anywhere for it.
+		#
+		# `not path /accounts/*` IS LOAD-BEARING. Without it this matcher eats
+		# the very flow it is trying to start: /accounts/oidc/household/login/
+		# and its /login/callback/ are both HTML GETs that arrive with no
+		# sessionid cookie -- the callback is what SETS that cookie. The symptom
+		# is a redirect loop that never reaches Tandoor at all.
+		@needs_handoff {
+			not header_regexp Cookie "sessionid="
+			not path /accounts/*
+			method GET
+			header Accept *text/html*
+		}
+		redir @needs_handoff /accounts/oidc/household/login/?process=login&next={uri} 302
+
+		reverse_proxy tandoor:80 {
+			import appproxy
+
+			# Tandoor's own AI import calls LiteLLM the same way Mealie's does
+			# -- same long-read-timeout reasoning as the Mealie block above.
+		}
+	}
+}
+
+# =============================================================================
+#  status.home.example.net -- Uptime Kuma, finally reachable.
+#
+#  /status NEVER WORKED, and the reason turned out to be structural: Kuma
+#  redirects / to /dashboard and serves every asset root-anchored -- it does
+#  not support living under a subpath, full stop. So it gets what the other
+#  subpath-refuseniks got in 2026-08-31's subdomain wave: its own hostname.
+#
+#  NOT behind forward_auth, and here that is a technical necessity rather
+#  than a choice: the household cookie lives on example.org and a
+#  duckdns hostname is a different registrable domain -- the cookie will
+#  never arrive here. Kuma's own login guards it instead (admin account
+#  created 2026-08-31, the same hour this block was -- before that, Kuma had
+#  NO admin and /setup would have handed the instance to its first visitor).
+# =============================================================================
+status.home.example.net {
+	header X-Robots-Tag "noindex, nofollow"
+	header -Server
+
+	# The cookie-bridge redemption door: /sso/bridge on the main site mints a
+	# one-minute code and sends the browser here; the auth service redeems it
+	# and sets the session cookie FOR THIS HOST. See rust/auth/src/bridge.rs.
+	handle /__sso* {
+		reverse_proxy https://192.168.1.86 {
+			import nuc_signin
+		}
+	}
+
+	handle {
+		# The same household gate as the main site's apps -- workable on a
+		# foreign domain only because of the bridge above.
+		forward_auth https://192.168.1.86 {
+			import nuc_gate
+			uri /verify
+			copy_headers X-Auth-Email
+			header_up X-Forwarded-Uri {http.request.orig_uri}
+			header_up X-Forwarded-Host {host}
+		}
+		# Kuma's own login is DISABLED (its documented reverse-proxy mode) --
+		# the household sign-in above is the only gate, which is the point.
+		reverse_proxy 192.168.1.86:3001
+	}
+}
+
+# =============================================================================
+#  llm.home.example.net -- LiteLLM's API from outside the house.
+#
+#  Jason's rule made this shape: access from anywhere, ports for nothing.
+#  The router forward for 4000 is gone; this subdomain rides 443 like
+#  everything else. NOT behind the household SSO because its clients are
+#  programs, not browsers -- LiteLLM enforces its own bearer API keys on
+#  every route, which is the correct lock for an API. Nothing answers here
+#  without a key.
+# =============================================================================
+#  homebox.home.example.net -- warranties, receipts, renewals.
+#
+#  Jason, 2026-09-10: "something that reminds me that something's going to
+#  expire and be reminded to renew it".
+#
+#  A HOSTNAME RATHER THAN A PATH, deliberately. Homebox has no subpath
+#  support: under /homebox/ its Nuxt baseURL and its /api/v1 and websocket
+#  routes all have to be rewritten with sub_filter, and v0.23.0 shipped a
+#  base-URL regression on top of that. Stirling already taught this house
+#  that lesson under /pdf/. DuckDNS resolves every subdomain to the same
+#  address, so the hostname is free and the whole class of problem goes away.
+#
+#  Gated by the household, via the cookie bridge -- same arrangement as
+#  status. Homebox keeps its own login behind that; it has no OIDC, so two
+#  doors is the honest description until it does.
+# =============================================================================
+#  money.home.example.net -- MoneyMatter, self-hosted.
+#
+#  Jason, 2026-09-10: "I want to use https://moneymatter.app/ ... I want to
+#  take all the account info like paystubs there and bank statements", then
+#  "i want it hosted on my pcv".
+#
+#  SELF-HOSTED RATHER THAN THE SAAS, and that was the point of checking: it
+#  is AGPL-3.0 with published images, so the paystubs and bank statements
+#  this will hold never leave the house. The hosted version would also have
+#  needed his password, which is not a thing to hand over.
+#
+#  A HOSTNAME, not a path. Third app today to earn one -- the frontend is a
+#  Vue SPA with no base-path setting, so under /money its assets would all
+#  404, exactly as Audiobookshelf's did under /listen.
+#
+#  Reached over Docker's own network, not a host port. Upstream names the
+#  stack's network `budget-tracker` and aliases the frontend to match,
+#  precisely so an outside reverse proxy can join; Caddy is a member (see
+#  docker-compose.web.yml) so nothing needs publishing on the machine.
+#
+#  IT HAS NO OIDC. The household gate is in front, and MoneyMatter keeps its
+#  own login behind it -- two doors, honestly described, same as Homebox was
+#  before 0.22.1 gave it SSO.
+# =============================================================================
+#  dj.home.example.net -- the DJ stream. PUBLIC, NO GATE.
+#
+#  Jason, 2026-09-10: "broadcast my traktor pro 4 session with a webcam to dj
+#  subdomain with a live and request button", and he chose public knowingly
+#  when asked.
+#
+#  THIS IS THE ONLY WHOLE SITE HERE WITH NO forward_auth. /s/ and /exam/ are
+#  ungated PATHS, and both are guarded by an unguessable token that names one
+#  record. This is a hostname anybody can open, which is the point -- a stream
+#  nobody can watch is not a stream. Worth being deliberate about rather than
+#  arriving at: nothing else on this domain should be added under this block.
+#
+#  RTMP INGEST IS NOT HERE AND MUST NOT BE. OBS pushes to 192.168.1.86:1935
+#  over the LAN. That port is bound to the LAN address in compose and there is
+#  no router forward for it. An open ingest port is how somebody else's video
+#  ends up on your site.
+#
+#  Two things Jason accepted with "public": every 720p viewer is roughly
+#  2-3 Mbps of household UPLOAD, so a dozen of them will saturate a domestic
+#  connection -- and the viewers see it stutter before the DJ does. And a
+#  self-hosted public stream carries none of the music licensing that Twitch
+#  and Mixcloud have negotiated.
+# =============================================================================
+dj.home.example.net {
+	header X-Robots-Tag "noindex, nofollow"
+	header -Server
+
+	# Owncast is a live video server: HLS segments, a websocket for chat, and
+	# a REST API the page polls for whether the stream is up. reverse_proxy
+	# upgrades websockets on its own; what it must NOT do is buffer, so no
+	# compression and no body limit on this one.
+	reverse_proxy 192.168.1.86:8095 {
+		header_up X-Forwarded-Host {host}
+		# Long timeouts: an HLS viewer holds a connection open for the whole
+		# set, and the chat socket for longer.
+		transport http {
+			read_timeout 12h
+			write_timeout 12h
+		}
+	}
+}
+
+# =============================================================================
+money.home.example.net {
+	header X-Robots-Tag "noindex, nofollow"
+	header -Server
+
+	# The cookie-bridge redemption door: the session cookie belongs to
+	# example.org, and this is how a foreign host gets its own.
+	handle /__sso* {
+		reverse_proxy https://192.168.1.86 {
+			import nuc_signin
+		}
+	}
+
+	handle {
+		forward_auth https://192.168.1.86 {
+			import nuc_gate
+			uri /verify
+			copy_headers X-Auth-Email
+			header_up X-Forwarded-Uri {http.request.orig_uri}
+			header_up X-Forwarded-Host {host}
+		}
+		# Bank statements and CSVs are uploaded here.
+		request_body {
+			max_size 64MB
+		}
+		reverse_proxy budget-tracker:80 {
+			import appproxy
+		}
+	}
+}
+
+# =============================================================================
+homebox.home.example.net {
+	header X-Robots-Tag "noindex, nofollow"
+	header -Server
+
+	# The cookie-bridge redemption door. The session cookie belongs to
+	# example.org; this is how a foreign host gets its own.
+	handle /__sso* {
+		reverse_proxy https://192.168.1.86 {
+			import nuc_signin
+		}
+	}
+
+	handle {
+		forward_auth https://192.168.1.86 {
+			import nuc_gate
+			uri /verify
+			copy_headers X-Auth-Email
+			header_up X-Forwarded-Uri {http.request.orig_uri}
+			header_up X-Forwarded-Host {host}
+		}
+		# Receipts and manuals are uploaded here, so the body limit has to
+		# clear a phone photo and a scanned PDF.
+		request_body {
+			max_size 64MB
+		}
+		reverse_proxy 192.168.1.86:8090 {
+			import appproxy
+		}
+	}
+}
+
+# =============================================================================
+llm.home.example.net {
+	header X-Robots-Tag "noindex, nofollow"
+	header -Server
+	reverse_proxy litellm:4000
+}
+
+# =============================================================================
+#  dashboard.home.example.net -- the one wall (Homepage).
+#  Behind the household sign-in via the cookie bridge; the "dashboard" grant
+#  decides who sees it (host-aware gating maps this subdomain's label to the
+#  dashboard app). Widgets show live infrastructure detail, so this is
+#  Jason's by default -- grant others in /admin/people if wanted.
+# =============================================================================
+dashboard.home.example.net {
+	header X-Robots-Tag "noindex, nofollow"
+	header -Server
+	handle /__sso* {
+		reverse_proxy https://192.168.1.86 {
+			import nuc_signin
+		}
+	}
+	handle {
+		forward_auth https://192.168.1.86 {
+			import nuc_gate
+			uri /verify
+			copy_headers X-Auth-Email
+			header_up X-Forwarded-Uri {http.request.orig_uri}
+			header_up X-Forwarded-Host {host}
+		}
+		reverse_proxy homepage:3000
+	}
+}
+
+# =============================================================================
+#  cloud.home.example.net -- Nextcloud, the live editor. 2026-09-06.
+#
+#  Jason: "live editor nextcloud with the ability to add a llm plugin like
+#  Gemini or Hermes or claude."
+#
+#  NOT BEHIND forward_auth, and that is a decision rather than an omission.
+#  Nextcloud has its own accounts, its own sharing model and its own
+#  per-file permissions, and its mobile and desktop sync clients speak
+#  WebDAV with app passwords -- none of which can complete a browser
+#  sign-in redirect. Wrapping it in the household SSO would break sync on
+#  every phone while adding nothing: it is already a login.
+#
+#  The household sign-in can still be the way in -- Nextcloud's user_oidc
+#  app points at the auth service at /auth/oidc -- but that is configured
+#  INSIDE Nextcloud, not by putting a second gate in front of it.
+# =============================================================================
+cloud.home.example.net {
+	encode zstd gzip
+
+	# Phones sync whole libraries and people upload real documents. The
+	# default cap rejects both, as a bare 413 with no explanation.
+	request_body {
+		max_size 10GB
+	}
+
+	# The well-known redirects Nextcloud asks for. Without them its own
+	# setup checks report the instance as misconfigured, and some desktop
+	# clients refuse to connect at all.
+	redir /.well-known/carddav /remote.php/dav 301
+	redir /.well-known/caldav /remote.php/dav 301
+	redir /.well-known/webfinger /index.php/.well-known/webfinger 301
+	redir /.well-known/nodeinfo /index.php/.well-known/nodeinfo 301
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		# Nextcloud sets its own frame rules and must embed Collabora; a
+		# blanket DENY here leaves every document as a blank box.
+		-X-Frame-Options
+	}
+
+	reverse_proxy nextcloud:80 {
+		import appproxy
+		# Big uploads and long occ jobs from the web UI. The default read
+		# timeout cuts a slow upload off mid-file and the retry starts
+		# again from nothing.
+		transport http {
+			read_timeout 900s
+			write_timeout 900s
+		}
+	}
+
+	log {
+		output file /var/log/caddy/nextcloud.log {
+			roll_size 10MB
+			roll_keep 5
+		}
+	}
+}
+
+# =============================================================================
+#  office.home.example.net -- Collabora, the editing engine.
+#
+#  A SEPARATE HOSTNAME IS REQUIRED, not a preference. Collabora is embedded
+#  in an iframe by Nextcloud and the two must be different origins, or the
+#  isolation the editor relies on stops meaning anything.
+#
+#  Nobody visits this directly. It answers Nextcloud's WOPI callbacks, which
+#  is why it carries no auth of its own -- the document tokens in those
+#  callbacks are the credential, minted by Nextcloud per file, per person,
+#  per session.
+# =============================================================================
+office.home.example.net {
+	encode zstd gzip
+
+	request_body {
+		max_size 2GB
+	}
+
+	reverse_proxy collabora:9980 {
+		import appproxy
+		# The editor holds a websocket open for as long as a document is
+		# open. A short timeout drops people mid-sentence, and the
+		# reconnect loses whatever was not yet saved.
+		transport http {
+			read_timeout 3600s
+			write_timeout 3600s
+		}
+	}
+
+	log {
+		output file /var/log/caddy/collabora.log {
+			roll_size 10MB
+			roll_keep 5
+		}
+	}
+}
+
+# =============================================================================
+#  gym.home.example.net -- openGym. 2026-09-06.
+#
+#  Jason: "for my moms SSO casey and Jason for now I want to use this workout
+#  docker ... I want to allow a persiant session across devices if they get
+#  new apps."
+#
+#  BEHIND THE HOUSEHOLD GATE, and unlike Nextcloud that is the right call
+#  here. openGym's own sign-in is passkeys, which are bound to ONE DEVICE:
+#  a new phone means registering a new passkey, which is exactly the
+#  "persistent session across devices" that was asked for and exactly what
+#  passkeys cannot give. There are no sync clients to break -- it is a web
+#  app and a web push subscription, both of which follow a browser session.
+#
+#  So forward_auth signs everyone in once, at this door, and openGym takes
+#  that answer: the api reads X-Auth-Email and creates the profile the
+#  first time somebody arrives (api/server.js, readSession). Mom opens the
+#  page and it is hers, on her phone and on her tablet, with nothing to set
+#  up on either.
+#
+#  WHAT MAKES THAT SAFE IS NOT THIS BLOCK. Port 8086 is on the LAN because
+#  Caddy runs on the other machine, so anything in the house can reach
+#  openGym directly and send whatever header it likes. The nginx inside the
+#  web container blanks X-Auth-Email unless the connection came from
+#  192.168.1.205 -- this machine. See web/nginx.conf in the openGym
+#  checkout, and gitea-proxy.nginx.conf on the NUC, which does the same job
+#  for the same reason.
+#
+#  Reachable on the LAN without the gate, it shows openGym's own passkey
+#  login. That is the fallback for the day the gate is broken, and it is
+#  why the nginx blanks the header rather than refusing the request.
+# =============================================================================
+#  music. -- Navidrome on the Pi.  192.168.1.69:4533
+#
+#  The library was reachable only at http://192.168.1.69:4533 on the LAN --
+#  no route, no card, nothing on the site saying it existed. 117,321 files
+#  and 223 GB, including the 80.7 GB of Jason's Music and the 45.5 GB YouTube
+#  crate moved to the NAS on 2026-09-14/15, all of it unplayable from a phone
+#  off the wifi.
+#
+#  NO SECOND LOGIN. Navidrome was already configured for header auth and had
+#  simply never been wired to anything:
+#      ND_EXTAUTH_USERHEADER=X-Auth-Email
+#      ND_EXTAUTH_TRUSTEDSOURCES=192.168.1.0/24
+#  so forward_auth's X-Auth-Email is accepted as the identity and the house
+#  sign-in covers it, the same way Paperless and Gitea work.
+#
+#  WHY /rest/* IS NOT GATED, and why that is not a hole. That is the Subsonic
+#  API, which is how a phone client (DSub, Symfonium, play:Sub) plays music.
+#  Those apps cannot perform a cookie sign-in flow, so forward_auth would not
+#  secure them -- it would simply make them fail to connect. The Subsonic API
+#  authenticates every request itself with a username and a salted token, so
+#  the endpoint is protected by Navidrome rather than by Caddy. Same shape as
+#  the /paperless/share/* exception above: an endpoint whose own auth model
+#  is the right one is left to use it.
+#
+#  Streaming needs: long timeouts, because a client holds one connection for
+#  the length of a track and a phone on a train holds it a lot longer than
+#  that. No compression -- audio is already compressed and buffering it would
+#  break seeking.
+# =============================================================================
+music.home.example.net {
+	header X-Robots-Tag "noindex, nofollow"
+	header -Server
+
+	# Outside the gate, or the sign-in redirect loops on its own callback.
+	handle /__sso* {
+		reverse_proxy https://192.168.1.86 {
+			import nuc_signin
+		}
+	}
+
+	# The Subsonic API. Authenticated by Navidrome, not by Caddy -- see above.
+	# X-Auth-Email is stripped deliberately: leaving Caddy's last-seen
+	# identity on an API request would let a phone client act as whoever
+	# signed in on the browser most recently.
+	handle /rest/* {
+		reverse_proxy 192.168.1.69:4533 {
+			header_up -X-Auth-Email
+			header_up X-Forwarded-Host {host}
+			transport http {
+				read_timeout 6h
+				write_timeout 6h
+			}
+		}
+	}
+
+	# Everything else -- the web player -- behind the house sign-in.
+	handle {
+		forward_auth https://192.168.1.86 {
+			import nuc_gate
+			uri /verify
+			copy_headers X-Auth-Email
+			header_up X-Forwarded-Uri {http.request.orig_uri}
+			header_up X-Forwarded-Host {host}
+		}
+		reverse_proxy 192.168.1.69:4533 {
+			header_up X-Forwarded-Host {host}
+			transport http {
+				read_timeout 6h
+				write_timeout 6h
+			}
+		}
+	}
+}
+
+# =============================================================================
+gym.home.example.net {
+	header X-Robots-Tag "noindex, nofollow"
+	header -Server
+
+	# The sign-in screens themselves, served by the auth service. Without
+	# this the gate would redirect to a page that is also behind the gate.
+	handle /__sso* {
+		reverse_proxy https://192.168.1.86 {
+			import nuc_signin
+		}
+	}
+
+	handle {
+		forward_auth https://192.168.1.86 {
+			import nuc_gate
+			uri /verify
+			copy_headers X-Auth-Email
+			header_up X-Forwarded-Uri {http.request.orig_uri}
+			header_up X-Forwarded-Host {host}
+		}
+		reverse_proxy 192.168.1.86:8086 {
+			import appproxy
+		}
+	}
+}
+
+# ---------------------------------------------------------------------------
+#  n8n on the Pi -- the mail gatekeeper.  192.168.1.69:5678
+#
+#  TWO PATHS ARE DELIBERATELY UNGATED, and each one has to be.
+#
+#  /rest/oauth2-credential/callback  is where GOOGLE lands after you
+#  authorise the Gmail account. Google's browser redirect carries no
+#  household SSO cookie, so behind forward_auth it is bounced to the login
+#  page and the authorisation silently fails with a callback error that
+#  says nothing about why. It is a fixed path, it accepts only a one-time
+#  code that n8n itself issued moments earlier, and the code is useless to
+#  anyone who cannot also decrypt n8n's credential store.
+#
+#  /webhook*  is the entire point of a webhook: an outside service calls
+#  it. Gating it would mean nothing could ever trigger a workflow. The
+#  protection is that each path ends in an unguessable UUID n8n generates.
+#
+#  Everything else -- the editor, the credential store, the execution
+#  history -- is behind the household gate AND n8n's own owner login.
+# ---------------------------------------------------------------------------
+n8n.home.example.net {
+	header X-Robots-Tag "noindex, nofollow"
+	header -Server
+
+	handle /__sso* {
+		reverse_proxy https://192.168.1.86 {
+			import nuc_signin
+		}
+	}
+
+	# Ungated, for the reasons above. Listed before the catch-all so they
+	# win -- Caddy matches handle blocks in order of specificity, but
+	# writing them first keeps the intent readable.
+	handle /rest/oauth2-credential/callback* {
+		reverse_proxy 192.168.1.69:5678 {
+			import appproxy
+		}
+	}
+	handle /webhook* {
+		reverse_proxy 192.168.1.69:5678 {
+			import appproxy
+		}
+	}
+
+	handle {
+		forward_auth https://192.168.1.86 {
+			import nuc_gate
+			uri /verify
+			copy_headers X-Auth-Email
+			header_up X-Forwarded-Uri {http.request.orig_uri}
+			header_up X-Forwarded-Host {host}
+		}
+		# Workflows move attachments -- a scanned receipt, a book.
+		request_body {
+			max_size 64MB
+		}
+		reverse_proxy 192.168.1.69:5678 {
+			import appproxy
+		}
+	}
+}
+
+# ---------------------------------------------------------------------------
+#  watch. -- the outside-in watchdog on the Pi.  192.168.1.69:3002
+#
+#  A SECOND Uptime Kuma, not a move. The NUC keeps its own at :3001.
+#
+#  WHY THE DUPLICATE IS THE WHOLE POINT. On 2026-09-10 haproxy-relay exited
+#  during a reboot and every public site was unreachable for hours while
+#  every container on the PC reported healthy. The monitor that should have
+#  caught it was on the NUC -- inside the outage. This one is on neither
+#  machine it watches.
+#
+#  AND NOTE THE LIMIT OF THIS BLOCK. Reaching this page goes through the
+#  relay and this Caddy, so the exact outage it exists to catch also hides
+#  its own dashboard. That is unavoidable and it is fine, because the
+#  dashboard is not the alerting mechanism -- the push notification is.
+#  Configure a notification channel in it or it is decoration. It is also
+#  always reachable on the LAN at http://192.168.1.69:3002 with nothing in
+#  the way, which is where to look when everything else is down.
+# ---------------------------------------------------------------------------
+watch.home.example.net {
+	header X-Robots-Tag "noindex, nofollow"
+	header -Server
+
+	handle /__sso* {
+		reverse_proxy https://192.168.1.86 {
+			import nuc_signin
+		}
+	}
+
+	handle {
+		forward_auth https://192.168.1.86 {
+			import nuc_gate
+			uri /verify
+			copy_headers X-Auth-Email
+			header_up X-Forwarded-Uri {http.request.orig_uri}
+			header_up X-Forwarded-Host {host}
+		}
+		reverse_proxy 192.168.1.69:3002 {
+			import appproxy
+		}
+	}
+}
+
+# ---------------------------------------------------------------------------
+#  files. -- the front door for putting things ON the shelves.
+#            192.168.1.86:8099 (FileBrowser)
+#
+#  Jason, 2026-09-11: "i have mango for casey its in cbz format I want to
+#  upload this any more how do I". scp is not an answer for Casey.
+#
+#  It writes straight into the same trees Kavita reads -- /home/user/manga
+#  and /home/user/documents -- so an uploaded .cbz is a file Kavita finds
+#  on its next scan. No copy step and no second opinion about where a book
+#  lives.
+#
+#  request_header -X-Auth-Email IS THE SECURITY CONTROL HERE, and it is
+#  worth saying why it is spelled out rather than left to the shared
+#  snippet. FileBrowser is configured with --auth.method=proxy, so it
+#  believes whoever X-Auth-Email says you are. The (appproxy) snippet
+#  strips nine forgeable identity headers -- X-Real-IP, True-Client-IP and
+#  friends -- but it does NOT strip X-Auth-Email, because until now nothing
+#  downstream read it as an identity it would act on without also checking
+#  a session.
+#
+#  Deleting it on the way IN, before forward_auth runs, means the only
+#  X-Auth-Email that can reach the app is the one the auth service issued
+#  a moment ago. A household member with a valid session cannot relabel
+#  themselves as somebody else on the way past. That is the specific attack:
+#  not an outsider getting in, but Casey arriving as Jason and seeing the tax
+#  returns.
+# ---------------------------------------------------------------------------
+files.home.example.net {
+	header X-Robots-Tag "noindex, nofollow"
+	header -Server
+
+	# Runs before forward_auth in Caddy's directive order. See above.
+	request_header -X-Auth-Email
+
+	handle /__sso* {
+		reverse_proxy https://192.168.1.86 {
+			import nuc_signin
+		}
+	}
+
+	handle {
+		forward_auth https://192.168.1.86 {
+			import nuc_gate
+			uri /verify
+			copy_headers X-Auth-Email
+			header_up X-Forwarded-Uri {http.request.orig_uri}
+			header_up X-Forwarded-Host {host}
+		}
+		# A manga volume is 50-200MB and a scanned book can be larger.
+		request_body {
+			max_size 2GB
+		}
+		reverse_proxy 192.168.1.86:8099 {
+			import appproxy
+		}
+	}
+}
+
+# ---------------------------------------------------------------------------
+#  push. -- ntfy on the Pi.  192.168.1.69:8093
+#
+#  THE ONLY SITE HERE WITHOUT forward_auth, AND THAT IS A CHOICE, NOT AN
+#  OVERSIGHT. (dj. is the other, for a different reason -- a public stream
+#  is meant to be public.)
+#
+#  The ntfy phone app holds a long-lived subscription and authenticates
+#  with a bearer token. It has no browser, no cookie jar, and no way to
+#  complete an SSO redirect. Put the household gate in front of this and
+#  notifications simply stop arriving, with no error anywhere that says
+#  why -- the worst possible failure mode for the thing whose entire job
+#  is telling you something has failed.
+#
+#  WHAT PROTECTS IT INSTEAD is ntfy's own auth, set to
+#  auth-default-access: deny-all in ntfy-server.yml. Verified before this
+#  block was written: an anonymous publish and an anonymous subscribe both
+#  return 403. Two accounts exist -- an admin for the phone, and a
+#  WRITE-ONLY machine account for Uptime Kuma that can post to one topic
+#  and read nothing, so a leak of the credential stored in Kuma's database
+#  means somebody can send a fake alert, not read every alert this house
+#  has generated.
+#
+#  WHY IT IS PUBLIC AT ALL, given everything else is gated: because a
+#  notifier that only works on the house wifi is useless. The outage it
+#  reports is most likely to be found out about while away from home.
+# ---------------------------------------------------------------------------
+push.home.example.net {
+	header X-Robots-Tag "noindex, nofollow"
+	header -Server
+
+	reverse_proxy 192.168.1.69:8093 {
+		import appproxy
+		# ntfy holds subscriptions open indefinitely -- that is how push
+		# works. Without this, Caddy's default read timeout severs the
+		# connection and the app reconnects in a loop, burning battery
+		# and missing messages in the gaps.
+		transport http {
+			read_timeout 24h
+		}
+	}
+}
+
+# ---------------------------------------------------------------------------
+#  media. -- Jellyfin on the NUC.  192.168.1.86:8096
+#
+#  The PRIVATE library. Plex on the NAS keeps the household one.
+#
+#  NO forward_auth, for the third time on this stack and the same reason as
+#  ntfy and dj.: the Jellyfin apps speak Jellyfin's own token API, have no
+#  browser, and cannot complete an SSO redirect. Gate this and the web page
+#  works while every phone and TV silently fails to sign in.
+#
+#  The SSO is INSIDE Jellyfin instead, via its OIDC plugin pointed at the
+#  household provider -- same credentials, and the apps keep working because
+#  to them it is ordinary Jellyfin auth. The OIDC client is registered as
+#  `jellyfin` with redirect
+#      https://media.home.example.net/sso/OID/redirect/household
+#  and the provider in the plugin MUST be named exactly `household`, because
+#  redirect URIs are matched here as literal strings and never as patterns.
+#
+#  THE HOSTNAME IS DELIBERATELY NEUTRAL. `media.` rather than anything
+#  descriptive: the DNS name is the one part of this that is visible to
+#  anyone who can see a certificate log, and Let's Encrypt publishes every
+#  name it issues to public CT logs. There is no way to have a public
+#  hostname and keep the hostname private, so the hostname says nothing.
+#
+#  STREAMING NEEDS A LONG TIMEOUT. A two-hour film is one HTTP response.
+#  Caddy's default read timeout would cut it, and the client would show it
+#  as the video stopping partway with no error.
+# ---------------------------------------------------------------------------
+media.home.example.net {
+	header X-Robots-Tag "noindex, nofollow"
+	header -Server
+
+	reverse_proxy 192.168.1.86:8096 {
+		import appproxy
+		transport http {
+			read_timeout 6h
+		}
+		flush_interval -1
+	}
+}
+
+# ---------------------------------------------------------------------------
+#  grab. -- MeTube on the Pi, inside the VPN tunnel.  192.168.1.69:8081
+#
+#  Jason and Sachin paste a URL, it downloads through Proton, and it lands
+#  in either the general or the private library.
+#
+#  GATED, unlike media./push./dj. -- and it can be, because this one is
+#  only ever used from a browser. There is no app holding a bearer token to
+#  break, so the household gate is free to do its job properly here.
+#
+#  AND THE GATE IS DOING MORE THAN "ARE YOU LOGGED IN". `grab` is registered
+#  in rust/common/src/people.rs as an EXPLICIT_ONLY app, so
+#  Person::level_for() returns None for anyone without a named grant and
+#  /verify answers 403 -- including accounts flagged apps_unrestricted,
+#  which inherit every other app automatically. That inversion is the whole
+#  point: this writes into the private library, so "everyone by default"
+#  is the wrong default, and adding the app to one list is cheaper and more
+#  durable than remembering to narrow each account.
+#
+#  MeTube itself has NO login. That is fine and deliberate -- it is only
+#  reachable through this block, and it binds to the Pi's LAN address
+#  otherwise. If it were ever published without forward_auth, anyone could
+#  queue downloads into the house.
+#
+#  WEBSOCKET: the progress bar is a websocket, which Caddy upgrades
+#  automatically, but a long download holds it open for the duration --
+#  hence the read timeout. Without it the bar freezes partway while the
+#  download carries on invisibly, which looks exactly like a hang.
+# ---------------------------------------------------------------------------
+# =========================================================================
+#  go.* -- the link shortener (Shlink on the NUC, :8097)
+#
+#  THIS ONE IS NOT GATED, AND THAT IS THE ENTIRE POINT. A short link is
+#  something Jason sends to somebody who does not have an account yet --
+#  putting the household sign-in in front of it would mean a friend has to
+#  authenticate before they can reach the invite that would have given them
+#  an identity. The link IS the credential: single use, expiring, and
+#  revocable from the admin side without touching whatever it points at.
+#
+#  WHAT IS STILL PROTECTED. /rest/* is Shlink's REST API and it refuses
+#  every request without a valid X-Api-Key header, so it carries its own
+#  auth and must stay reachable for Hermes and the admin panel to mint
+#  links programmatically. Wrapping it in forward_auth would break exactly
+#  those callers while adding nothing a stolen API key could not already
+#  do. Rate limiting, not sign-in, is the right control here.
+# =========================================================================
+go.home.example.net {
+	header X-Robots-Tag "noindex, nofollow"
+	header -Server
+
+	reverse_proxy 192.168.1.86:8097 {
+		header_up X-Forwarded-Host {host}
+		header_up X-Forwarded-Proto https
+	}
+}
+
+grab.home.example.net {
+	header X-Robots-Tag "noindex, nofollow"
+	header -Server
+
+	handle /__sso* {
+		reverse_proxy https://192.168.1.86 {
+			import nuc_signin
+		}
+	}
+
+	handle {
+		forward_auth https://192.168.1.86 {
+			import nuc_gate
+			uri /verify
+			copy_headers X-Auth-Email X-Auth-Level
+			header_up X-Forwarded-Uri {http.request.orig_uri}
+			header_up X-Forwarded-Host {host}
+			header_up X-Forwarded-Method {method}
+		}
+		# Direct video uploads as well as URLs.
+		request_body {
+			max_size 16GB
+		}
+		reverse_proxy 192.168.1.69:8081 {
+			import appproxy
+			transport http {
+				read_timeout 12h
+			}
+		}
+	}
+}
+
+# ---------------------------------------------------------------------------
+#  drop. -- the upload page.  192.168.1.86:8100 (the intake service)
+#
+#  Jason, 2026-09-11: "either of us need a book we add it to our collection
+#  ... to down load to paperless and be auto tagged based on who is logined
+#  in".
+#
+#  THE PAGE HAS NO "WHO IS THIS FOR" CONTROL. forward_auth has already
+#  established that, and copy_headers hands the verified address to the app
+#  as X-Auth-Email. Asking a second time would be worse than redundant: a
+#  dropdown can be left on its last value, and the failure that produces is
+#  a medical record filed under the wrong person.
+#
+#  request_header -X-Auth-Email IS LOad-BEARING, same as on files. The app
+#  trusts that header completely -- it is the only thing deciding whose file
+#  this is -- so an inbound one has to be destroyed before forward_auth sets
+#  the real one. Without it a household member with a valid session could
+#  relabel themselves on the way past and file into somebody else's shelf.
+#  The shared (appproxy) snippet strips nine forgeable identity headers but
+#  NOT this one.
+#
+#  The intake container binds to 192.168.1.86 only, so this block is the
+#  sole route to it.
+# ---------------------------------------------------------------------------
+drop.home.example.net {
+	header X-Robots-Tag "noindex, nofollow"
+	header -Server
+
+	request_header -X-Auth-Email
+
+	handle /__sso* {
+		reverse_proxy https://192.168.1.86 {
+			import nuc_signin
+		}
+	}
+
+	handle {
+		forward_auth https://192.168.1.86 {
+			import nuc_gate
+			uri /verify
+			copy_headers X-Auth-Email X-Auth-Level
+			header_up X-Forwarded-Uri {http.request.orig_uri}
+			header_up X-Forwarded-Host {host}
+			header_up X-Forwarded-Method {method}
+		}
+		# A film is the largest thing that goes through here.
+		request_body {
+			max_size 16GB
+		}
+		reverse_proxy 192.168.1.86:8100 {
+			import appproxy
+			transport http {
+				read_timeout 6h
+			}
+		}
+	}
+}
+
+# =============================================================================
+#  nights.home.example.net -- the nights played, and the photographs
+#
+#  PUBLIC TO READ, SSO TO ADD. The point of the page is showing it to
+#  somebody -- a recruiter reading the AV half of the CV, or whoever is
+#  thinking about booking him -- so / and the images have no gate. Everything
+#  that WRITES, and /manage which is the same page with the upload panel
+#  showing, goes through forward_auth first.
+#
+#  NOT dj.home.example.net: that hostname is the live Owncast stream
+#  and has been since 2026-09-10. Caddy caught the collision as an "ambiguous
+#  site definition" and refused to load rather than silently letting one block
+#  win, which is the good outcome -- the stream never went down.
+#
+#  ITS OWN HOSTNAME RATHER THAN A PATH ON THE MAIN SITE, and that is not a
+#  preference. The page asks for /api/library and /photo/... at the root; put
+#  it behind a stripped path prefix and those absolute URLs land on the main
+#  site instead, which 404s in a way that looks like the app is broken.
+#
+#  THE SERVICE PUBLISHES NO PORT. Reachable only from this proxy on the
+#  compose network, which is the whole reason it may trust X-Auth-Email.
+# =============================================================================
+nights.home.example.net {
+	import common
+
+	# Sign-in on this hostname too: forward_auth's redirect is relative, so
+	# an unauthenticated arrival is sent to /auth/ HERE.
+	redir /auth /auth/ 308
+	handle /auth/* {
+		reverse_proxy https://192.168.1.86 {
+			import nuc_signin
+		}
+	}
+
+	# The gated half: the manage view and every write.
+	@guarded path /manage /api/upload /api/gig /api/gig-delete /api/assign /api/move /api/delete
+	handle @guarded {
+		# A ceiling, not a permit: Caddy has no default body limit, so
+		# without this one bad request can stream unbounded bytes into a
+		# service whose whole job is writing them to disk. 64MB clears a
+		# HEIC from any phone with room to spare.
+		request_body {
+			max_size 64MB
+		}
+		forward_auth https://192.168.1.86 {
+			import nuc_gate
+			uri /verify
+			copy_headers X-Auth-Email
+			header_up X-Forwarded-Uri {http.request.orig_uri}
+		}
+		reverse_proxy dj:8026 {
+			import appproxy
+		}
+	}
+
+	# Everything else, public. The page must revalidate -- a cached copy
+	# shows an old running order -- while the photographs are immutable.
+	handle {
+		@page path / /static/*
+		header @page Cache-Control "no-cache"
+		reverse_proxy dj:8026 {
+			import appproxy
+		}
+	}
+}
+
+# =============================================================================
+#  wiki.garden.example.net -- Robin's garden encyclopedia (Wiki.js)
+#
+#  NO forward_auth, AND THAT IS DELIBERATE. Jason, 2026-09-24: "Juns and
+#  mine manage the wiki but anyone can read it." Wiki.js has its own users
+#  and groups and does exactly that natively -- so the permission model is
+#  its job. Putting the household sign-in in front would lock out the
+#  readers it is FOR, and approximating "public read, two editors" at the
+#  proxy would be a worse version of something the app already does.
+#
+#  THE BARE garden.example.net POINTS SOMEWHERE ELSE -- 108.4.155.134
+#  on 2026-09-24, not this house. The wildcard subdomains resolve here
+#  correctly, which is why the wiki uses one. Worth fixing separately.
+#
+#  Wiki.js is a single-page app with a GraphQL API and websockets for live
+#  editing; reverse_proxy upgrades those itself, and the long timeouts are
+#  for an editor left open.
+# =============================================================================
+wiki.garden.example.net {
+	import common
+
+	# RETIRED 2026-10-25: Robin's Garden is not served from here.
+	respond "Robin's Garden moved." 410
+}
+
+# =============================================================================
+#  test.garden.example.net -- the Rust rewrite, under test
+#
+#  THE STAGING DOOR FOR ROBIN'S SITE. Jason's workflow: branch the change, run
+#  it here, and only promote to garden.example.org once it behaves. The
+#  live PHP site is untouched by anything on this hostname -- different
+#  container, different port, same database READ-ONLY paths for now.
+#
+#  PUBLIC, BECAUSE THE REAL SITE IS PUBLIC. Gating this behind the household
+#  sign-in would test something the live site does not do, and the first
+#  thing to get wrong in a rewrite is what an anonymous visitor sees.
+#
+#  BUT NEVER INDEXED. A staging copy of a real site in a search engine
+#  outranks the original often enough to be a known hazard, and the pages
+#  here are by definition half-finished. X-Robots-Tag is sent on every
+#  response rather than relying on a robots.txt the crawler may not fetch.
+# =============================================================================
+test.garden.example.net {
+	import common
+
+	header X-Robots-Tag "noindex, nofollow, noarchive"
+
+	# RETIRED 2026-10-25: Robin's Garden is not served from here.
+	respond "Robin's Garden moved." 410
+}
+
+# =============================================================================
+#  wiki.home.example.net -- Jason's own wiki (Wiki.js), PRIVATE
+#
+#  A SECOND INSTANCE, NOT A FOLDER IN ROBIN'S, and the reason is the one above:
+#  Robin's wiki is public to read on purpose. A private tree inside a public
+#  wiki is correct only for as long as its page rules stay correct, and the
+#  failure mode is publishing somebody's notes. Two instances cannot make
+#  that mistake.
+#
+#  forward_auth HERE, unlike Robin's. There is no public readership to lock
+#  out -- this one is his. The household sign-in gates the whole hostname,
+#  and Wiki.js's own accounts sit behind it as a second layer rather than
+#  the only one.
+#
+#  /auth/ MUST EXIST ON THIS HOSTNAME TOO. forward_auth's redirect is
+#  relative, so somebody sent to sign in has to find the door here rather
+#  than on example.org.
+#
+#  Separate database (jason_wiki) on the same MariaDB, its own content
+#  volume, port 8027 on the NUC, bound to the LAN address only.
+# =============================================================================
+wiki.home.example.net {
+	import common
+
+	redir /auth /auth/ 308
+	handle /auth/* {
+		reverse_proxy https://192.168.1.86 {
+			import nuc_signin
+		}
+	}
+
+	# THE SIGN-IN CALLBACK MUST NOT BE BEHIND THE GATE IT SERVES.
+	#
+	# Left out when this hostname was added, and the result was the loop
+	# Jason hit: the bridge sends the browser to /__sso?code=...&next=...,
+	# which fell through to Wiki.js. Wiki.js has no such route, so the code
+	# was never consumed, the gate bounced the browser back to sign in, and
+	# each pass wrapped the previous URL inside a new `next` -- the link
+	# grew a nested layer every time until Chrome gave up.
+	#
+	# Every other bridged subdomain in this file carries this block for
+	# exactly this reason, and says so.
+	handle /__sso* {
+		reverse_proxy https://192.168.1.86 {
+			import nuc_signin
+		}
+	}
+
+	handle {
+		forward_auth https://192.168.1.86 {
+			import nuc_gate
+			uri /verify
+			copy_headers X-Auth-Email
+			header_up X-Forwarded-Uri {http.request.orig_uri}
+		}
+		reverse_proxy 192.168.1.86:8027 {
+			import appproxy
+			transport http {
+				read_timeout 4h
+				write_timeout 4h
+			}
+		}
+	}
+}
+
+# =============================================================================
+#  collage.home.example.net -- the wall above the fridge
+#
+#  PUBLIC TO READ, SSO TO REARRANGE. The gallery is a wall of family
+#  photographs and there is nobody to hide it from, so / and the images have
+#  no gate. Everything that WRITES -- and /manage, which is the same page with
+#  the arrows showing -- goes through forward_auth first, and the verified
+#  address is passed on in X-Auth-Email.
+#
+#  THE SERVICE PUBLISHES NO PORT. It is reachable only from this proxy on the
+#  compose network, which is the whole reason it may trust that header. Same
+#  pattern as Gitea and Paperless here, and the same rule: do not publish one.
+#
+#  A NEW HOSTNAME COSTS NOTHING. Caddy picks sites by SNI and the router
+#  already forwards 80/443 through the NUC relay to this Caddy regardless of
+#  hostname, so this needs no new port and gets its own certificate.
+# =============================================================================
+collage.home.example.net {
+	import common
+
+	# Sign-in, on this hostname too: forward_auth's redirect is relative, so
+	# an unauthenticated arrival is sent to /auth/ HERE. Without this block
+	# that path would fall through to the collage app and 404 -- a sign-in
+	# link that 404s, which reads as the gate being broken when it is fine.
+	redir /auth /auth/ 308
+	handle /auth/* {
+		reverse_proxy https://192.168.1.86 {
+			import nuc_signin
+		}
+	}
+
+	# The gated half: the manage view and every write.
+	@guarded path /manage /api/move /api/upload /api/delete
+	handle @guarded {
+		forward_auth https://192.168.1.86 {
+			import nuc_gate
+			uri /verify
+			copy_headers X-Auth-Email
+			header_up X-Forwarded-Uri {http.request.orig_uri}
+		}
+		reverse_proxy collage:8024 {
+			import appproxy
+		}
+	}
+
+	# Everything else, public. The page must revalidate -- a cached copy
+	# replays an old wall against new photographs -- while the photographs
+	# themselves are immutable and cache hard.
+	handle {
+		@page path / /static/*
+		header @page Cache-Control "no-cache"
+		reverse_proxy collage:8024 {
+			import appproxy
+		}
+	}
+}

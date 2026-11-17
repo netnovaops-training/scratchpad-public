@@ -1,0 +1,2 @@
+# These are byte-for-byte copies of scripts as they run elsewhere; fix them at the source, not here.
+disable=SC2148,SC1017,SC1044,SC1072,SC1073

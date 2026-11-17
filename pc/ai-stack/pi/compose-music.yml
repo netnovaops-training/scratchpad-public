@@ -1,0 +1,173 @@
+# =============================================================================
+#  The Pi 5 as the DJ: a library you browse, and a station that never stops.
+#
+#  Jason, 2026-09-12: "lets use the pi5 ... use the nas as a mounting host",
+#  and he picked BOTH a browsable library and a 24/7 auto-radio.
+#
+#      NAS \\UltraNova\Music  (NFS: rw at the mount, ro at the players)
+#            |
+#            +--> navidrome    browse + play on demand, phone apps, SSO
+#            +--> liquidsoap   continuous stream, crossfaded
+#
+#  ---------------------------------------------------------------------------
+#  WHY THIS IS NOT OWNCAST, WHICH IS ALSO "THE DJ".
+#
+#  Owncast on the NUC is a PASSTHROUGH RELAY: OBS encodes the Traktor set on
+#  the PC's GPU, pushes RTMP, and Owncast repackages it to HLS. It has no
+#  file playback of any kind. Pointing it at a music folder does nothing at
+#  all. The two are complementary -- Owncast is "Jason is live right now",
+#  this is "the library, and something playing when he is not".
+#
+#  ---------------------------------------------------------------------------
+#  WHY NO ICECAST, WHICH EVERY GUIDE TELLS YOU TO RUN.
+#
+#  Liquidsoap has output.harbor, which serves the stream over HTTP itself.
+#  Icecast would be a second container, a second config file, and a second
+#  arm64 image to keep alive, to do a job liquidsoap already does in-process.
+#  It earns its place when you need dozens of mount points or thousands of
+#  listeners. For a household it is ceremony.
+#
+#  It also keeps the SD card out of it. An HLS output would write segments
+#  continuously, forever, to the one piece of hardware on this machine that
+#  wears out -- the exact thing pi-sdcard-guard.sh exists to prevent. Harbor
+#  streams from memory and writes nothing.
+#
+#  ---------------------------------------------------------------------------
+#  THE MOUNT IS READ-WRITE; BOTH SERVICES MOUNT IT READ-ONLY. See the note
+#  on the nas_music volume at the bottom. Short version: Jason syncs into
+#  this share and edits tags there, so the export must be writable -- but
+#  neither player has any business writing to 15,751 irreplaceable tracks,
+#  so each takes it with `:ro`, which Docker enforces per container.
+#
+#  ---------------------------------------------------------------------------
+#  BEFORE THIS CAN START, two things on the NAS -- both are why it is not
+#  running yet:
+#
+#    1. NFS rule on the `Music` share for 192.168.1.69, Read/Write. The
+#       row on that share reads 192.168.1.86 -- the NUC. The Pi 5 has no
+#       rule on ANY share: Pictures, which has had rules for hours, refuses
+#       .69 with the same error. The DSM column truncates to
+#       "192.168.1...." so .86 and .69 look identical; click Edit on the
+#       row to see which it actually is.
+#    2. That is all -- NFS with "map all users to admin" does not use the
+#       homelab account. An SMB grant to `homelab` on Music was tried and
+#       is not sufficient on its own.
+#
+#  Run:  docker compose -f compose.yml -f compose-music.yml up -d
+# =============================================================================
+
+services:
+
+  navidrome:
+    image: deluan/navidrome:latest
+    container_name: navidrome
+    restart: unless-stopped
+    # No `user:` line. Navidrome drops privileges itself, and pinning it
+    # to 1000:1000 meant it could not write the fresh named volume --
+    # Docker creates those owned by root. The symptom was "unable to open
+    # database file: no such file or directory", which names the wrong
+    # cause: the directory is there, the process just cannot write it.
+    environment:
+      - ND_MUSICFOLDER=/music
+      - ND_DATAFOLDER=/data
+      # 24h. The library lives on the NAS and changes rarely; scanning a
+      # 36,000-track library over NFS every few minutes would keep both
+      # the Pi and the NAS busy for nothing.
+      - ND_SCANSCHEDULE=24h
+      # SKIP SYNOLOGY'S METADATA FOLDERS. A DSM share carries an @eaDir
+      # directory beside EVERY file, holding thumbnails and indexing
+      # data. Navidrome walks each one as a folder, finds one image and
+      # no audio, and logs it -- so a 15,751-track library becomes tens
+      # of thousands of pointless folder scans and the first pass never
+      # seems to end. Observed here before this line existed.
+      #
+      # #recycle is DSM's trash: real audio files, already deleted, which
+      # would otherwise reappear in the library as playable tracks.
+      - ND_IGNOREDPATTERNS=@eaDir/**,**/@eaDir/**,#recycle/**,**/#recycle/**,**/.DS_Store
+      - ND_LOGLEVEL=info
+      - ND_SESSIONTIMEOUT=24h
+      # Transcoding OFF. A Pi 5 can transcode a couple of streams, but the
+      # clients here are phones on the LAN that play mp3 and flac natively.
+      # Leaving it on invites a 4-core box to re-encode for no gain.
+      - ND_ENABLETRANSCODINGCONFIG=false
+      # Identity comes from the SSO header, same as every other app here.
+      # Navidrome's own login stays as the fallback for the phone apps,
+      # which cannot do a browser redirect.
+      #
+      # EXTAUTH_*, not REVERSEPROXY_*: 0.64 renamed these and warns that
+      # the old names "will be ignored in a future release". Setting the
+      # current names now avoids SSO silently failing on an upgrade.
+      # 192.168.1.100/32, NOT the whole /24. Only one host terminates
+      # forward_auth -- the PC that runs Caddy -- and this setting decides
+      # who is allowed to ASSERT an identity with a header. Trusting the
+      # entire LAN meant any device on the wifi could skip the household
+      # sign-in completely:
+      #
+      #     curl -H "X-Auth-Email: user@example.com" http://192.168.1.69:4533/
+      #
+      # ...because 4533 is published on the Pi's LAN address below, so the
+      # request never passes through Caddy at all. Navidrome creates the
+      # account if it does not exist, and a real ND_USER account already
+      # exists (pi/playlist-match.py) to impersonate instead.
+      #
+      # The project already pins this exact boundary elsewhere -- Gitea uses
+      # REVERSE_PROXY_TRUSTED_PROXIES=192.168.1.100/32 and openGym has an
+      # nginx sidecar for the same reason. Navidrome was the outlier.
+      - ND_EXTAUTH_TRUSTEDSOURCES=192.168.1.100/32
+      - ND_EXTAUTH_USERHEADER=X-Auth-Email
+    volumes:
+      - nas_music:/music:ro
+      - navidrome_data:/data
+    ports:
+      - "192.168.1.69:4533:4533"
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  liquidsoap:
+    image: savonet/liquidsoap:v2.4.6
+    container_name: liquidsoap
+    restart: unless-stopped
+    command: ["/etc/liquidsoap/radio.liq"]
+    volumes:
+      - nas_music:/music:ro
+      - ./liquidsoap:/etc/liquidsoap:ro
+    ports:
+      # 8010, not 8000: gluetun already publishes 192.168.1.69:8000 for
+      # the download lane, and Docker fails the container outright with
+      # "port is already allocated" rather than picking another.
+      # Caddy fronts this for the public name.
+      - "192.168.1.69:8010:8000"
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+    depends_on:
+      - navidrome
+
+volumes:
+  # The NAS music library, mounted by Docker over NFS.
+  #
+  # READ-WRITE AT THE MOUNT, READ-ONLY AT THE PLAYERS, and the split is
+  # the point.
+  #
+  # Jason wants to sync into this share -- tagging software edits tags on
+  # the NAS, new tracks land there, and the library is the master rather
+  # than a copy. That needs the export and the kernel mount to be rw.
+  #
+  # But navidrome and liquidsoap have no business writing to 15,751
+  # irreplaceable tracks. Navidrome keeps its index in its own database,
+  # not in the files; liquidsoap only reads. So both mount this volume
+  # with `:ro` on their own volume lines, which Docker enforces per
+  # container.
+  #
+  # The result: a sync process can write here, and a bug in either player
+  # cannot. Making the whole mount rw and trusting the applications would
+  # be one upgrade away from a library-wide rewrite.
+  nas_music:
+    driver: local
+    driver_opts:
+      type: nfs
+      o: "addr=192.168.1.68,nfsvers=4.1,rw,soft,timeo=150,retrans=3"
+      device: ":/volume1/Music"
+
+  navidrome_data:

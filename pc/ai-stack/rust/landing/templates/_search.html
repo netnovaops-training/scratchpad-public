@@ -1,0 +1,68 @@
+<!-- Search, on every person's own page.
+     Jason, 2026-09-08: "is there a search ui on each of the pages".
+
+     It was a card that linked to /find/ and nothing else. A card is a door;
+     this is the thing you can actually type into without going anywhere
+     first, which is most of the difference between a search that gets used
+     and one that does not.
+
+     A PLAIN FORM, NOT A LIVE SEARCH BOX. Typing here submits to /find/, which
+     already does type-ahead properly against the index. Wiring a second
+     debounced fetch into fifteen theme templates would mean fifteen copies of
+     the same JavaScript, all able to drift, to save one page load. The form
+     works with JavaScript switched off, which the live version could not.
+
+     BUILT FROM WHATEVER PALETTE THE THEME HAS. Fifteen themes define their
+     own colours and there is no shared token set, so this asks for --accent
+     and --line with fallbacks and otherwise borrows the page's own font and
+     background. A search box that is the only purple thing on the beach theme
+     looks like it was bolted on, because it was.
+
+     Included by every theme the same way _effects.html is -- edited once
+     here rather than fifteen times. -->
+<form class="findbar" action="/find/" method="get" role="search">
+  <label class="sr-only" for="findq">Search your recipes, workouts, documents and code</label>
+  <input id="findq" name="q" type="search" autocomplete="off"
+         placeholder="Search everything of yours&hellip;">
+  <button type="submit">Find</button>
+</form>
+<style>
+  /* FULL WIDTH, ACROSS THE TOP. It used to be capped at 34rem AND included
+     inside <div class="grid">, so the grid handed it one column like a card
+     and the placeholder was cut off mid-word ("Search everything of yo").
+     The include now sits above the grid; this is the other half -- a bar
+     that stops at 34rem above a full-width grid looks like a mistake. */
+  .findbar { display: flex; gap: .5rem; margin: 0 0 1.4rem;
+             width: 100%; }
+  .findbar input {
+    flex: 1 1 auto; min-width: 0;
+    padding: .6rem .85rem;
+    /* 16px is not a style choice: anything smaller makes iOS Safari zoom the
+       whole page when the field is focused, which reads as the site breaking. */
+    font: inherit; font-size: 16px;
+    color: inherit;
+    background: rgba(255, 255, 255, .07);
+    border: 1px solid var(--line, rgba(128, 128, 128, .35));
+    border-radius: 9px;
+  }
+  .findbar input::placeholder { color: inherit; opacity: .55; }
+  .findbar input:focus {
+    outline: 2px solid var(--accent, #5aa2e8); outline-offset: 1px;
+    border-color: transparent;
+  }
+  .findbar button {
+    padding: .6rem 1.1rem; font: inherit; font-size: .95rem; font-weight: 600;
+    cursor: pointer; color: inherit;
+    background: rgba(255, 255, 255, .1);
+    border: 1px solid var(--accent, #5aa2e8); border-radius: 9px;
+  }
+  .findbar button:hover { background: var(--accent, #5aa2e8); color: #0b1017; }
+  /* Present for a screen reader, invisible on the page -- the placeholder is
+     not a label, and a search box with no label is one nobody using a reader
+     can identify. */
+  .sr-only {
+    position: absolute; width: 1px; height: 1px; overflow: hidden;
+    clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;
+  }
+  @media (max-width: 480px) { .findbar { max-width: none; } }
+</style>

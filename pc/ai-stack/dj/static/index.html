@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jason Gibson — Nights Worked</title>
+<meta name="description" content="Every night I have DJ'd: where, when, and the photographs from it.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Newsreader:opsz,wght@6..72,400;6..72,500&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* ===========================================================================
+   Same rack-equipment palette as the portfolio, because it is the same
+   person and the two pages link to each other. The one thing this page adds
+   is the cue sheet: a night is a numbered row on a running order, which is
+   what a DJ actually works from.
+   ======================================================================== */
+:root{
+  --paper:#F7F6F3; --paper-2:#EFEDE8; --rack:#1C1F24; --rack-2:#262A30;
+  --ink:#16181B; --ink-2:#3F444A; --label:#6B7075; --rule:#DAD7D0;
+  --signal:#1F7A4D; --signal-lit:#35D07F; --peak:#C4442E;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --paper:#15171A; --paper-2:#1C1F24; --ink:#ECEAE5; --ink-2:#B4B8BD;
+    --label:#8C9196; --rule:#2C3137; --rack:#0F1114; --rack-2:#191C20;
+    --signal:#35D07F;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#15171A; --paper-2:#1C1F24; --ink:#ECEAE5; --ink-2:#B4B8BD;
+  --label:#8C9196; --rule:#2C3137; --rack:#0F1114; --rack-2:#191C20;
+  --signal:#35D07F;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);
+  font:400 17px/1.62 Newsreader,Georgia,serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1080px;margin:0 auto;padding:0 24px}
+a{color:inherit}
+.label{font:600 12px/1 "Barlow Condensed",system-ui,sans-serif;
+  letter-spacing:.22em;text-transform:uppercase;color:var(--label)}
+
+/* ---- header: a rack face, like the portfolio's ------------------------- */
+.top{background:var(--rack);color:#ECEAE5;padding:40px 0 34px}
+.top .label{color:#7E858C}
+.top h1{font:700 clamp(38px,8vw,76px)/0.94 "Barlow Condensed",system-ui,sans-serif;
+  text-transform:uppercase;letter-spacing:-.01em;margin:12px 0 0}
+.top h1 em{font-style:normal;color:var(--signal-lit)}
+.top p{color:#C9CDD2;max-width:46ch;margin:16px 0 0}
+.top nav{margin:22px 0 0;display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center}
+.top nav a{color:#ECEAE5;text-decoration:none;border-bottom:1px solid #454B52;
+  font:500 15px/1 "IBM Plex Mono",monospace;padding-bottom:3px}
+.top nav a:hover{border-color:var(--signal-lit);color:var(--signal-lit)}
+
+/* ---- the cue sheet ----------------------------------------------------- */
+section{padding:52px 0;border-top:1px solid var(--rule)}
+h2{font:600 clamp(26px,4vw,40px)/1.05 "Barlow Condensed",system-ui,sans-serif;
+  text-transform:uppercase;letter-spacing:.01em;margin:10px 0 0}
+.night{border-top:1px solid var(--rule);padding:30px 0 6px}
+.night:first-of-type{border-top:0}
+.cue{display:flex;gap:16px;align-items:baseline;flex-wrap:wrap}
+/* The number is the running order, which is real information: these are
+   nights in the sequence they happened. */
+.cue .n{font:500 13px/1 "IBM Plex Mono",monospace;color:var(--signal);
+  min-width:3ch}
+.cue h3{font:600 clamp(21px,3vw,29px)/1.1 "Barlow Condensed",system-ui,sans-serif;
+  text-transform:uppercase;margin:0}
+.cue .meta{font:400 14px/1 "IBM Plex Mono",monospace;color:var(--label)}
+.night .note{color:var(--ink-2);margin:10px 0 0;max-width:62ch}
+
+.shots{display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));
+  gap:10px;margin:18px 0 0}
+.shot{position:relative;aspect-ratio:1;border-radius:2px;overflow:hidden;
+  background:var(--paper-2);border:1px solid var(--rule)}
+.shot img{width:100%;height:100%;object-fit:cover;display:block;
+  transition:transform .35s ease}
+.shot:hover img{transform:scale(1.04)}
+.shot figcaption{position:absolute;left:0;right:0;bottom:0;padding:16px 8px 6px;
+  font:500 12px/1.3 "IBM Plex Mono",monospace;color:#fff;
+  background:linear-gradient(transparent,rgba(0,0,0,.72))}
+.empty{color:var(--label);font-style:italic;margin:14px 0 0}
+
+/* ---- the manage panel; only ever rendered for a signed-in editor ------- */
+.panel{background:var(--paper-2);border:1px solid var(--rule);border-radius:3px;
+  padding:22px;margin:0 0 30px}
+.panel h3{font:600 18px/1 "Barlow Condensed",system-ui,sans-serif;
+  letter-spacing:.14em;text-transform:uppercase;margin:0 0 14px}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+input,select,textarea,button{font:400 15px/1.4 "IBM Plex Mono",monospace;
+  padding:9px 11px;border:1px solid var(--rule);border-radius:2px;
+  background:var(--paper);color:var(--ink)}
+textarea{width:100%;min-height:64px;resize:vertical}
+button{cursor:pointer;background:var(--rack);color:#ECEAE5;border-color:var(--rack);
+  font-weight:500}
+button.quiet{background:transparent;color:var(--ink-2);border-color:var(--rule)}
+button:disabled{opacity:.5;cursor:default}
+.status{font:500 14px/1.5 "IBM Plex Mono",monospace;color:var(--signal);
+  margin:12px 0 0;min-height:1.5em}
+.status.bad{color:var(--peak)}
+.tools{display:flex;gap:6px;margin:6px 0 0}
+.tools button{padding:4px 8px;font-size:12px}
+footer{padding:40px 0 60px;color:var(--label);
+  font:400 14px/1.6 "IBM Plex Mono",monospace}
+@media (max-width:560px){
+  .shots{grid-template-columns:repeat(2,1fr)}
+  input,select{flex:1 1 100%}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+:focus-visible{outline:2px solid var(--signal);outline-offset:2px}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <span class="label">Jason Gibson · the other desk</span>
+    <h1>Nights <em>worked</em></h1>
+    <p>Every night I have played: where, when, and what the room looked
+       like. Same job as the rest of my work, with an audience watching and
+       no second take.</p>
+    <nav>
+      <a href="https://example.org/">Portfolio</a>
+      <a href="https://example.org/notes.html">Engineering notes</a>
+      <a href="https://dj.home.example.net/">Live stream</a>
+      <a id="door" href="/manage">Sign in to add</a>
+    </nav>
+  </div>
+</header>
+
+<section>
+  <div class="wrap">
+    <div id="manage" hidden>
+      <div class="panel">
+        <h3>Add a night</h3>
+        <div class="row">
+          <input id="g-title" placeholder="What it was" size="22">
+          <input id="g-venue" placeholder="Where" size="18">
+          <input id="g-date" type="date">
+          <button id="g-save">Save night</button>
+        </div>
+        <textarea id="g-note" placeholder="Anything worth remembering about it (optional)"></textarea>
+      </div>
+
+      <div class="panel">
+        <h3>Add photographs</h3>
+        <div class="row">
+          <select id="u-gig"></select>
+          <input id="u-file" type="file" accept="image/*" multiple>
+          <button id="u-go">Upload</button>
+        </div>
+        <p class="status" id="u-status"></p>
+      </div>
+    </div>
+
+    <span class="label">The running order</span>
+    <h2>Nights</h2>
+    <div id="book"><p class="empty">Loading…</p></div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    Booking and AV work: <a href="https://example.org/">example.org</a>
+  </div>
+</footer>
+
+<script>
+const $ = s => document.querySelector(s);
+let LIB = {gigs: [], photos: [], editor: null};
+
+const esc = s => (s||"").replace(/[&<>"]/g, c =>
+  ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+async function load(){
+  const r = await fetch("/api/library", {cache: "no-store"});
+  LIB = await r.json();
+  draw();
+}
+
+function draw(){
+  const editing = !!LIB.editor;
+  $("#manage").hidden = !editing;
+  $("#door").textContent = editing ? LIB.editor : "Sign in to add";
+  $("#door").href = editing ? "#" : "/manage";
+
+  // The upload target list, rebuilt so a night added a moment ago is
+  // immediately something photographs can go into.
+  const sel = $("#u-gig");
+  sel.innerHTML = '<option value="">— no night —</option>' +
+    LIB.gigs.map(g => `<option value="${esc(g.id)}">${esc(g.title)}</option>`).join("");
+
+  const byGig = {};
+  for (const p of LIB.photos) (byGig[p.gig || ""] ||= []).push(p);
+
+  const parts = LIB.gigs.map((g, i) => night(g, byGig[g.id] || [], i));
+  const loose = byGig[""] || [];
+  if (loose.length) parts.push(night(
+    {id: "", title: "Not filed yet", venue: "", date: "", note: ""}, loose, -1));
+
+  $("#book").innerHTML = parts.join("") ||
+    `<p class="empty">Nothing here yet.${editing ? " Add a night above." : ""}</p>`;
+}
+
+function night(g, shots, i){
+  const meta = [g.venue, g.date].filter(Boolean).map(esc).join(" · ");
+  const n = i >= 0 ? String(LIB.gigs.length - i).padStart(2, "0") : "··";
+  return `<article class="night">
+    <div class="cue">
+      <span class="n">${n}</span>
+      <h3>${esc(g.title)}</h3>
+      ${meta ? `<span class="meta">${meta}</span>` : ""}
+    </div>
+    ${g.note ? `<p class="note">${esc(g.note)}</p>` : ""}
+    ${shots.length
+      ? `<div class="shots">${shots.map(shot).join("")}</div>`
+      : `<p class="empty">No photographs from this one.</p>`}
+  </article>`;
+}
+
+function shot(p){
+  const cap = p.caption ? `<figcaption>${esc(p.caption)}</figcaption>` : "";
+  const tools = LIB.editor
+    ? `<div class="tools">
+         <button class="quiet" onclick="caption('${p.name}')">Caption</button>
+         <button class="quiet" onclick="remove('${p.name}')">Remove</button>
+       </div>` : "";
+  return `<div><figure class="shot">
+      <a href="/photo/${p.name}" target="_blank" rel="noopener">
+        <img src="${p.thumb}" alt="${esc(p.caption) || "A night I played"}" loading="lazy">
+      </a>${cap}
+    </figure>${tools}</div>`;
+}
+
+async function post(path, body, headers){
+  const r = await fetch(path, {method: "POST", headers: headers || {},
+    body: body instanceof Blob || body instanceof File ? body : JSON.stringify(body)});
+  const out = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(out.error || `${r.status}`);
+  return out;
+}
+
+$("#g-save").onclick = async () => {
+  const title = $("#g-title").value.trim();
+  if (!title) return;
+  try {
+    await post("/api/gig", {title, venue: $("#g-venue").value,
+      date: $("#g-date").value, note: $("#g-note").value});
+    for (const id of ["#g-title", "#g-venue", "#g-date", "#g-note"])
+      $(id).value = "";
+    await load();
+  } catch (e) { alert(e.message); }
+};
+
+// ONE REQUEST PER PHOTO, IN SEQUENCE. A phone on a bad signal loses one
+// picture and keeps going, and the count is honest while it happens --
+// which is the difference between waiting and wondering.
+$("#u-go").onclick = async () => {
+  const files = [...$("#u-file").files];
+  if (!files.length) return;
+  const gig = $("#u-gig").value, st = $("#u-status");
+  $("#u-go").disabled = true;
+  let done = 0; const failed = [];
+  for (const f of files) {
+    st.className = "status";
+    st.textContent = `Uploading ${done + 1} of ${files.length}…`;
+    try {
+      await post("/api/upload", f, {"X-Filename": f.name, "X-Gig": gig});
+      done++;
+    } catch (e) { failed.push(`${f.name}: ${e.message}`); }
+  }
+  st.className = failed.length ? "status bad" : "status";
+  st.textContent = failed.length
+    ? `${done} up, ${failed.length} failed — ${failed[0]}`
+    : `${done} photograph${done === 1 ? "" : "s"} added.`;
+  $("#u-file").value = "";
+  $("#u-go").disabled = false;
+  await load();
+};
+
+async function caption(name){
+  const now = (LIB.photos.find(p => p.name === name) || {}).caption || "";
+  const text = prompt("Caption for this photograph", now);
+  if (text === null) return;
+  try { await post("/api/assign", {name, caption: text}); await load(); }
+  catch (e) { alert(e.message); }
+}
+
+async function remove(name){
+  if (!confirm("Take this photograph off the page? It is kept on the server.")) return;
+  try { await post("/api/delete", {name}); await load(); }
+  catch (e) { alert(e.message); }
+}
+
+load();
+</script>
+</body>
+</html>

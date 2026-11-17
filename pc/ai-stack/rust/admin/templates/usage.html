@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#050a12">
+<meta name="robots" content="noindex, nofollow">
+<title>Where it&rsquo;s used &middot; admin</title>
+<link rel="stylesheet" href="/theme.css">
+<style>
+  body{--accent:#e8c26a}
+  table.backlog{width:100%;border-collapse:collapse;margin-top:.7rem}
+  table.backlog th{text-align:left;font-size:.72rem;text-transform:uppercase;
+    letter-spacing:.05em;color:var(--muted);padding:.4rem .5rem;border-bottom:1px solid var(--line)}
+  table.backlog td{padding:.6rem .5rem;border-bottom:1px solid var(--line);
+    font-size:.88rem;vertical-align:middle}
+  table.backlog tr:last-child td{border-bottom:0}
+  table.backlog a.small{margin-right:.8rem}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="{{ base }}/pictures">&larr; pictures</a>
+
+  <h1>Where it&rsquo;s used</h1>
+  <p class="sub">Every recipe with this {{ kind }} in it, the exact line as
+    written where it applies, and two ways in: read the whole recipe to see
+    the context, or jump straight to editing it if the line itself is the
+    actual problem.</p>
+
+  <div class="panel">
+    {% if recipes.is_empty() %}
+      <p class="sub" style="margin:.4rem 0 0">Not used in any recipe right now.</p>
+    {% else %}
+    <div style="overflow-x:auto">
+    <table class="backlog">
+      <tr><th>Recipe</th><th>Line</th><th></th></tr>
+      {% for r in recipes %}
+      <tr>
+        <td>{{ r.title }}</td>
+        <td>{% if !r.original_text.is_empty() %}&ldquo;{{ r.original_text }}&rdquo;{% endif %}</td>
+        <td>
+          {% if !r.guide_url.is_empty() %}<a class="small" href="{{ r.guide_url }}">read the recipe</a>{% endif %}
+          {% if !r.edit_url.is_empty() %}<a class="small" href="{{ r.edit_url }}">edit it</a>{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
+    </div>
+    {% endif %}
+  </div>
+
+  <footer>
+    &copy; {{ year }}
+  </footer>
+</div>
+</body>
+</html>

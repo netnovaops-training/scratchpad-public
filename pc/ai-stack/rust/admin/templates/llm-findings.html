@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#050a12">
+<meta name="robots" content="noindex, nofollow">
+<title>LLM findings &middot; admin</title>
+<link rel="stylesheet" href="/theme.css">
+<style>
+  body{--accent:#e8c26a}
+  table.backlog{width:100%;border-collapse:collapse;margin-top:.7rem}
+  table.backlog th{text-align:left;font-size:.72rem;text-transform:uppercase;
+    letter-spacing:.05em;color:var(--muted);padding:.4rem .5rem;border-bottom:1px solid var(--line)}
+  table.backlog td{padding:.6rem .5rem;border-bottom:1px solid var(--line);
+    font-size:.88rem;vertical-align:middle}
+  table.backlog tr:last-child td{border-bottom:0}
+  .src{font-size:.68rem;text-transform:uppercase;letter-spacing:.05em;
+    border-radius:99px;padding:.15rem .55rem;border:1px solid var(--line)}
+  .running{color:var(--accent)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="{{ base }}/">&larr; all sites</a>
+
+  <h1>LLM findings</h1>
+  <p class="sub">Matches food and tool names against each other -- an exact
+    match after stripping prep/filler words merges automatically (no review,
+    safe by construction); a real judgment call ("does this mean the same
+    thing?") lands below instead, for you to approve or reject. Runs in the
+    background; you'll get a Telegram message with a summary and this link
+    when it's done, so there's nothing to wait on here.</p>
+
+  {% if !flash.is_empty() %}
+    <p class="note {% if flash_ok %}ok{% else %}bad{% endif %}">{{ flash }}</p>
+  {% endif %}
+
+  <div class="panel">
+    <h2>Run it</h2>
+    {% if running %}
+      <p class="running">Running now &mdash; checking back here, or just wait
+        for the Telegram message, both work.</p>
+    {% else %}
+      <form method="post" action="{{ base }}/llm-findings/run">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <button type="submit">Match all food &amp; tool items now</button>
+      </form>
+    {% endif %}
+    <form method="post" action="{{ base }}/llm-findings/tidy" style="margin-top:.6rem">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <button type="submit" class="ghost">Tidy food names (strip baked-in portion sizes)</button>
+    </form>
+    <p class="sub" style="margin:.5rem 0 0;font-size:.78rem">Renames things like
+      &ldquo;(60ml) lemon juice from 1 lemon&rdquo; to &ldquo;Lemon Juice&rdquo; --
+      mechanical, no model, food only (a tool's size is real, a food's
+      portion isn't). Never changes what a recipe's own ingredient line
+      says. Instant, not backgrounded.</p>
+  </div>
+
+  <div class="panel">
+    <h2>Waiting on you ({{ total }})</h2>
+    <p class="sub" style="margin:.35rem 0 0">Two names the model thinks mean
+      the same real-world thing, but weren't identical enough to merge on
+      their own. Approve merges the second name into the first, everywhere
+      it's used; reject leaves both exactly as they are.</p>
+    {% if rows.is_empty() %}
+      <p class="sub" style="margin:.6rem 0 0">Nothing waiting on you.</p>
+    {% else %}
+    <div style="overflow-x:auto">
+    <table class="backlog">
+      <tr><th>Kind</th><th>Merge</th><th>Why</th><th></th></tr>
+      {% for m in rows %}
+      <tr>
+        <td><span class="src">{{ m.kind }}</span></td>
+        <td>&ldquo;{{ m.item_name }}&rdquo; &rarr; &ldquo;{{ m.target_name }}&rdquo;
+          <br><a class="small" href="{{ m.usage_url }}">where it's used</a></td>
+        <td class="sub">{{ m.reason }}</td>
+        <td>
+          <form method="post" action="{{ base }}/llm-findings/approve">
+            <input type="hidden" name="csrf" value="{{ csrf }}">
+            <input type="hidden" name="id" value="{{ m.id }}">
+            <button type="submit">Approve</button>
+          </form>
+          <form method="post" action="{{ base }}/llm-findings/reject" style="margin-top:.3rem">
+            <input type="hidden" name="csrf" value="{{ csrf }}">
+            <input type="hidden" name="id" value="{{ m.id }}">
+            <button type="submit" class="ghost">Reject</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
+    </div>
+    {% endif %}
+  </div>
+
+  <footer>
+    &copy; {{ year }}
+  </footer>
+</div>
+</body>
+</html>

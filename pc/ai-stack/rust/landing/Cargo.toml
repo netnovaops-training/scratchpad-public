@@ -1,0 +1,21 @@
+[package]
+name = "landing"
+version = "0.1.0"
+edition = "2021"
+
+# The binary Docker copies out of the build stage. Keep this name in sync with
+# the ARG APP in rust/Dockerfile.
+[[bin]]
+name = "landing"
+path = "src/main.rs"
+
+[dependencies]
+common.workspace = true
+axum.workspace = true
+tokio.workspace = true
+tower-http.workspace = true
+askama.workspace = true
+tracing.workspace = true
+anyhow.workspace = true
+# For the per-person look store (src/looks.rs), which is a small JSON map.
+serde_json.workspace = true

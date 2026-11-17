@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1b1033">
+<meta name="robots" content="noindex, nofollow">
+<title>People &middot; admin</title>
+<link rel="stylesheet" href="/theme.css">
+<style>
+  /* Purple admin identity (2026-10-30, matches Proton Pass branding) --
+     scoped to this page only via local token overrides, same pattern the
+     old page used for --accent. The shared theme.css (night-sky, its own
+     purple accent #8b7cff) still drives sign-in/offer/account pages
+     untouched; nothing here leaks outside this template. */
+  body{
+    --ink2:#1b1033; --violet:#8a6eff; --surface:#0f0b1f; --card:#17112c;
+    --muted2:#9a8fc2; --border2:#2a2147; --tag-bg:#231a44; --tag-fg:#c3b8f0;
+    --accent:#8a6eff;
+    background:var(--surface);
+  }
+
+  .admin-header{
+    background:var(--ink2); margin:-28px calc(-1 * max(16px,env(safe-area-inset-left,0px)))
+      0 calc(-1 * max(16px,env(safe-area-inset-right,0px)));
+    padding:18px max(24px,env(safe-area-inset-left,0px));
+    display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+  }
+  .admin-header .mark2{
+    width:28px;height:28px;border-radius:7px;background:var(--violet);
+    display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;
+  }
+  .admin-header h1{margin:0;font-size:16px;font-weight:600;color:#fff;letter-spacing:.01em}
+  .admin-header a.back{color:rgba(255,255,255,.65);font-size:13px;text-decoration:none}
+  .admin-header a.back:hover{color:#fff}
+
+  .wrap.narrow{max-width:760px}
+  .sub{color:var(--muted2)}
+
+  .panel{
+    background:var(--card); border:1px solid var(--border2); border-radius:10px;
+    padding:20px 22px; margin-bottom:16px;
+  }
+  .panel h2{margin:0 0 10px;font-size:15px;color:#fff}
+
+  button[type=submit]{
+    background:var(--violet); color:#140c29; border:none; font-weight:600;
+    padding:.5rem 1rem; border-radius:7px; font-size:.82rem; cursor:pointer;
+  }
+  button[type=submit]:hover{background:#7a5cf0}
+  .acts button, details.pw button[type=submit]{
+    background:none; border:1px solid var(--border2); color:var(--muted2);
+    padding:.4rem .8rem; border-radius:7px; font-size:.78rem;
+  }
+  .acts form .rm button, button.revoke{
+    color:#ffb3a8; border-color:color-mix(in srgb,var(--bad) 45%,transparent);
+  }
+
+  ul.people{list-style:none;margin:0;padding:0}
+  ul.people li{
+    padding:14px 16px; border:1px solid var(--border2); border-radius:9px;
+    background:rgba(255,255,255,.015); margin-bottom:10px;
+  }
+  ul.people li:last-child{margin-bottom:0}
+  ul.people .top{display:flex;align-items:flex-start;justify-content:space-between;gap:.8rem;flex-wrap:wrap}
+  ul.people .who{font-size:.92rem;font-weight:500;color:#fff;word-break:break-all}
+
+  .tag{
+    font-size:.64rem;letter-spacing:.04em;text-transform:uppercase;border-radius:99px;
+    padding:.15rem .55rem;background:var(--tag-bg);color:var(--tag-fg);white-space:nowrap;
+    border:1px solid transparent;
+  }
+  .tag.warn{background:color-mix(in srgb,var(--bad) 18%,var(--tag-bg));color:#ffc9c0}
+  .tag.you{background:color-mix(in srgb,var(--violet) 22%,var(--tag-bg));color:var(--violet)}
+
+  ul.people .access{margin:.5rem 0 0;font-size:.76rem;color:var(--muted2)}
+  ul.people .access b{color:#ece7fb;font-weight:600}
+
+  details.pw{margin-top:.6rem}
+  details.pw summary{cursor:pointer;font-size:.8rem;color:var(--muted2)}
+  details.pw summary:hover{color:#ece7fb}
+  details.pw .row{margin-top:.5rem}
+  input[type=password],input[type=text],input[type=number],select{
+    background:var(--surface); border:1px solid var(--border2); color:#ece7fb;
+    border-radius:6px; padding:.4rem .6rem;
+  }
+  input[type=password]{min-width:150px}
+
+  label.chk{display:flex;align-items:center;gap:.5rem;margin-top:.6rem;
+    font-size:.78rem;color:var(--muted2);cursor:pointer}
+  label.chk input{width:auto;margin:0}
+  .acts{display:flex;align-items:center;gap:.4rem;flex-wrap:wrap}
+  .acts form{display:inline}
+
+  /* --- page-access UI: presets, chips, grouped add panel. Shared by the
+     invite form and every existing person's "Which pages" section. Reads
+     and writes the hidden lvl_{app} inputs Askama already emits -- the
+     POST contract to people_apps/people_invite is UNCHANGED, this is a
+     presentation layer only. --- */
+  .presets{display:flex;gap:.5rem;flex-wrap:wrap;margin:.6rem 0}
+  .preset-chip{
+    font-size:.76rem; padding:.35rem .8rem; border-radius:99px;
+    border:1px solid var(--border2); background:none; color:var(--muted2); cursor:pointer;
+  }
+  .preset-chip:hover{border-color:var(--violet);color:var(--violet)}
+  .preset-chip.active{border-color:var(--violet);color:var(--violet);background:rgba(138,110,255,.1)}
+
+  .page-chips{display:flex;flex-wrap:wrap;gap:.45rem;align-items:center;margin-top:.5rem}
+  .page-chip{
+    display:flex; align-items:center; gap:.3rem; font-size:.74rem;
+    background:var(--tag-bg); color:var(--tag-fg); border-radius:7px;
+    padding:.3rem .5rem .3rem .65rem;
+  }
+  .page-chip .lvl{
+    font-size:.64rem; text-transform:uppercase; letter-spacing:.03em;
+    opacity:.75; padding:.08rem .35rem; border-radius:99px; background:rgba(0,0,0,.22);
+    cursor:pointer;
+  }
+  .page-chip .lvl.full{color:var(--violet)}
+  .page-chip .lvl:hover{opacity:1;outline:1px solid currentColor}
+  .page-chip button.x{
+    background:none;border:none;color:inherit;opacity:.6;cursor:pointer;
+    font-size:.9rem;line-height:1;padding:0;margin-left:.45rem;
+    border-left:1px solid rgba(255,255,255,.15);padding-left:.45rem;
+  }
+  .page-chip button.x:hover{opacity:1;color:#ffc9c0}
+
+  .add-page-btn{
+    font-size:.74rem; padding:.3rem .65rem; border-radius:7px; margin-top:.5rem;
+    border:1px dashed var(--border2); background:none; color:var(--muted2); cursor:pointer;
+  }
+  .add-page-btn:hover{border-color:var(--violet);color:var(--violet)}
+
+  .add-page-panel{
+    display:none; flex-wrap:wrap; gap:.4rem; margin-top:.5rem;
+    background:var(--surface); border:1px solid var(--border2); border-radius:8px;
+    padding:.6rem;
+  }
+  .add-page-panel.open{display:flex}
+  .avail-group{width:100%}
+  .avail-group:first-child{margin-top:0}
+  .avail-group-label{
+    width:100%; font-size:.66rem; letter-spacing:.05em; text-transform:uppercase;
+    color:var(--muted2); margin:.5rem 0 .3rem; opacity:.75;
+  }
+  .avail-group:first-child .avail-group-label{margin-top:0}
+  .avail-group-items{display:flex;flex-wrap:wrap;gap:.4rem}
+  .avail-chip{
+    display:flex; align-items:center; gap:.3rem; font-size:.74rem;
+    background:var(--card); border:1px solid var(--border2); border-radius:7px;
+    padding:.25rem .3rem .25rem .55rem; color:var(--muted2);
+  }
+  .avail-chip button{
+    font-size:.66rem; text-transform:uppercase; letter-spacing:.03em;
+    border:none; border-radius:5px; padding:.2rem .4rem; cursor:pointer;
+    background:var(--tag-bg); color:var(--tag-fg);
+  }
+  .avail-chip button.full{background:rgba(138,110,255,.18);color:var(--violet)}
+  .avail-chip button:hover{filter:brightness(1.25)}
+  .hidden-levels{display:none}
+
+  @media (max-width:480px){
+    ul.people li{padding:12px 14px}
+    .acts{width:100%}
+    .acts form{flex:1}
+    .acts button{width:100%}
+    .admin-header{padding:14px max(16px,env(safe-area-inset-left,0px))}
+  }
+</style>
+</head>
+<body>
+<div class="admin-header">
+  <div class="mark2">&#128737;</div>
+  <h1>People</h1>
+  <a class="back" href="{{ base }}/" style="margin-left:auto">&larr; all sites</a>
+</div>
+
+<div class="wrap narrow">
+  <p class="sub" style="margin-top:18px">Who can sign in, and with one password, everywhere: <code>/mama</code>,
+    <code>/kitchen</code>, the knowledge base, <code>/casey</code>. You choose
+    the password and hand it over, and it stays that password until you change it
+    here. There is no reset email &mdash; if somebody forgets theirs, you set a new
+    one on this page. Untick a page below to keep somebody off it specifically,
+    without touching their sign-in anywhere else.</p>
+
+  {% if !flash.is_empty() %}
+    <p class="note {% if flash_ok %}ok{% else %}bad{% endif %}">{{ flash }}</p>
+  {% endif %}
+
+  <!-- TODO: DELETE -- Add someone (email+password) panel hidden 2026-10-29.
+       Replaced by invite-link flow. Remove this block once invite is
+       confirmed as the only onboarding path. -->
+
+  <div class="panel">
+    <h2>Invite a guest</h2>
+    <p class="sub" style="margin:.35rem 0 .9rem">No email, no password for them to
+      remember -- you pick what they can reach and for how long, and get a one-time
+      link to send however you like (text, in person). They tap it, make a passkey
+      with their own fingerprint or face, and they're in. The link stops working the
+      moment it's used.</p>
+    <form method="post" action="{{ base }}/people/invite">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <input type="text" name="label" maxlength="40" autocomplete="off"
+             placeholder="A name for your own reference, e.g. Brandon"
+             required style="width:100%">
+
+      <div class="page-scope" data-page-scope>
+        <div class="presets"></div>
+        <div class="page-chips"></div>
+        <button type="button" class="add-page-btn">+ Add page</button>
+        <div class="add-page-panel"></div>
+        <div class="hidden-levels">
+          {% for a in fresh_app_checks %}
+          <input type="hidden" name="lvl_{{ a.name }}" value="none" data-app="{{ a.name }}">
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="row" style="margin-top:.9rem;align-items:center;gap:.5rem">
+        <label for="inv-days">Expires in</label>
+        <input id="inv-days" name="days" type="number" min="1" max="365" step="1"
+               value="7" inputmode="numeric" required style="width:5rem">
+        <span class="fine">days</span>
+        <button type="submit">Create invite link</button>
+      </div>
+      <p class="fine" style="margin-top:.35rem">Any number of days, 1 to 365. A guest account
+        always has an end date -- there's no "never expires" option by design.</p>
+    </form>
+  </div>
+
+  <div class="panel">
+    <h2>Accounts ({{ people.len() }})</h2>
+    {% if people.is_empty() %}
+      <p class="sub" style="margin:.4rem 0 0">Nobody yet.</p>
+    {% else %}
+    <ul class="people" style="margin-top:.7rem">
+      {% for p in people %}
+      <li>
+        <div class="top">
+          <span class="who">{{ p.display_name }}
+            {% if p.guest %}<span class="tag">guest</span>{% endif %}
+            {% if p.owner %}<span class="tag you">you</span>{% endif %}
+            {% if !p.has_password %}
+              <span class="tag warn">no password &mdash; cannot sign in</span>
+            {% else if p.must_change %}
+              <span class="tag">must pick their own</span>
+            {% endif %}
+            {% if p.passkeys.is_empty() %}
+              <span class="tag warn">no passkey</span>
+            {% else %}
+              <span class="tag">{{ p.passkeys.len() }} passkey{% if p.passkeys.len() != 1 %}s{% endif %}</span>
+            {% endif %}
+          </span>
+          <div class="acts">
+            <form method="post" action="{{ base }}/people/signout"
+                  onsubmit="return confirm('Sign {{ p.display_name }} out of the website and both apps? They can sign back in.')">
+              <input type="hidden" name="csrf" value="{{ csrf }}">
+              <input type="hidden" name="email" value="{{ p.email }}">
+              <button type="submit">Sign out everywhere</button>
+            </form>
+            {% if p.owner %}
+              <span class="sub" style="font-size:.72rem">yours</span>
+            {% else %}
+            <form class="rm" method="post" action="{{ base }}/people/remove">
+              <input type="hidden" name="csrf" value="{{ csrf }}">
+              <input type="hidden" name="email" value="{{ p.email }}">
+              <button type="submit">Remove</button>
+            </form>
+            {% endif %}
+          </div>
+        </div>
+        <p class="access">
+          Last signed out: <b>{{ p.signed_out }}</b>
+          {% if !p.account_expires_label.is_empty() %}
+            &middot; account expires <b>{{ p.account_expires_label }}</b>
+          {% endif %}
+          {% if !p.invited_label.is_empty() %}
+            &middot; {{ p.invited_label }}
+          {% endif %}
+          {% if !p.trial.is_empty() %}
+            &middot; also holds a trial ({{ p.trial }}), which their account overrides
+          {% endif %}
+        </p>
+        {% if !p.passkeys.is_empty() %}
+        <details class="pw">
+          <summary>Passkeys ({{ p.passkeys.len() }})</summary>
+          <div style="margin-top:.5rem;display:flex;flex-direction:column;gap:.4rem">
+            {% for k in p.passkeys %}
+            <div style="display:flex;align-items:center;gap:.6rem;font-size:.78rem">
+              <span style="flex:1;color:#ece7fb">{{ k.name }}
+                {% if !k.expires_label.is_empty() %}
+                  <span class="tag" style="margin-left:.3rem">expires {{ k.expires_label }}</span>
+                {% endif %}
+              </span>
+              <form method="post" action="{{ base }}/people/passkey-revoke"
+                    onsubmit="return confirm('Revoke passkey &quot;{{ k.name }}&quot; for {{ p.display_name }}? They will need to make a new one to sign in.')">
+                <input type="hidden" name="csrf" value="{{ csrf }}">
+                <input type="hidden" name="email" value="{{ p.email }}">
+                <input type="hidden" name="key_id" value="{{ k.id }}">
+                <button type="submit" style="color:#ffc9c0;border-color:color-mix(in srgb,var(--bad) 50%,transparent)">Revoke</button>
+              </form>
+            </div>
+            {% endfor %}
+          </div>
+        </details>
+        {% endif %}
+        <details class="pw">
+          <summary>{% if p.has_password %}Set a new password{% else %}Set a password{% endif %}</summary>
+          <form method="post" action="{{ base }}/people/password">
+            <input type="hidden" name="csrf" value="{{ csrf }}">
+            <input type="hidden" name="email" value="{{ p.email }}">
+            <div class="row">
+              <input type="password" name="password" autocomplete="new-password"
+                     minlength="{{ min }}" placeholder="new password" required style="flex:1">
+              <input type="password" name="confirm" autocomplete="new-password"
+                     minlength="{{ min }}" placeholder="again" required style="flex:1">
+              <button type="submit">Save</button>
+            </div>
+            {% if !p.owner %}
+            <label class="chk"><input type="checkbox" name="must_change" value="1">
+              Make them choose their own next time they sign in</label>
+            {% endif %}
+          </form>
+        </details>
+        {% if !p.owner %}
+        <details class="pw">
+          <summary>Which pages ({{ p.apps_allowed }}/{{ p.app_checks.len() }})</summary>
+          <form method="post" action="{{ base }}/people/apps">
+            <input type="hidden" name="csrf" value="{{ csrf }}">
+            <input type="hidden" name="email" value="{{ p.email }}">
+
+            <div class="page-scope" data-page-scope>
+              <div class="presets"></div>
+              <div class="page-chips"></div>
+              <button type="button" class="add-page-btn">+ Add page</button>
+              <div class="add-page-panel"></div>
+              <div class="hidden-levels">
+                {% for a in p.app_checks %}
+                <input type="hidden" name="lvl_{{ a.name }}" value="{{ a.level }}" data-app="{{ a.name }}">
+                {% endfor %}
+              </div>
+            </div>
+
+            <label class="row" style="margin-top:.9rem;display:block">
+              <span style="display:block;font-size:.85rem;opacity:.75;margin-bottom:.25rem">
+                Name &mdash; what their page calls them
+              </span>
+              <input type="text" name="name" value="{{ p.name }}" maxlength="40"
+                     placeholder="{% if p.guest %}their label{% else %}{{ p.email }}{% endif %}" autocomplete="off">
+            </label>
+
+            <label class="row" style="margin-top:.9rem;display:block">
+              <span style="display:block;font-size:.85rem;opacity:.75;margin-bottom:.25rem">
+                Start page look &mdash; changes appearance only, never access
+              </span>
+              <select name="theme">
+                {% for t in themes %}
+                <option value="{{ t.key }}"{% if t.key == p.theme %} selected{% endif %}>
+                  {{ t.label }} &mdash; {{ t.blurb }}
+                </option>
+                {% endfor %}
+              </select>
+            </label>
+
+            <div class="row" style="margin-top:.6rem">
+              <button type="submit">Save</button>
+            </div>
+          </form>
+        </details>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </div>
+
+  <footer>
+    Removing somebody, or setting a new password, kills any session they already
+    had on their next click &mdash; which is what makes a six-month sign-in safe to
+    give out. Your own addresses are marked <b>you</b> and have no Remove button.<br>
+    &copy; {{ year }}
+  </footer>
+</div>
+
+<script>
+// Page-access UI (2026-10-30): presets, chips, and a grouped "+ Add page"
+// panel, layered over the real lvl_{app} hidden inputs Askama already
+// renders from common::people::ALL_APPS / p.app_checks. This file never
+// hand-maintains the app UNIVERSE -- it reads whichever hidden inputs
+// exist in each .page-scope, so it can never drift from ALL_APPS. It DOES
+// hand-maintain a small CATEGORY MAP for the "+ Add page" grouping only
+// (a presentation concern with no Rust equivalent); any app missing from
+// GROUPS falls into "Other" automatically rather than disappearing, so a
+// future ALL_APPS addition stays visible even before someone categorizes it.
+//
+// backlog/tickets/todo (2026-10-30): added to common::people::ALL_APPS the
+// same night this UI shipped, specifically so they could be toggled on a
+// per-person basis -- see the ALL_APPS comment in common/src/people.rs for
+// why they were missing before and what else had to change alongside it
+// (Jason's own account needed them added to its apps list, since
+// EXPLICIT_ONLY ignores apps_unrestricted by design).
+(function(){
+  var GROUPS = [
+    {label:'Household', apps:['mama','kitchen','kb','casey','home','looks','find','scratch','study']},
+    {label:'Entertainment', apps:['photos','music','read','audiobookshelf','tribute','studio','engine','connect']},
+    {label:'Documents & Finance', apps:['recipe','pdf','files','paperless','money','homebox']},
+    {label:'Work & Planning', apps:['backlog','tickets','todo','projects','portfolio']},
+    {label:'Admin & Ops', apps:['status','logs','git','tools','portainer','grafana','dashboard','ability','dl','special','grab']}
+  ];
+  function categoryOf(app){
+    for (var i = 0; i < GROUPS.length; i++) {
+      if (GROUPS[i].apps.indexOf(app) !== -1) return GROUPS[i].label;
+    }
+    return 'Other';
+  }
+
+  var PRESETS = {
+    family:    {label:'Family',    pages:{mama:'full',kitchen:'full',recipe:'full',money:'full',files:'view',photos:'full'}},
+    guest:     {label:'Guest',     pages:{kitchen:'view',recipe:'view',scratch:'view',photos:'view'}}
+  };
+
+  function initScope(root){
+    var inputs = Array.prototype.slice.call(root.querySelectorAll('input[type=hidden][data-app]'));
+    var chipsEl = root.querySelector('.page-chips');
+    var panelEl = root.querySelector('.add-page-panel');
+    var addBtn = root.querySelector('.add-page-btn');
+    var presetsEl = root.querySelector('.presets');
+    // The visible "Which pages (N/M)" count, if this scope sits right after
+    // one -- only present on an existing person's panel, not the invite form.
+    var countEl = root.closest('details') ? root.closest('details').querySelector('summary') : null;
+    var countTemplate = countEl ? countEl.textContent : '';
+
+    function byApp(app){
+      for (var i = 0; i < inputs.length; i++) if (inputs[i].dataset.app === app) return inputs[i];
+      return null;
+    }
+    function granted(){
+      return inputs.filter(function(i){ return i.value !== 'none'; }).map(function(i){ return i.dataset.app; });
+    }
+
+    function renderChips(){
+      chipsEl.innerHTML = '';
+      granted().sort().forEach(function(app){
+        var input = byApp(app);
+        var chip = document.createElement('span');
+        chip.className = 'page-chip';
+        var lvl = document.createElement('span');
+        lvl.className = 'lvl ' + input.value;
+        lvl.textContent = input.value;
+        lvl.title = 'Click to switch ' + app + ' to ' + (input.value === 'view' ? 'full' : 'view');
+        lvl.addEventListener('click', function(){
+          input.value = input.value === 'view' ? 'full' : 'view';
+          renderChips(); renderPanel();
+        });
+        chip.appendChild(document.createTextNode(app + ' '));
+        chip.appendChild(lvl);
+        var x = document.createElement('button');
+        x.type = 'button'; x.className = 'x'; x.textContent = '×';
+        x.title = 'Remove ' + app;
+        x.addEventListener('click', function(){
+          input.value = 'none';
+          renderChips(); renderPanel();
+        });
+        chip.appendChild(x);
+        chipsEl.appendChild(chip);
+      });
+      if (countEl && /^Which pages \(/.test(countTemplate)) {
+        countEl.textContent = 'Which pages (' + granted().length + '/' + inputs.length + ')';
+      }
+    }
+
+    function renderPanel(){
+      panelEl.innerHTML = '';
+      var remaining = inputs.filter(function(i){ return i.value === 'none'; });
+      var byGroup = {};
+      remaining.forEach(function(i){
+        var cat = categoryOf(i.dataset.app);
+        (byGroup[cat] = byGroup[cat] || []).push(i);
+      });
+      var order = GROUPS.map(function(g){ return g.label; }).concat(['Other']);
+      order.forEach(function(label){
+        var list = byGroup[label];
+        if (!list || !list.length) return;
+        var wrap = document.createElement('div');
+        wrap.className = 'avail-group';
+        var lab = document.createElement('div');
+        lab.className = 'avail-group-label';
+        lab.textContent = label;
+        wrap.appendChild(lab);
+        var items = document.createElement('div');
+        items.className = 'avail-group-items';
+        list.forEach(function(input){
+          var chip = document.createElement('span');
+          chip.className = 'avail-chip';
+          chip.appendChild(document.createTextNode(input.dataset.app));
+          ['view','full'].forEach(function(lvl){
+            var b = document.createElement('button');
+            b.type = 'button'; b.className = lvl; b.textContent = lvl;
+            b.addEventListener('click', function(){
+              input.value = lvl;
+              renderChips(); renderPanel();
+            });
+            chip.appendChild(b);
+          });
+          items.appendChild(chip);
+        });
+        wrap.appendChild(items);
+        panelEl.appendChild(wrap);
+      });
+    }
+
+    Object.keys(PRESETS).forEach(function(key){
+      var btn = document.createElement('button');
+      btn.type = 'button'; btn.className = 'preset-chip';
+      btn.textContent = PRESETS[key].label;
+      btn.addEventListener('click', function(){
+        var pages = PRESETS[key].pages;
+        inputs.forEach(function(i){ i.value = pages[i.dataset.app] || 'none'; });
+        presetsEl.querySelectorAll('.preset-chip').forEach(function(b){ b.classList.remove('active'); });
+        btn.classList.add('active');
+        renderChips(); renderPanel();
+      });
+      presetsEl.appendChild(btn);
+    });
+
+    addBtn.addEventListener('click', function(){ panelEl.classList.toggle('open'); });
+
+    renderChips();
+    renderPanel();
+  }
+
+  document.querySelectorAll('[data-page-scope]').forEach(initScope);
+})();
+</script>
+</body>
+</html>

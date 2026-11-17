@@ -1,0 +1,479 @@
+# =============================================================================
+#  THE ROUTER. This file is the whole point of the stack.
+#
+#  `model_name` is a JOB, not a model. Open WebUI, Hermes and Telegram all ask
+#  for a job name ("coding", "reasoning", "fast"). You decide here what actually
+#  answers it. Swap the model under a job and every surface changes at once --
+#  no code edits, no reconfiguring three apps.
+#
+#  TUNED FOR AN RTX 4070 (12GB).
+#  Rough VRAM cost at Q4 (Ollama's default quantisation):
+#      3B  ~ 2 GB      8B  ~ 5 GB      14B ~ 9 GB      32B ~ 20 GB
+#
+#  IMPORTANT: on a 12GB card you do NOT have 12GB. Windows' desktop compositor,
+#  your browser, and Docker Desktop itself hold 1-1.5GB before Ollama loads
+#  anything. The usable budget is ~10.5GB.
+#
+#  So the default pairing here is 8B + 3B (~7GB resident), which leaves real
+#  headroom. A 14B model DOES fit a 4070, but only on its own -- see the
+#  "going bigger" note at the bottom of this file.
+#
+#  After editing:  Docker Desktop -> Containers -> litellm -> Restart
+#  (or: docker compose restart litellm)
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+#  NINE OF THE NAMES BELOW ARE ONE MODEL.
+#
+#  fast, chat, coding, reasoning, long-context, big-context, vision, mama and
+#  phone all resolve to gemma4:12b. What differs between them is thinking
+#  on/off, num_ctx, and nothing else. `ollama list` on this box has exactly
+#  two models in it: gemma4:12b and nomic-embed-text.
+#
+#  THE NAMES STAY ANYWAY, and that is deliberate. They are a published
+#  interface -- 41 files ask for `fast`, 22 for `chat`, 17 for `phone` --
+#  so collapsing the list would break working code to tidy a menu. What was
+#  actually wrong is that each description named the model that used to
+#  answer it, so the list read as a choice between a 3B and a 14B. Fixed
+#  2026-09-22: every description now says which model really answers.
+#
+#  If a second model is ever installed, `reasoning` and `vision` are the two
+#  names that would earn their own -- they are the two whose callers expect
+#  something gemma4 is only adequate at.
+# -----------------------------------------------------------------------------
+model_list:
+
+  # --- quick/cheap: short turns, summaries, routing decisions ---------------
+  # Always resident. ~2 GB. This is what makes the stack feel instant.
+  - model_name: fast
+    litellm_params:
+      # Consolidated onto the one generalist 2026-09-13, now that
+      # eviction works. See the `chat` route for the benchmark.
+      # NOTE: this was llama3.2:3b, the near-instant model behind the phone
+      # line. gemma4 is the better answer and the slower one; if a call
+      # ever feels laggy, this single line is what to put back.
+      model: ollama_chat/gemma4:12b
+      think: false
+      api_base: http://ollama:11434
+    model_info:
+      description: gemma4:12b (7.6 GB), thinking off. Short turns, summaries, routing.
+
+  # --- everyday conversation ------------------------------------------------
+  - model_name: chat
+    litellm_params:
+      # gemma4:12b, 2026-09-13: passed instr/reason/tools/vision where
+      # the incumbents each failed at least one. 256K context, 7.6 GB.
+      model: ollama_chat/gemma4:12b
+      api_base: http://ollama:11434
+      # THINKING OFF. gemma4 reasons before answering, and with a modest
+      # max_tokens it spends the whole budget thinking and returns an
+      # EMPTY string with HTTP 200 -- a failure shaped like an empty
+      # result rather than an error. Measured 2026-09-13: 300 tokens and
+      # no answer with thinking on; 45 tokens and a correct answer off.
+      think: false
+    model_info:
+      description: gemma4:12b (7.6 GB), thinking off. General conversation. The default.
+
+  # --- writing code, reading diffs, refactors -------------------------------
+  # 7B so it can stay resident alongside `fast`. The 14B coder is genuinely
+  # better and does fit a 4070 -- but only alone. See the note at the bottom.
+  - model_name: coding
+    litellm_params:
+      # Consolidated onto the one generalist 2026-09-13, now that
+      # eviction works. See the `chat` route for the benchmark.
+      model: ollama_chat/gemma4:12b
+      think: false
+      api_base: http://ollama:11434
+    model_info:
+      description: gemma4:12b (7.6 GB), thinking off. Code and diffs -- same model as chat.
+
+  # --- documenting source files in the background ---------------------------
+  # Added 2026-10-31. A JOB of its own, deliberately NOT a change to `coding`:
+  # this model is 18 GB (the 30B mixture-of-experts with ~3B active, spilling
+  # past the 4070's 12 GB into RAM), so keeping it resident would push `fast`
+  # and `chat` out and make every ordinary call reload. It loads for a backfill
+  # run and leaves after 5 minutes idle.
+  # WHY THIS MODEL: trialled against gemma4:12b and phi4 on 9 real files
+  # (D:\ai-doc-trial, report in /documents/ "Local AI doc trial"). qwen3-coder:
+  # 0 invented names on 8 of 9, followed the required format every time, 13-49 s
+  # per file. gemma4:12b wrote 760-1,430 words per file and invented names;
+  # phi4 was close but wrapped answers in code fences and once invented a title.
+  # KNOWN WEAKNESS: it said "no side effects" for a script that pulls an image
+  # and starts containers. Its output is a first draft, never merged unreviewed.
+  # `qwen3-coder-16k` is the same weights with a 16K context window baked in
+  # (made with `ollama create` and a one-line Modelfile); the default window can
+  # silently cut a long file short. Temperature is low on purpose: this is
+  # summarising, not brainstorming.
+  - model_name: docs
+    litellm_params:
+      model: ollama_chat/qwen3-coder-16k
+      api_base: http://ollama:11434
+      temperature: 0.2
+      keep_alive: 5m
+    model_info:
+      description: qwen3-coder 30B-A3B (18 GB, 16K context). Writes per-file documentation drafts. Slow to load, loads only for backfill runs.
+
+  # --- multi-step thinking, planning, hard problems -------------------------
+  - model_name: reasoning
+    litellm_params:
+      # gemma4:12b, 2026-09-13: passed instr/reason/tools/vision where
+      # the incumbents each failed at least one. 256K context, 7.6 GB.
+      model: ollama_chat/gemma4:12b
+      api_base: http://ollama:11434
+      # alternative with visible chain-of-thought:
+      # model: ollama_chat/deepseek-r1:8b
+    model_info:
+      description: gemma4:12b (7.6 GB), THINKING ON -- the only route where it is. Slower, and can return an empty string if max_tokens is small.
+
+  # --- big documents / long chat history, recipe/KB parsing ------------------
+  # 32k of context costs several GB of KV cache ON TOP of the weights, which is
+  # why this is the one route that should run alone.
+  #
+  # WAS qwen2.5:7b, then briefly qwen2.5:14b, now Phi-4 -- Jason's own
+  # sequence (2026-08-24): asked for "a bigger model... that can fit on
+  # my card" for recipe/KB parsing specifically (both point at this exact
+  # job -- Kitchen's core.py and kb/writer.py's own KB_MODEL_JOB, same
+  # default), then asked to compare Phi-4 against the qwen2.5:14b upgrade
+  # already wired in, then chose Phi-4 for THIS job while keeping
+  # qwen2.5:14b around as its own separate job (`big-context`, below) for
+  # whatever else it's wanted for -- explicitly not deleted.
+  #
+  # CONFIRMED LIVE before switching, same discipline as the qwen swap:
+  # Phi-4 (Microsoft, 14.7B, Q4_K_M) returned clean, valid JSON on the
+  # first try against a real extraction prompt, loaded at 100% GPU with
+  # no CPU spillover, comparable speed (~16s) to qwen2.5:14b's warm runs.
+  # Real native max context is 16384 (`ollama show phi4`), not 32k.
+  #
+  # num_ctx=8192, same reasoning as the qwen2.5:14b entry this replaced:
+  # Phi-4's weights are ~9.7GB, slightly MORE than qwen2.5:14b's 9.0GB, so
+  # if anything there is LESS headroom for KV cache here, not more --
+  # 8192 was the value already confirmed to keep the smaller model
+  # comfortably under the ~10.5GB usable budget, so it is the conservative
+  # starting point here too, not assumed safe by analogy alone.
+  #
+  # Fits alone, only, same as before -- automatic evict-and-restore around
+  # every call to this job (Kitchen/app/vram.py's parsing(), PARSE_MODEL
+  # updated to match).
+  - model_name: long-context
+    litellm_params:
+      # phi4 at num_ctx 8192 was "long" only by comparison. gemma4:12b is
+      # a 256K-context model; 32768 is a conservative window that still
+      # leaves the card room for TTS beside it. Raise it if a job needs
+      # more -- the model is not the limit here, VRAM is.
+      model: ollama_chat/gemma4:12b
+      api_base: http://ollama:11434
+      num_ctx: 32768
+      # THINKING OFF. gemma4 reasons before answering, and with a modest
+      # max_tokens it spends the whole budget thinking and returns an
+      # EMPTY string with HTTP 200 -- a failure shaped like an empty
+      # result rather than an error. Measured 2026-09-13: 300 tokens and
+      # no answer with thinking on; 45 tokens and a correct answer off.
+      think: false
+    model_info:
+      description: gemma4:12b (7.6 GB) at num_ctx 32768, thinking off. Recipe and KB parsing.
+
+  # --- kept available, not currently called by anything ----------------------
+  # qwen2.5:14b, preserved as its own job rather than deleted when
+  # `long-context` moved to Phi-4 above -- Jason's own words: "keep qwen...
+  # it has other uses in my codebase." Nothing currently points at this
+  # job name; it exists so the model stays pulled and reachable the
+  # moment something does.
+  - model_name: big-context
+    litellm_params:
+      model: ollama_chat/gemma4:12b
+      api_base: http://ollama:11434
+      num_ctx: 32768
+      # THINKING OFF. gemma4 reasons before answering, and with a modest
+      # max_tokens it spends the whole budget thinking and returns an
+      # EMPTY string with HTTP 200 -- a failure shaped like an empty
+      # result rather than an error. Measured 2026-09-13: 300 tokens and
+      # no answer with thinking on; 45 tokens and a correct answer off.
+      think: false
+    model_info:
+      description: gemma4:12b (7.6 GB) at num_ctx 32768, thinking off. Identical to long-context; kept because two callers use this name.
+
+  # --- images (vision) ---------------------------------------------------------
+  #
+  # WAS llama3.2-vision:11b. CAUGHT LIVE (2026-08-24): that model's manifest
+  # looks completely normal (`ollama show` reports a real mllama/10.7B/vision
+  # entry), but Ollama's actual runtime on this machine cannot load it at
+  # all -- "error loading model: unknown model architecture: 'mllama'",
+  # a hard crash, every single time, survives a full container restart. Not
+  # a Kitchen bug and not a config mistake; this specific Ollama build's
+  # backend does not support that architecture, full stop.
+  #
+  # Switched to qwen3-vl:8b instead -- pulled and smoke-tested live against
+  # this exact machine (asked to name the color of a plain red square,
+  # answered "red"), so this entry is not a repeat of the same mistake. Also
+  # smaller (6.1GB vs 7.8GB), which matters for the eviction toggle in
+  # Kitchen's own admin page (see handoff below) -- more headroom left over
+  # once this is the only thing loaded.
+  #
+  #   card total        12.3 GB
+  #   Windows holds    -1.5 GB   desktop compositor, browser
+  #   usable           ~10.5 GB
+  #   this model         6.1 GB   + KV cache
+  #   left over          ~4 GB   real headroom, unlike the old 7.8GB model
+  #
+  # ENABLED, OWNER-ONLY. /mama already accepts a photo of an error message,
+  # and the KB importer can describe a screenshot rather than guessing from
+  # alt text. Kitchen's own admin toggle (Jason only, see main.py) explicitly
+  # evicts everything else before turning this on, and evicts this before
+  # turning it back off -- see the eviction mechanism note in
+  # TANDOOR_MIGRATION_STATUS.md (POST /api/generate {"keep_alive":0},
+  # confirmed live to unload a model immediately).
+  - model_name: vision
+    litellm_params:
+      # WAS qwen3-vl:8b, which returned an EMPTY reply when handed a real
+      # photo from the library on 2026-09-13 -- the failure mode that looks
+      # like the caller's bug. gemma4:12b described the same image
+      # correctly. Silence is the worst answer a vision route can give.
+      model: ollama_chat/gemma4:12b
+      api_base: http://ollama:11434
+      # THINKING OFF. gemma4 reasons before answering, and with a modest
+      # max_tokens it spends the whole budget thinking and returns an
+      # EMPTY string with HTTP 200 -- a failure shaped like an empty
+      # result rather than an error. Measured 2026-09-13: 300 tokens and
+      # no answer with thinking on; 45 tokens and a correct answer off.
+      think: false
+    model_info:
+      description: gemma4:12b (7.6 GB), thinking off. Images -- gemma4 is multimodal; there is no separate vision model installed.
+
+  # --- Mama's answers -------------------------------------------------------
+  #  A job of her own rather than reusing `chat`, because the requirement is
+  #  different: this one is read by somebody who cannot easily tell a confident
+  #  wrong answer from a right one, so it wants the most RELIABLE model rather
+  #  than the cleverest.
+  #
+  #  NOT qwen3:8b, which `chat` points at. qwen3 is a THINKING model: asked for
+  #  JSON it spends its budget reasoning and returns an EMPTY reply -- measured
+  #  here at both 200 and 900 max_tokens. /mama classifies, documents and
+  #  labels in JSON constantly, and an empty reply there is a lost ticket.
+  - model_name: mama
+    litellm_params:
+      # Consolidated onto the one generalist 2026-09-13, now that
+      # eviction works. See the `chat` route for the benchmark.
+      model: ollama_chat/gemma4:12b
+      think: false
+      api_base: http://ollama:11434
+      num_ctx: 8192
+    model_info:
+      description: gemma4:12b (7.6 GB) at num_ctx 8192, thinking off. Answers Mama and survives JSON.
+
+  # --- the phone line ------------------------------------------------------
+  # 7B is the sweet spot here. A 3B is faster but unreliable at tool calling,
+  # and on this line a botched tool call means a missed booking. On a 4070 with
+  # nothing else competing, qwen2.5:7b answers fast enough for a phone call.
+  #
+  # If callers complain about pauses, drop to llama3.2:3b and accept a simpler
+  # conversation. If it books wrongly, this is the first thing to make bigger.
+  - model_name: phone
+    litellm_params:
+      # Consolidated onto the one generalist 2026-09-13, now that
+      # eviction works. See the `chat` route for the benchmark.
+      model: ollama_chat/gemma4:12b
+      think: false
+      api_base: http://ollama:11434
+      num_ctx: 8192
+    model_info:
+      description: gemma4:12b (7.6 GB) at num_ctx 8192, thinking off. The phone line's tool calls.
+
+  # --- embeddings (document search / RAG in Open WebUI) ---------------------
+  # --- the big local model: 552B streamed from NVMe -------------------------
+  # colibri serves an OpenAI-compatible API, so it slots in here like any
+  # other provider and nothing else in the stack changes -- comparing it
+  # against gemma4 on real work is a one-word switch in the request.
+  #
+  # NOT IN ANY FALLBACK CHAIN, deliberately. At ~0.9 tokens/sec a 300-token
+  # answer takes five minutes. That is a fine trade when you ASK for it and
+  # a terrible surprise for the phone line, so nothing falls back to it:
+  # you get it by naming it.
+  #
+  # api_key is a placeholder because colibri does not check one; LiteLLM
+  # refuses to start a block with an empty key, so it needs a value.
+  - model_name: big-local
+    litellm_params:
+      model: openai/deepseek-v4.1-flash-colibri
+      api_base: http://colibri:5000/v1
+      api_key: "not-checked-by-colibri"
+      # Generous: this model thinks slowly and being cut off mid-answer
+      # after five minutes of work is the worst possible outcome.
+      timeout: 1800
+    model_info:
+      description: >-
+        DeepSeek V4.1 Flash, 552B (16B active), streamed from NVMe by
+        colibri. Vision and tool calling. ~0.9 tok/s -- ask it hard
+        questions, not quick ones.
+
+  - model_name: embed
+    litellm_params:
+      model: ollama/nomic-embed-text
+      api_base: http://ollama:11434
+
+  # ---------------------------------------------------------------------------
+  #  OPTIONAL CLOUD ESCALATION
+  #  Uncomment a block only AFTER putting the matching key in .env.
+  #  LiteLLM refuses to start if a block references a key that isn't set.
+  # ---------------------------------------------------------------------------
+
+  # --- the escalation ------------------------------------------------------
+  #  THE ONE ROUTE THAT LEAVES THIS HOUSE.
+  #
+  #  Everything above runs on the 4070 and nothing it sees goes anywhere. This
+  #  does: a question routed here is sent to Anthropic. It is here because a
+  #  7B model genuinely cannot hold six knowledge-base articles in mind at
+  #  once and write one coherent guide from them, and that is a real job.
+  #
+  #  IT IS COMMENTED IN, NOT ON. LiteLLM refuses to START if a block names a
+  #  key that is not set -- so with ANTHROPIC_API_KEY empty this line would
+  #  take the whole router down, and with it the phone line. Uncomment the
+  #  four lines below only after putting a key in .env.
+  #
+  #  The landing page used to say nothing here touches a cloud service. That
+  #  sentence has been changed rather than left to go stale.
+  #  ENABLED 2026-09-13. Jason: "my claude key is included in the .env i
+  #  want to use this to refine things that rely on local and use a cloud
+  #  model til the gemini and claude api are dry."
+  #
+  #  Both keys verified against the provider before uncommenting -- the
+  #  warning above is real, LiteLLM will not start if a block names a key
+  #  that is empty, and that takes the phone line down with it.
+  #  claude-sonnet-5, claude-sonnet-4-5 and claude-haiku-4-5 all returned
+  #  200 on this key; sonnet-5 is the current one.
+  #
+  #  cloud-fast STAYS COMMENTED: OPENAI_API_KEY is empty. Uncomment it
+  #  only after putting a key in .env, or the router will not boot.
+  #
+  #  "Til they are dry" is handled by router_settings.fallbacks at the
+  #  bottom of this file, not by anything here: when a cloud model returns
+  #  429 or 401 -- quota exhausted, key revoked -- the request is retried
+  #  against the local model instead of failing. Nothing that depends on
+  #  these goes down when the credit runs out; it just gets quieter.
+  - model_name: cloud-smart
+    litellm_params:
+      model: anthropic/claude-sonnet-5
+      api_key: os.environ/ANTHROPIC_API_KEY
+      # THE CEILING. rpm/tpm are enforced in-process per request and need
+      # no database, which makes them the limit that actually holds. A
+      # runaway loop -- a retry storm, a workflow that fans out, an agent
+      # that will not stop -- hits this and gets queued or falls back to
+      # the local model, instead of spending the month's credit in an
+      # afternoon.
+      #
+      # 10 requests and 100k tokens a minute is roughly "a person using
+      # it", not "a machine hammering it". Raise it deliberately if a
+      # real job needs more; do not raise it to make an error go away.
+      rpm: 10
+      tpm: 100000
+
+  # - model_name: cloud-fast
+  #   litellm_params:
+  #     model: openai/gpt-4.1-mini
+  #     api_key: os.environ/OPENAI_API_KEY
+
+  - model_name: cloud-vision
+    litellm_params:
+      # gemini-3.6-flash, not 2.5. Google returns a 404 for 2.5 on this
+      # key -- "no longer available to new users ... use
+      # models/gemini-3.6-flash" -- and 3.8-flash answered 503, so 3.6 is
+      # the current one that actually serves. Checked against the API,
+      # not assumed from a docs page.
+      model: gemini/gemini-3.6-flash
+      api_key: os.environ/GEMINI_API_KEY
+      # Higher than cloud-smart: Gemini Flash is far cheaper per token and
+      # vision calls carry big images.
+      rpm: 15
+      tpm: 200000
+
+# =============================================================================
+
+litellm_settings:
+  # SPEND CEILING. $25 per rolling 30 days across every model.
+  #
+  # An earlier version of this comment said the counter was in-memory and
+  # reset on restart. That was wrong: this stack DOES run a database for
+  # LiteLLM (the litellm_db container, Prisma), so spend is persisted and
+  # the 30-day window survives restarts. Corrected 2026-09-13 after
+  # watching the proxy connect to it on boot.
+  #
+  # The rpm/tpm limits on each cloud model above are still the harder
+  # stop -- they are enforced per request and cannot be outrun -- but
+  # this ceiling is real, not decorative.
+  #
+  # Check what has actually been spent against the provider, not here:
+  #   console.anthropic.com -> Usage      (authoritative)
+  #   aistudio.google.com   -> quota
+  # or locally, since the last restart:
+  #   curl -s localhost:4000/metrics | grep litellm_spend
+  max_budget: 25.0
+  budget_duration: 30d
+  drop_params: true            # silently drop params a local model doesn't know
+  set_verbose: false
+  request_timeout: 600         # 14B on a mid GPU can take a while on long output
+  json_logs: true
+  num_retries: 2
+  # Per-request counters and latency, in Prometheus text format at /metrics.
+  # This is NOT the database the note below still refuses -- no postgres, no
+  # volume, nothing persisted to disk. It's an in-memory counter the process
+  # already tracks, just handed out as text instead of thrown away. This is
+  # what /usage, /graph and Hermes's /system all read for "usage by model".
+  #
+  # THE KEY IS `callbacks`, NOT `success_callback`. This was `success_callback`
+  # and that silently did nothing: success_callback is the hook for logging
+  # each completed call to somewhere, while `callbacks` is what actually
+  # registers the Prometheus exporter that serves /metrics. Wrong key = no
+  # error, no warning, just an endpoint that never has any litellm_* numbers
+  # in it. Confirmed against LiteLLM's own docs:
+  #   https://docs.litellm.ai/docs/proxy/prometheus
+  #
+  # No enterprise licence is needed for this -- it's in the open-source build.
+  callbacks: ["prometheus"]
+
+router_settings:
+  routing_strategy: simple-shuffle
+  # If a job's model won't load -- usually out of VRAM -- fall down this chain
+  # instead of throwing an error at whoever asked. On a 12GB card this is what
+  # stops a bad day from looking like a broken stack.
+  fallbacks:
+    - reasoning: ["chat", "fast"]
+    - coding: ["chat", "fast"]
+    - long-context: ["chat"]
+    - vision: ["chat"]
+    - chat: ["fast"]
+    # WHEN THE CLOUD RUNS DRY, FALL BACK TO THE GPU DOWNSTAIRS.
+    #
+    # Enabled 2026-09-13 with the cloud blocks above. A 429 (quota gone)
+    # or 401 (key revoked) from Anthropic or Google retries the same
+    # request against the local model instead of returning an error. So
+    # "use the cloud until it is dry" is literally what happens: every
+    # call goes out while there is credit, and the day there is not, the
+    # same call is answered by Ollama, with no code change anywhere and
+    # nothing visibly broken -- it just gets quieter.
+    - cloud-smart: ["reasoning", "chat"]
+    - cloud-vision: ["vision", "chat"]
+  allowed_fails: 2
+  cooldown_time: 30
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  # No database on purpose -- that would mean a postgres container and a volume
+  # to babysit. You lose the spend dashboard, you keep a stack that fits in your
+  # head.
+
+# =============================================================================
+#  GOING BIGGER ON A 4070
+#
+#  A 14B model does fit 12GB, but only as the single resident model. If you
+#  want qwen2.5-coder:14b for real work:
+#
+#    1. .env  ->  OLLAMA_MAX_LOADED_MODELS=1
+#    2. .env  ->  TTS_DEVICE=cpu        (stop the voice model competing)
+#    3. point the `coding` route at ollama_chat/qwen2.5-coder:14b
+#    4. docker compose exec ollama ollama pull qwen2.5-coder:14b
+#    5. docker compose restart litellm
+#
+#  The tradeoff: with only one model resident, every switch between `coding`
+#  and `fast` evicts and reloads, which costs 5-15 seconds. Fine for a long
+#  coding session on one route. Annoying if you hop routes constantly, and
+#  actively bad if the phone agent is sharing this GPU.
+# =============================================================================

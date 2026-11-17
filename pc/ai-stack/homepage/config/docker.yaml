@@ -1,0 +1,1 @@
+# Deliberately empty: the docker socket is root, and a wall does not need root.

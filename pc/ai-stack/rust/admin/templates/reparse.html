@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#050a12">
+<meta name="robots" content="noindex, nofollow">
+<title>Re-parse &middot; admin</title>
+<link rel="stylesheet" href="/theme.css">
+<style>
+  body{--accent:#e8c26a}
+  table.backlog{width:100%;border-collapse:collapse;margin-top:.7rem}
+  table.backlog th{text-align:left;font-size:.72rem;text-transform:uppercase;
+    letter-spacing:.05em;color:var(--muted);padding:.4rem .5rem;border-bottom:1px solid var(--line)}
+  table.backlog td{padding:.5rem .5rem;border-bottom:1px solid var(--line);
+    font-size:.88rem;vertical-align:middle}
+  table.backlog tr:last-child td{border-bottom:0}
+  .done{color:var(--ok)}
+  .undone{color:var(--muted)}
+  .pill{font-size:.68rem;text-transform:uppercase;letter-spacing:.05em;
+    border-radius:99px;padding:.15rem .55rem;border:1px solid currentColor}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="{{ base }}/">&larr; all sites</a>
+
+  <h1>Re-parse from source</h1>
+  <p class="sub">Re-reads each recipe's original link with Phi-4 instead of
+    however it was first imported, then makes the steps more detailed and
+    converts measurements to imperial -- fixes thin, single-paragraph
+    recipes into real, followable steps. Never invents a quantity, time
+    or temperature the recipe didn't already state. A recipe with no
+    source link (typed or pasted in by hand) has nothing to re-fetch, so
+    it gets "Add detail" instead -- same detail/imperial pass, run on
+    what's already there. One at a time, on purpose: each button is a
+    real fetch and/or a real model call, so it takes a few seconds to a
+    minute. Step pictures aren't carried over automatically afterward
+    (the old ones don't line up with new steps) -- use "Draw step
+    pictures" to fill them back in; that button frees whatever Ollama
+    has loaded first, on its own, so the drawing model always has room.</p>
+
+  {% if !flash.is_empty() %}
+    <p class="note {% if flash_ok %}ok{% else %}bad{% endif %}">{{ flash }}</p>
+  {% endif %}
+
+  <div class="panel">
+    <h2>{{ done_count }} of {{ total }} done</h2>
+    <div style="overflow-x:auto">
+    <table class="backlog">
+      <tr><th>Recipe</th><th>Status</th><th></th></tr>
+      {% for r in rows %}
+      <tr>
+        <td>{{ r.title }}</td>
+        <td>
+          {% if r.done %}
+            <span class="pill done">done</span>
+          {% else %}
+            <span class="pill undone">not yet</span>
+          {% endif %}
+        </td>
+        <td>
+          <form method="post" action="{{ base }}/reparse/one">
+            <input type="hidden" name="csrf" value="{{ csrf }}">
+            <input type="hidden" name="id" value="{{ r.tandoor_id }}">
+            <button type="submit" class="small {% if r.done %}ghost{% endif %}">
+              {% if !r.has_source %}
+                {% if r.done %}Add detail again{% else %}Add detail{% endif %}
+              {% else %}
+                {% if r.done %}Re-parse again{% else %}Re-parse{% endif %}
+              {% endif %}
+            </button>
+          </form>
+          {% if !r.has_source %}
+            <p class="sub" style="margin:.3rem 0 0;font-size:.72rem">No source link &mdash; typed or pasted in</p>
+          {% endif %}
+          <form method="post" action="{{ base }}/reparse/draw" style="margin-top:.3rem">
+            <input type="hidden" name="csrf" value="{{ csrf }}">
+            <input type="hidden" name="id" value="{{ r.tandoor_id }}">
+            <button type="submit" class="small ghost">Draw step pictures</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
+    </div>
+  </div>
+
+  <footer>
+    &copy; {{ year }}
+  </footer>
+</div>
+</body>
+</html>

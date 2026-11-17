@@ -1,0 +1,8 @@
+# Names that look like typos but are deliberate (2026-10-31).
+[default.extend-words]
+# Real folder name on Jason's PC: "Office Offical 2019".
+offical = "offical"
+# Variable name in scripts/doc_backfill.py (regex for secret-shaped strings).
+SECRETY = "SECRETY"
+# "ba" in a generated doc is a variable fragment, not prose.
+ba = "ba"

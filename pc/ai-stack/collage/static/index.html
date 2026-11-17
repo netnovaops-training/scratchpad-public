@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<meta name="robots" content="noindex,nofollow">
+<title>The Wall</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,600&family=IBM+Plex+Sans:wght@400;500&display=swap">
+<style>
+/* =====================================================================
+   BLACK, BECAUSE THE PHOTOGRAPHS ARE THE LIGHT.
+   Jason asked for a black background and it is also the right one: these
+   are photographs of a physical collage, every one a different age, paper
+   and exposure. On any tint they fight the page and each other. On black
+   they stop being a grid of rectangles and become lit objects, which is
+   what they are on the wall.
+   ===================================================================== */
+:root{
+  --ink:#f2efe9;          /* warm off-white, not #fff: paper, not screen */
+  --dim:#8d867c;
+  --ground:#000;
+  --lift:#131211;         /* the barely-there card under a photo */
+  --edge:rgba(242,239,233,.13);
+  --warm:#d9a441;         /* the one accent: lamplight, kitchen, brass */
+  --gap:18px;             /* the even spacing, named once */
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0;background:var(--ground)}
+body{
+  color:var(--ink);
+  font:400 16px/1.55 "IBM Plex Sans",ui-sans-serif,-apple-system,"Segoe UI",Roboto,sans-serif;
+  -webkit-font-smoothing:antialiased;
+  /* The wall runs off the bottom of the phone; nothing should sit under
+     the home indicator. */
+  padding:0 0 calc(28px + env(safe-area-inset-bottom));
+}
+
+header{
+  padding:calc(22px + env(safe-area-inset-top)) 20px 14px;
+  display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;
+}
+h1{
+  margin:0;font-family:"Fraunces",Georgia,serif;font-weight:300;
+  font-size:clamp(1.5rem,6vw,2rem);letter-spacing:-.01em;
+}
+.count{color:var(--dim);font-size:.82rem}
+.who{margin-left:auto;color:var(--warm);font-size:.74rem;
+  letter-spacing:.08em;text-transform:uppercase}
+
+/* --- the wall ------------------------------------------------------- */
+/* One column, always. This is a wall read top to bottom on a phone; a
+   responsive grid would reflow the ORDER, and the order is the entire
+   point of the thing. */
+#wall{display:flex;flex-direction:column;gap:var(--gap);padding:0 var(--gap)}
+figure{margin:0;position:relative;background:var(--lift);
+  border:1px solid var(--edge);border-radius:14px;overflow:hidden}
+figure img{display:block;width:100%;height:auto;cursor:zoom-in}
+/* Nothing has loaded yet and the page should not jump when it does. */
+figure img[data-loading]{min-height:40vh;background:#0c0b0a}
+
+/* --- edit mode ------------------------------------------------------ */
+/* ARROWS, NOT DRAG. Dragging to reorder on a phone fights the scroll --
+   you are already dragging to move down the page -- and a mis-drag on
+   somebody's family wall is a silent mistake. Two buttons per row behave
+   exactly like a table, which is what Jason asked for. */
+.tools{display:none;gap:8px;align-items:center;
+  padding:9px 11px;background:rgba(0,0,0,.55);
+  border-top:1px solid var(--edge)}
+body.editing .tools{display:flex}
+.tools button{
+  font:inherit;font-size:.9rem;min-width:52px;min-height:44px;   /* thumbs */
+  color:var(--ink);background:#1c1a18;border:1px solid var(--edge);
+  border-radius:9px;cursor:pointer}
+.tools button:active{background:#282522}
+.tools button:disabled{opacity:.3;cursor:default}
+.tools .pos{margin-left:auto;color:var(--dim);font-size:.78rem;
+  font-variant-numeric:tabular-nums}
+.tools .rm{color:#e0897c;border-color:rgba(224,137,124,.3)}
+
+/* --- the bar -------------------------------------------------------- */
+#bar{position:fixed;left:0;right:0;bottom:0;z-index:30;
+  display:flex;gap:10px;align-items:center;
+  padding:10px 14px calc(10px + env(safe-area-inset-bottom));
+  background:rgba(0,0,0,.86);backdrop-filter:blur(9px);
+  border-top:1px solid var(--edge)}
+#bar.hidden{display:none}
+#bar button,#bar label{
+  font:inherit;font-size:.9rem;min-height:44px;padding:0 15px;
+  display:inline-flex;align-items:center;border-radius:10px;cursor:pointer;
+  background:#1c1a18;color:var(--ink);border:1px solid var(--edge)}
+#bar .primary{background:var(--warm);color:#1a1205;border-color:transparent;
+  font-weight:500}
+#bar .grow{margin-left:auto;color:var(--dim);font-size:.78rem;border:0;
+  background:none;padding:0}
+input[type=file]{display:none}
+
+/* --- the viewer ----------------------------------------------------- */
+/* Its own layer, black, no chrome. Pinch is the browser's own gesture
+   inside this scroller -- a hand-written pinch handler is worse than the
+   one every phone already has, and this is the arrangement that lets the
+   real one work. */
+#viewer{position:fixed;inset:0;z-index:50;display:none;background:#000;
+  overflow:auto;-webkit-overflow-scrolling:touch;touch-action:pinch-zoom}
+#viewer.show{display:block}
+#viewer img{display:block;width:100%;height:auto;margin:auto;
+  min-height:100%;object-fit:contain}
+#close{position:fixed;top:calc(10px + env(safe-area-inset-top));right:12px;
+  z-index:51;width:46px;height:46px;border-radius:50%;
+  background:rgba(0,0,0,.6);color:var(--ink);border:1px solid var(--edge);
+  font-size:1.2rem;line-height:1;cursor:pointer}
+#hint{position:fixed;left:0;right:0;bottom:calc(16px + env(safe-area-inset-bottom));
+  z-index:51;text-align:center;color:var(--dim);font-size:.78rem;
+  pointer-events:none;transition:opacity .5s}
+
+.empty{padding:16vh 26px;text-align:center;color:var(--dim)}
+.empty strong{display:block;color:var(--ink);font-family:"Fraunces",Georgia,serif;
+  font-weight:300;font-size:1.3rem;margin-bottom:8px}
+#say{position:fixed;left:50%;transform:translateX(-50%);
+  bottom:calc(74px + env(safe-area-inset-bottom));z-index:40;
+  background:#1c1a18;border:1px solid var(--edge);border-radius:10px;
+  padding:9px 15px;font-size:.86rem;opacity:0;transition:opacity .25s;
+  pointer-events:none;max-width:88vw}
+#say.show{opacity:1}
+
+@media (prefers-reduced-motion: reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>The Wall</h1>
+  <span class="count" id="count"></span>
+  <span class="who" id="who"></span>
+</header>
+
+<div id="wall"></div>
+<div class="empty" id="empty" hidden>
+  <strong>Nothing on the wall yet.</strong>
+  Sign in and add the first photograph.
+</div>
+
+<div id="bar" class="hidden">
+  <label class="primary" for="pick">Add a photo</label>
+  <input type="file" id="pick" accept="image/*" multiple>
+  <button id="toggle">Rearrange</button>
+  <span class="grow" id="barnote"></span>
+</div>
+
+<div id="viewer">
+  <button id="close" aria-label="Close">&#10005;</button>
+  <img id="big" alt="">
+  <div id="hint">Pinch to zoom</div>
+</div>
+
+<div id="say"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+let PHOTOS = [], EDITOR = null, editing = false;
+
+function say(msg){
+  const el = $('#say'); el.textContent = msg; el.classList.add('show');
+  clearTimeout(say.t); say.t = setTimeout(() => el.classList.remove('show'), 2600);
+}
+
+async function load(){
+  const r = await fetch('/api/photos', {cache:'no-store'});
+  const d = await r.json();
+  PHOTOS = d.photos || [];
+  EDITOR = d.editor || null;
+  $('#who').textContent = EDITOR ? 'signed in' : '';
+  $('#bar').classList.toggle('hidden', !EDITOR);
+  draw();
+}
+
+function draw(){
+  const wall = $('#wall');
+  $('#count').textContent = PHOTOS.length
+    ? PHOTOS.length + (PHOTOS.length === 1 ? ' photograph' : ' photographs') : '';
+  $('#empty').hidden = PHOTOS.length > 0;
+
+  wall.innerHTML = PHOTOS.map((p, i) => `
+    <figure data-name="${p.name}">
+      <img src="${p.thumb}" alt="" loading="lazy" data-full="/photo/${p.name}">
+      <div class="tools">
+        <button data-act="up"   ${i === 0 ? 'disabled' : ''} aria-label="Move up">&#9650;</button>
+        <button data-act="down" ${i === PHOTOS.length - 1 ? 'disabled' : ''} aria-label="Move down">&#9660;</button>
+        <button data-act="rm" class="rm" aria-label="Remove">Remove</button>
+        <span class="pos">${i + 1} of ${PHOTOS.length}</span>
+      </div>
+    </figure>`).join('');
+}
+
+// --- the viewer -------------------------------------------------------
+// Opens the FULL file, not the thumbnail: the thumbnail is 900px and the
+// whole reason to tap a photograph is to get closer than the wall lets you.
+$('#wall').addEventListener('click', async e => {
+  const fig = e.target.closest('figure');
+  if(!fig) return;
+  const act = e.target.dataset ? e.target.dataset.act : null;
+  if(act) return doAct(fig.dataset.name, act, e.target);
+  const img = e.target.closest('img');
+  if(!img) return;
+  $('#big').src = img.dataset.full;
+  $('#viewer').classList.add('show');
+  $('#hint').style.opacity = 1;
+  setTimeout(() => { $('#hint').style.opacity = 0; }, 2200);
+});
+const shut = () => { $('#viewer').classList.remove('show'); $('#big').src = ''; };
+$('#close').addEventListener('click', shut);
+// Back closes the picture rather than leaving the wall, which is what the
+// gesture means to somebody looking at a photograph.
+addEventListener('popstate', () => { if($('#viewer').classList.contains('show')) shut(); });
+
+// --- editing ----------------------------------------------------------
+$('#toggle').addEventListener('click', () => {
+  editing = !editing;
+  document.body.classList.toggle('editing', editing);
+  $('#toggle').textContent = editing ? 'Done' : 'Rearrange';
+  $('#barnote').textContent = editing ? 'Arrows move a photo' : '';
+});
+
+async function doAct(name, act, btn){
+  if(act === 'rm'){
+    if(!confirm('Take this one off the wall? It is kept, not deleted.')) return;
+    return send('/api/delete', {name}, 'Taken off the wall');
+  }
+  btn.disabled = true;
+  await send('/api/move', {name, delta: act === 'up' ? -1 : 1});
+}
+
+async function send(url, body, note){
+  try{
+    const r = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'},
+                               body: JSON.stringify(body)});
+    const d = await r.json();
+    if(!r.ok) throw new Error(d.error || 'that did not work');
+    // The SERVER's order, re-read, rather than guessing locally. Two phones
+    // rearranging the same wall should not each believe their own version.
+    await load();
+    document.body.classList.toggle('editing', editing);
+    if(note) say(note);
+  }catch(err){ say(err.message); }
+}
+
+$('#pick').addEventListener('change', async e => {
+  const files = [...e.target.files];
+  e.target.value = '';
+  let cleanedCount = 0;
+  for(const [n, f] of files.entries()){
+    say(`Adding ${n + 1} of ${files.length}…`);
+    try{
+      const r = await fetch('/api/upload', {
+        method:'POST',
+        headers:{'X-Filename': f.name, 'Content-Type':'application/octet-stream'},
+        body: f,
+      });
+      const d = await r.json();
+      if(!r.ok) throw new Error(d.error || 'upload failed');
+      // SAY SO WHEN A PHOTO WAS ALTERED. Quietly editing somebody's
+      // picture is the wrong default even when the edit is the one they
+      // asked for — and if it ever paints over something that was not a
+      // watermark, this line is how they find out.
+      if(d.cleaned) cleanedCount++;
+    }catch(err){ say(err.message); break; }
+  }
+  await load();
+  say(cleanedCount
+      ? `Added to the top — took the Gemini mark off ${cleanedCount === 1
+          ? 'it' : cleanedCount + ' of them'}`
+      : 'Added to the top — use Rearrange to place it');
+  scrollTo({top:0, behavior:'smooth'});
+});
+
+load();
+</script>
+</body>
+</html>

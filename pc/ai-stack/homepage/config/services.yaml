@@ -1,0 +1,218 @@
+# =============================================================================
+#  Jason's page. GENERATED from home_cards() in rust/landing/src/main.rs by
+#  scratchpad/build-dashboard.py -- do not hand-edit the tiles, edit the card
+#  list and regenerate, or the two lists drift and nothing notices.
+#
+#  Widgets are the exception and ARE hand-maintained here: they are live API
+#  pulls with no counterpart in the Rust card list.
+#
+#  /home is unchanged. This is every card Jason can reach, in one place; the
+#  per-person start page still serves everyone else as it did.
+#
+#  HAND-EDITED 2026-11-04 to match the trimmed card list (Photos, Study, Music,
+#  Connect, Workouts, Tech help, Career, My record, Find, Notes/KB, Been there
+#  removed; Kitchen added). If build-dashboard.py is ever re-run, check it
+#  agrees with this list first.
+# =============================================================================
+# --- Live: the same numbers as Jason's Debug Found, read-only, NO logs (2026-11-04: "every
+#     API that basically made it a graphic ... ported over to the wall ... viewable only").
+#     Pulled straight from the NUC's Prometheus; Grafana itself stays Jason-only. ---------
+- Live:
+    - Alert:
+        icon: mdi-alarm-light
+        description: "0 all good · 1 investigate (RAM + swap full) · 2 critical (overload or heat)"
+        widget:
+            type: prometheusmetric
+            url: http://192.168.1.86:9090
+            refreshInterval: 30000
+            metrics:
+              - label: NUC level
+                query: 'clamp_max((100*(1-node_memory_MemAvailable_bytes{job="nuc"}/node_memory_MemTotal_bytes{job="nuc"}) > bool 85) * (100*(1-node_memory_SwapFree_bytes{job="nuc"}/node_memory_SwapTotal_bytes{job="nuc"}) > bool 90) + 2*scalar(max(node_load1{job="nuc"}) > bool 24) + 2*scalar(max(node_hwmon_temp_celsius{job="nuc"}) > bool 85), 2)'
+              - label: Machines up
+                query: 'sum(up{job=~"nuc|pc|pi"})'
+                format: { type: text, suffix: " of 3" }
+    - PC:
+        icon: mdi-desktop-tower
+        widget:
+            type: prometheusmetric
+            url: http://192.168.1.86:9090
+            refreshInterval: 15000
+            metrics:
+              - label: CPU
+                query: '100*(1-avg(rate(windows_cpu_time_total{job="pc",mode="idle"}[2m])))'
+                format: { type: percent, options: { maximumFractionDigits: 0 } }
+              - label: RAM
+                query: '100*(1-windows_memory_available_bytes{job="pc"}/windows_memory_physical_total_bytes{job="pc"})'
+                format: { type: percent, options: { maximumFractionDigits: 0 } }
+              - label: GPU
+                query: 'engine_gpu_util_pct{machine="supernova"}'
+                format: { type: percent, options: { maximumFractionDigits: 0 } }
+              - label: VRAM
+                query: '100*engine_gpu_vram_used_mb{machine="supernova"}/engine_gpu_vram_total_mb{machine="supernova"}'
+                format: { type: percent, options: { maximumFractionDigits: 0 } }
+    - NUC:
+        icon: mdi-server
+        widget:
+            type: prometheusmetric
+            url: http://192.168.1.86:9090
+            refreshInterval: 15000
+            metrics:
+              - label: CPU
+                query: '100*(1-avg(rate(node_cpu_seconds_total{job="nuc",mode="idle"}[2m])))'
+                format: { type: percent, options: { maximumFractionDigits: 0 } }
+              - label: RAM
+                query: '100*(1-node_memory_MemAvailable_bytes{job="nuc"}/node_memory_MemTotal_bytes{job="nuc"})'
+                format: { type: percent, options: { maximumFractionDigits: 0 } }
+              - label: Swap
+                query: '100*(1-node_memory_SwapFree_bytes{job="nuc"}/node_memory_SwapTotal_bytes{job="nuc"})'
+                format: { type: percent, options: { maximumFractionDigits: 0 } }
+              - label: Temp
+                query: 'max(node_hwmon_temp_celsius{job="nuc"})'
+                format: { type: number, suffix: " °C", options: { maximumFractionDigits: 0 } }
+    - Pi:
+        icon: mdi-raspberry-pi
+        widget:
+            type: prometheusmetric
+            url: http://192.168.1.86:9090
+            refreshInterval: 15000
+            metrics:
+              - label: CPU
+                query: '100*(1-avg(rate(node_cpu_seconds_total{job="pi",mode="idle"}[2m])))'
+                format: { type: percent, options: { maximumFractionDigits: 0 } }
+              - label: RAM
+                query: '100*(1-node_memory_MemAvailable_bytes{job="pi"}/node_memory_MemTotal_bytes{job="pi"})'
+                format: { type: percent, options: { maximumFractionDigits: 0 } }
+              - label: Temp
+                query: 'max(node_hwmon_temp_celsius{job="pi"})'
+                format: { type: number, suffix: " °C", options: { maximumFractionDigits: 0 } }
+    - Network:
+        icon: mdi-swap-vertical
+        widget:
+            type: prometheusmetric
+            url: http://192.168.1.86:9090
+            refreshInterval: 15000
+            metrics:
+              - label: PC down
+                query: 'sum(rate(windows_net_bytes_received_total{job="pc"}[1m]))*8'
+                format: { type: bitrate }
+              - label: PC up
+                query: 'sum(rate(windows_net_bytes_sent_total{job="pc"}[1m]))*8'
+                format: { type: bitrate }
+              - label: NUC down
+                query: 'sum(rate(node_network_receive_bytes_total{job="nuc",device!~"lo|veth.*|docker.*|br-.*"}[1m]))*8'
+                format: { type: bitrate }
+              - label: NUC up
+                query: 'sum(rate(node_network_transmit_bytes_total{job="nuc",device!~"lo|veth.*|docker.*|br-.*"}[1m]))*8'
+                format: { type: bitrate }
+
+- Health:
+    - Is everything up?:
+        icon: uptime-kuma.png
+        href: https://status.home.example.net/
+        description: "Every light green means everything is fine."
+        widget:
+            type: uptimekuma
+            url: http://192.168.1.86:3001
+            slug: family
+    - Engine Bay:
+        icon: mdi-gauge
+        href: https://example.org/engine
+        description: "SuperNova + the NUC"
+        widget:
+            type: customapi
+            url: http://metrics:8000/engine/data
+            refreshInterval: 15000
+            mappings:
+              - field: cpu_pct
+                label: CPU
+                suffix: '%'
+              - field: ram_pct
+                label: RAM
+                suffix: '%'
+              - field: gpu
+                additionalField:
+                  field: util_pct
+                label: GPU
+                suffix: '%'
+              - field: gpu
+                additionalField:
+                  field: temp_c
+                label: GPU temp
+                suffix: 'C'
+
+- Family & house:
+    - Reader:
+        icon: kavita.png
+        href: https://example.org/read/
+        description: "Read EPUBs and PDFs in the browser, and it remembers where you stopped."
+    - Listen:
+        icon: audiobookshelf.png
+        href: https://example.org/listen
+        description: "Anything sent from Find, narrated in one of the house voices."
+    - Recipes:
+        icon: mdi-chef-hat
+        href: https://example.org/recipe/
+        description: "Everything we cook, searchable, with the ones we actually make marked."
+    - Kitchen:
+        icon: mdi-silverware-fork-knife
+        href: https://example.org/kitchen/
+        description: "The recipe database behind Recipes: drafts, foods and nutrition."
+
+- Projects:
+    - The First Voice:
+        icon: mdi-radio
+        href: https://peewee.home.example.net/
+        description: "The radio tribute to Edward “Pee-Wee” Harris. Switch it on and tune the dial."
+    - Pee-Wee Studio:
+        icon: mdi-microphone
+        href: https://studio.home.example.net/
+        description: "Add people, edit their stories, import photos, publish to the site."
+    - Android:
+        icon: gitea.png
+        href: https://example.org/jason/android
+        description: "The Android apps, with what each one does and a \\
+                   download."
+
+- Dashboards:
+    - The wall:
+        icon: mdi-view-dashboard
+        href: https://dashboard.home.example.net/
+        description: "Live widgets for both machines: what is running, what it \\
+                   is using, and w..."
+    - Log history:
+        icon: grafana.png
+        href: https://example.org/grafana/
+        description: "Grafana and Loki: both machines' logs, kept and \\
+                   searchable. Best when so..."
+
+- Administrative:
+    - Money:
+        icon: mdi-cash
+        href: https://money.home.example.net/
+        description: "Paystubs, bank statements and where it all actually goes. Self-hosted, so it stays here."
+    - Warranties:
+        icon: homebox.png
+        href: https://homebox.home.example.net/
+        description: "What we own, what it cost, and when the cover on it runs out."
+    - PDF tools:
+        icon: stirling-pdf.png
+        href: https://example.org/pdf/
+        description: "Merge, split, compress and sign. Files stay on the machine here."
+    - Utilities:
+        icon: it-tools.png
+        href: https://example.org/tools/
+        description: "Converters, formatters, generators. Small tools, no accounts."
+    - Code:
+        icon: gitea.png
+        href: https://example.org/git/
+        description: "Everything running here, and the history of every change."
+    - Documents:
+        icon: paperless.png
+        href: https://example.org/paperless/
+        description: "Scanned household paperwork, searchable by its text."
+    - Containers:
+        icon: portainer.png
+        href: https://example.org/portainer/
+        description: "Portainer: start, stop, inspect and update anything on \\
+                   either box. Keeps..."
+

@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#050a12">
+<meta name="robots" content="noindex, nofollow">
+<title>Trials &middot; admin</title>
+<link rel="stylesheet" href="/theme.css">
+<style>
+  body{--accent:#7ee8d0}
+
+  ul.rows{list-style:none;margin:0;padding:0}
+  ul.rows li{padding:.75rem 0;border-bottom:1px solid var(--line)}
+  ul.rows li:last-child{border-bottom:0}
+  ul.rows .top{display:flex;align-items:center;justify-content:space-between;
+    gap:.8rem;flex-wrap:wrap}
+  ul.rows .who{font-size:.9rem;word-break:break-all}
+  ul.rows .meta{font-size:.76rem;color:var(--muted);margin-top:.25rem;
+    font-variant-numeric:tabular-nums}
+  ul.rows button{padding:.35rem .7rem;font-size:.78rem;background:none;
+    border:1px solid var(--line);color:var(--muted)}
+  ul.rows form{display:inline}
+  .danger button:hover{color:#ffd9d3;
+    border-color:color-mix(in srgb,var(--bad) 50%,transparent)}
+  /* THE REASON THIS PAGE IS OPEN. Somebody out of questions, waiting to be
+     let in, is the one thing here that is time-sensitive, so the button that
+     does it does not look like the other three. */
+  .promote button{background:var(--accent);color:#04121f;border-color:transparent;
+    font-weight:650}
+  .promote button:hover{filter:brightness(1.08)}
+
+  /* The code itself, meant to be read off a screen and typed into a phone. */
+  code.big{font-family:var(--mono);font-size:1rem;letter-spacing:.09em;
+    color:var(--ink);user-select:all;-webkit-user-select:all}
+
+  .tag{font-size:.64rem;letter-spacing:.05em;text-transform:uppercase;
+    border-radius:99px;padding:.12rem .5rem;border:1px solid var(--line);
+    color:var(--muted);white-space:nowrap}
+  .tag.off{border-color:color-mix(in srgb,var(--bad) 55%,transparent);color:#ffc9c0}
+  .tag.done{border-color:color-mix(in srgb,var(--warn) 55%,transparent);color:#ffdba8}
+  .tag.member{border-color:#7ee8d0;color:#7ee8d0}
+
+  /* THE ONE NUMBER WORTH SEEING FROM THE DOOR: how many people are out of
+     questions and still have no account. It is the only reason this page is
+     time-sensitive, so it is not buried in a list. */
+  .waiting{display:flex;align-items:center;gap:.7rem;margin:0 0 1.2rem;
+    padding:.8rem 1rem;border-radius:12px;
+    background:color-mix(in srgb,var(--warn) 10%,transparent);
+    border:1px solid color-mix(in srgb,var(--warn) 32%,transparent)}
+  .waiting b{color:var(--warn)}
+
+  .grid2{display:grid;gap:.7rem;grid-template-columns:1fr 1fr}
+  @media (max-width:520px){ .grid2{grid-template-columns:1fr} }
+  .hint{font-size:.78rem;color:var(--muted);margin:.3rem 0 0}
+  h2{margin:2rem 0 .3rem;font-size:1.05rem}
+  h2:first-of-type{margin-top:1.4rem}
+</style>
+</head>
+<body>
+<div class="wrap narrow">
+  <a class="back" href="{{ base }}/">&larr; all sites</a>
+
+  <h1>Trials</h1>
+  <p class="sub">
+    A code you send with the app lets somebody ask the assistant
+    {{ default_quota }} questions without an account. They reach the plain
+    model and nothing of this house &mdash; no documents, no recipes, no shelf.
+    When the questions run out they are told to email you, and you are emailed
+    too.
+  </p>
+
+  {% if !flash.is_empty() %}
+    <p class="note {% if flash_ok %}ok{% else %}bad{% endif %}">{{ flash }}</p>
+  {% endif %}
+
+  {% if waiting > 0 %}
+    <p class="waiting">
+      <b>{{ waiting }}</b>
+      {% if waiting == 1 %}person has{% else %}people have{% endif %}
+      run out and have no account yet.
+    </p>
+  {% endif %}
+
+  <h2>Make a code</h2>
+  <form method="post" action="{{ base }}/trials/add">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="grid2">
+      <div>
+        <label for="code">Code</label>
+        <!-- Pre-filled with a generated one so there is something to accept
+             rather than something to invent. Ambiguous characters (O/0, I/1)
+             are left out of the alphabet: they cost more in mistyped codes
+             than they buy in space. Overwrite it with anything memorable. -->
+        <input type="text" id="code" name="code" value="{{ suggested }}"
+               autocapitalize="characters" autocomplete="off" spellcheck="false" required>
+      </div>
+      <div>
+        <label for="label">What it is for</label>
+        <input type="text" id="label" name="label" placeholder="e.g. sent to Dave"
+               autocomplete="off">
+      </div>
+    </div>
+    <div class="grid2" style="margin-top:.7rem">
+      <div>
+        <label for="quota">Questions each</label>
+        <input type="number" id="quota" name="quota" value="{{ default_quota }}"
+               min="1" max="1000">
+      </div>
+      <div>
+        <label for="max_uses">How many people</label>
+        <input type="number" id="max_uses" name="max_uses" value="0" min="0">
+        <p class="hint">0 means no limit &mdash; one code for everybody you send it to.</p>
+      </div>
+    </div>
+    <div class="row" style="margin-top:.9rem">
+      <button type="submit">Make it</button>
+    </div>
+  </form>
+
+  <h2>Codes</h2>
+  {% if codes.is_empty() %}
+    <p class="sub">None yet. Make one above and send it with the app link.</p>
+  {% else %}
+    <ul class="rows">
+      {% for c in codes %}
+        <li>
+          <div class="top">
+            <div>
+              <code class="big">{{ c.code }}</code>
+              {% if !c.active %}<span class="tag off">off</span>{% endif %}
+              <div class="meta">
+                {% if !c.label.is_empty() %}{{ c.label }} &middot; {% endif %}
+                {{ c.quota }} questions each &middot;
+                {% if c.max_uses == 0 %}
+                  {{ c.redeemed }} used it, no limit
+                {% else %}
+                  {{ c.redeemed }} of {{ c.max_uses }} used it
+                {% endif %}
+              </div>
+            </div>
+            <div>
+              <form method="post" action="{{ base }}/trials/code">
+                <input type="hidden" name="csrf" value="{{ csrf }}">
+                <input type="hidden" name="code" value="{{ c.code }}">
+                <input type="hidden" name="action" value="toggle">
+                <button type="submit">{% if c.active %}Switch off{% else %}Switch on{% endif %}</button>
+              </form>
+              <form method="post" action="{{ base }}/trials/code" class="danger"
+                    onsubmit="return confirm('Delete {{ c.code }}? Anyone already on it keeps the questions they have.')">
+                <input type="hidden" name="csrf" value="{{ csrf }}">
+                <input type="hidden" name="code" value="{{ c.code }}">
+                <input type="hidden" name="action" value="delete">
+                <button type="submit">Delete</button>
+              </form>
+            </div>
+          </div>
+        </li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+
+  <h2>Who is on a trial</h2>
+  {% if trials.is_empty() %}
+    <p class="sub">Nobody has redeemed a code yet.</p>
+  {% else %}
+    <ul class="rows">
+      {% for t in trials %}
+        <li>
+          <div class="top">
+            <div>
+              <span class="who">{{ t.email }}</span>
+              {% if t.now_a_member %}<span class="tag member">has an account</span>
+              {% else if t.finished %}<span class="tag done">out of questions</span>{% endif %}
+              <div class="meta">
+                {{ t.used }} of {{ t.quota }} used &middot; {{ t.remaining }} left &middot;
+                code {{ t.code }} &middot; started {{ t.started }} &middot;
+                last asked {{ t.last }}
+              </div>
+            </div>
+            <div>
+              {% if t.now_a_member %}
+                <form method="post" action="{{ base }}/trials/grant" class="promote">
+                  <input type="hidden" name="csrf" value="{{ csrf }}">
+                  <input type="hidden" name="email" value="{{ t.email }}">
+                  <button type="submit">Promote to full</button>
+                </form>
+              {% else %}
+                <form method="post" action="{{ base }}/trials/grant" class="promote"
+                      onsubmit="return confirm('Give {{ t.email }} a real account? You will get a password to send them.')">
+                  <input type="hidden" name="csrf" value="{{ csrf }}">
+                  <input type="hidden" name="email" value="{{ t.email }}">
+                  <button type="submit">Give them an account</button>
+                </form>
+                <form method="post" action="{{ base }}/trials/end">
+                  <input type="hidden" name="csrf" value="{{ csrf }}">
+                  <input type="hidden" name="email" value="{{ t.email }}">
+                  <input type="hidden" name="action" value="more">
+                  <button type="submit">+{{ default_quota }} more</button>
+                </form>
+              {% endif %}
+              <form method="post" action="{{ base }}/trials/end" class="danger"
+                    onsubmit="return confirm('End the trial for {{ t.email }}? Their app will ask them to sign in.')">
+                <input type="hidden" name="csrf" value="{{ csrf }}">
+                <input type="hidden" name="email" value="{{ t.email }}">
+                <input type="hidden" name="action" value="revoke">
+                <button type="submit">End it</button>
+              </form>
+            </div>
+          </div>
+        </li>
+      {% endfor %}
+    </ul>
+    <p class="hint" style="margin-top:.9rem">
+      To let somebody in properly, add them on
+      <a href="{{ base }}/people">People</a> and send them the password. A real
+      account always wins over a trial, so their app switches over as soon as
+      they sign in &mdash; you do not have to end the trial first.
+    </p>
+  {% endif %}
+
+  <footer>
+    <b>Give them an account</b> creates one with a password shown to you once,
+    which they are asked to change on first use. It grants NO website pages --
+    they get the assistant in the app, and you tick boxes on
+    <a href="{{ base }}/people">People</a> for anything more.<br>
+    Switching a code off stops anybody NEW redeeming it; it does not touch the
+    people already on it, who hold their own counters. Ending one person's
+    trial takes effect on their very next question, because the auth service
+    reads this list per request rather than caching it.<br>
+    &copy; {{ year }}
+  </footer>
+</div>
+</body>
+</html>

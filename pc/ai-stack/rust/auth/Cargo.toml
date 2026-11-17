@@ -1,0 +1,49 @@
+[package]
+name = "auth"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "auth"
+path = "src/main.rs"
+
+[dependencies]
+common.workspace = true
+axum.workspace = true
+tokio.workspace = true
+tower-http.workspace = true
+askama.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+anyhow.workspace = true
+hmac.workspace = true
+sha2.workspace = true
+time.workspace = true
+# Added 2026-08-28 for the password-reset flow:
+#   rand    -> OS CSPRNG for the one-time code (never a predictable source)
+#   lettre  -> SMTP, for actually delivering it
+rand.workspace = true
+lettre.workspace = true
+# Added 2026-08-31 for the OpenID Connect provider (src/oidc.rs):
+#   jsonwebtoken -> signs the id_token with RS256, which is the only
+#                   algorithm every OIDC client can be relied on to accept
+#   rsa          -> generates and reads the signing key, and exposes its
+#                   modulus and exponent for the JWKS document
+#   base64       -> base64url, which JWT and JWKS are made of
+jsonwebtoken.workspace = true
+rsa.workspace = true
+base64.workspace = true
+# Added 2026-09-17 for /app/chat (src/llm.rs): the phone apps authenticate
+# with their OIDC access token and this service forwards to LiteLLM with the
+# master key attached server-side, so the key never ships inside an APK.
+# The "stream" feature is what makes bytes_stream() available, and streaming
+# is the whole point -- a buffered chat reply feels like a hang.
+reqwest.workspace = true
+# Added for passkey sign-in (src/passkeys.rs). See PASSKEYS.md.
+webauthn-rs.workspace = true
+
+[dev-dependencies]
+# A software authenticator, so the tests can do a whole enrol + sign-in
+# without a phone. Tests only: it is not in the shipped binary.
+webauthn-authenticator-rs = { version = "=0.5.5", default-features = false, features = ["softpasskey"] }

@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#050a12">
+<meta name="robots" content="noindex, nofollow">
+<title>Check your email</title>
+<link rel="stylesheet" href="/theme.css">
+<style>
+  .card-form{width:min(380px,100%)}
+  /* Big, spaced and monospaced: a code is read a character at a time, and
+     this is the difference between typing it once and typing it twice. */
+  input.code{font-size:26px;text-align:center;letter-spacing:.3em;font-family:var(--mono)}
+</style>
+</head>
+<body>
+<div class="centre">
+  <form class="panel card-form" method="post" action="code">
+    <h1>Check your email</h1>
+    <p class="sub">If that address is on the list, a code and a link are on their
+      way. Both expire in {{ minutes }} minutes.</p>
+
+    <label for="c">Enter the 6-digit code</label>
+    <!-- inputmode=numeric gets the number pad on a phone; one-time-code lets
+         iOS and Android offer to fill it straight from the email. -->
+    <input id="c" class="code" name="code" type="text" inputmode="numeric"
+           pattern="[0-9 -]*" autocomplete="one-time-code" maxlength="9"
+           placeholder="000000" autofocus required>
+    <input type="hidden" name="email" value="{{ email }}">
+    <input type="hidden" name="next" value="{{ next }}">
+    <button class="wide" type="submit" style="margin-top:1rem">Sign in</button>
+
+    <p style="text-align:center;margin:1.1rem 0 0">
+      <a href="./?next={{ next }}" style="font-size:.8rem;color:var(--muted);text-decoration:none">Send another</a>
+    </p>
+    <p class="note info" style="margin:1.2rem 0 0">Nothing after a minute or two?
+      Check spam &mdash; and mark it "not spam" so the next one lands properly.</p>
+  </form>
+</div>
+</body>
+</html>

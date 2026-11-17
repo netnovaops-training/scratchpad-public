@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#070b1a">
+<meta name="robots" content="noindex">
+<title>{{ who }}&rsquo;s page</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Quicksand:wght@500;600;700&family=Nunito:wght@400;600;700&display=swap">
+<style>
+/* ===========================================================================
+   SPACE
+
+   QUIET, NOT BUSY. The temptation with a space theme is a starfield that
+   twinkles everywhere, which turns a page you glance at into a screensaver.
+   Only a handful of stars pulse, on long and unequal cycles, so movement is
+   something you notice rather than something you have to look past.
+
+   The planet does not orbit. It sits low and to one side, mostly out of
+   frame -- a thing the page is near rather than a mascot on it.
+   =========================================================================== */
+
+:root {
+  --void:    #070b1a;
+  --deep:    #0d1430;
+  --panel:   #141c3a;
+  --panel-2: #1b2549;
+  --edge:    #2a3765;
+  --star:    #dfe7ff;
+  --ion:     #7fd8ff;
+  --flare:   #ffc978;
+  --text:    #e6ecff;
+  --text-2:  #a8b4d8;
+  --text-3:  #7c88ad;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0; min-height: 100%;
+  background:
+    radial-gradient(ellipse 70% 50% at 78% 88%, rgba(127,216,255,.10), transparent 60%),
+    linear-gradient(180deg, var(--void) 0%, var(--deep) 60%, #121a3c 100%);
+  background-attachment: fixed;
+  color: var(--text);
+  font: 17px/1.65 Nunito, ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.sky-band { position: relative; height: 190px; overflow: hidden; }
+.sky-band svg { width: 100%; height: 100%; display: block; }
+
+/* Long, unequal cycles. Nothing shares a period, so the sky never blinks
+   in unison the way a single shared animation would. */
+@keyframes shine { 0%,100% { opacity: .35; } 50% { opacity: 1; } }
+.tw-1 { animation: shine  6s ease-in-out infinite; }
+.tw-2 { animation: shine  9s ease-in-out infinite; animation-delay: 1.7s; }
+.tw-3 { animation: shine 13s ease-in-out infinite; animation-delay: 4.2s; }
+.tw-4 { animation: shine  7.5s ease-in-out infinite; animation-delay: 2.9s; }
+
+/* One shooting star, rarely. A loop this long reads as chance. */
+@keyframes shoot {
+  0%, 88%  { opacity: 0; transform: translate(0,0); }
+  90%      { opacity: 1; }
+  100%     { opacity: 0; transform: translate(190px, 92px); }
+}
+.shoot { animation: shoot 24s linear infinite; }
+
+.content { position: relative; z-index: 1; max-width: 940px; margin: 0 auto; padding: 0 1.25rem 6rem; }
+
+header { text-align: center; margin-bottom: 2rem; }
+h1 { font-family: Quicksand, Nunito, sans-serif; font-weight: 700; font-size: clamp(2rem, 6.5vw, 2.9rem); margin: 0 0 .35rem; letter-spacing: -.01em; }
+h1 .name { color: var(--ion); text-transform: capitalize; }
+header p { margin: 0 auto; max-width: 32rem; color: var(--text-2); font-size: 1.02rem; }
+
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(215px, 1fr)); gap: 1rem; }
+
+.card {
+  display: block; text-decoration: none; color: inherit;
+  background: var(--panel); border: 1px solid var(--edge);
+  border-bottom: 5px solid var(--accent, var(--ion));
+  border-radius: 16px; padding: 1.25rem 1.25rem 1.1rem;
+  box-shadow: 0 14px 32px -22px rgba(0,0,0,.9);
+  transition: transform .2s cubic-bezier(.2,.8,.3,1), background .2s ease;
+}
+.card:hover, .card:focus-visible { transform: translateY(-5px); background: var(--panel-2); }
+.card:focus-visible { outline: 3px solid var(--ion); outline-offset: 3px; }
+.card .ico { display: inline-flex; width: 44px; height: 44px; align-items: center; justify-content: center; border-radius: 50%; background: var(--accent, var(--ion)); margin-bottom: .7rem; }
+.card .ico svg { width: 22px; height: 22px; stroke: #070b1a; fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.card h2 { font-family: Quicksand, sans-serif; font-size: 1.2rem; font-weight: 700; margin: 0 0 .15rem; color: var(--text); }
+.card .sub { margin: 0 0 .45rem; font-size: .74rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--text-3); }
+.card p.desc { margin: 0; color: var(--text-2); font-size: .95rem; line-height: 1.55; }
+.card .go { display: inline-block; margin-top: .8rem; font-weight: 700; color: var(--ion); border-bottom: 3px solid var(--accent, var(--ion)); padding-bottom: 1px; }
+
+.nothing { background: var(--panel); border: 2px dashed var(--edge); border-radius: 16px; padding: 2rem; text-align: center; color: var(--text-2); }
+
+footer { margin-top: 2.4rem; text-align: center; color: var(--text-3); font-size: .92rem; }
+footer a { color: var(--text-2); font-weight: 700; }
+
+@media (prefers-reduced-motion: reduce) {
+  .tw-1, .tw-2, .tw-3, .tw-4, .shoot { animation: none; }
+  .shoot { opacity: 0; }
+  .card { transition: none; }
+}
+{% include "_effects.html" %}
+
+/* --- applying the effects (2026-09-07) -------------------------------------
+   The classes existed and nothing wore them, so the page looked unchanged.
+   These three lines are what make the difference visible. */
+
+/* The entrance, staggered by --i. Capped in the template at 10: past that a
+   stagger stops reading as choreography and starts reading as a slow page. */
+.card.enter { animation-delay: calc(var(--i, 0) * 45ms); }
+
+/* The glow needs somewhere to sit above the card's own background. */
+.card.lit { isolation: isolate; }
+</style>
+</head>
+<body>
+
+<div class="sky-band" aria-hidden="true">
+  <svg viewBox="0 0 900 190" preserveAspectRatio="xMidYMid slice">
+    <g fill="#dfe7ff">
+      <circle class="tw-1" cx="90"  cy="42"  r="1.8"/>
+      <circle           cx="150" cy="96"  r="1.1"/>
+      <circle class="tw-2" cx="232" cy="30"  r="2.1"/>
+      <circle           cx="300" cy="118" r="1.2"/>
+      <circle class="tw-3" cx="386" cy="58"  r="1.7"/>
+      <circle           cx="452" cy="24"  r="1"/>
+      <circle           cx="510" cy="104" r="1.4"/>
+      <circle class="tw-4" cx="596" cy="46"  r="2"/>
+      <circle           cx="664" cy="88"  r="1.1"/>
+      <circle class="tw-2" cx="742" cy="34"  r="1.6"/>
+      <circle           cx="812" cy="110" r="1.3"/>
+      <circle class="tw-1" cx="866" cy="66"  r="1.9"/>
+    </g>
+
+    <g class="shoot" stroke="#dfe7ff" stroke-width="1.6" stroke-linecap="round" opacity="0">
+      <line x1="120" y1="20" x2="152" y2="36"/>
+    </g>
+
+    <!-- The planet: low, mostly out of frame. -->
+    <circle cx="770" cy="238" r="128" fill="#1c2a58"/>
+    <ellipse cx="770" cy="200" rx="126" ry="16" fill="#26386f" opacity=".85"/>
+    <ellipse cx="740" cy="236" rx="118" ry="13" fill="#2c4180" opacity=".6"/>
+    <circle cx="770" cy="238" r="128" fill="none" stroke="#7fd8ff" stroke-width="1" opacity=".22"/>
+  </svg>
+</div>
+
+<div class="content">
+  <header>
+    <h1>Hi <span class="name">{{ who }}</span></h1>
+    <p>Everything of yours, in one place. Pick something and go.</p>
+  </header>
+
+  {% if sections.is_empty() %}
+  <div class="nothing">Nothing has been set up for you yet. Give Jason a nudge.</div>
+  {% else %}
+  {% include "_search.html" %}
+  <div class="grid">
+    {% for s in sections %}
+    <a class="card enter{% if s.href == "/ability/" %} lit{% endif %}" href="{{ s.href }}" style="--accent:{{ s.accent }};--i:{{ loop.index0 }}">
+      <span class="ico"><svg viewBox="0 0 24 24">{{ s.icon|safe }}</svg></span>
+      <p class="sub">{{ s.sub }}</p>
+      <h2>{{ s.name }}</h2>
+      <p class="desc">{{ s.desc }}</p>
+      <span class="go">Open &rarr;</span>
+    </a>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <footer>
+    <a href="/looks">Change look</a> &middot; <a href="/auth/logout">Sign out</a> &middot; {{ year }}
+  </footer>
+</div>
+<script>
+/* Entrance animations run once per device, then stop.
+   Jason, 2026-09-07: "turn off animations after the person logs in."
+
+   localStorage, not a session flag: he means the daily user, and a session
+   flag replays the whole entrance every morning -- the thing being removed.
+
+   Set BEFORE first paint and wrapped in try/catch: a private window throws on
+   storage access, and an exception here would leave the class unset and the
+   animation running forever for that person -- invisible in testing,
+   permanent for them. Animating is the safe default when storage is gone. */
+(function () {
+  try {
+    if (localStorage.getItem('seen-entrance')) {
+      document.documentElement.classList.add('pre-seen');
+    } else { localStorage.setItem('seen-entrance', '1'); }
+  } catch (e) {}
+  document.addEventListener('DOMContentLoaded', function () {
+    var t = document.querySelectorAll('.tally[style*="--n"]');
+    if (!t.length || !window.IntersectionObserver) return;
+    /* Count-ups start only once visible, so a number below the fold has not
+       already finished counting by the time it is scrolled to. */
+    var io = new IntersectionObserver(function (es) {
+      es.forEach(function (e) {
+        if (e.isIntersecting) { e.target.classList.add('run'); io.unobserve(e.target); }
+      });
+    }, { threshold: 0.4 });
+    t.forEach(function (el) { io.observe(el); });
+  });
+})();
+</script>
+</body>
+</html>

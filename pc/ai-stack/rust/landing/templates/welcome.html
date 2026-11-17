@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#050a12">
+<meta name="description" content="Private tools running on hardware at home.">
+<title>example</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='22' fill='%23050a12'/><path d='M30 30h18v30a10 10 0 0 1-20 0' stroke='%235aa2e8' stroke-width='8' fill='none' stroke-linecap='square'/></svg>">
+<!-- The shared palette and components, served from web/public. Loaded FIRST
+     so the page-specific rules below still win where they differ. Removing the
+     duplicated :root block from here is the point: change a colour in
+     theme.css and this page follows, instead of quietly drifting apart. -->
+<link rel="stylesheet" href="/theme.css">
+<style>
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;background:var(--bg);color:var(--ink);
+  font:16px/1.6 ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  -webkit-font-smoothing:antialiased;overflow-x:hidden;
+}
+/* The live background sits behind everything and never intercepts clicks. */
+#bg{position:fixed;inset:0;width:100%;height:100%;z-index:0;display:block}
+.vignette{position:fixed;inset:0;z-index:1;pointer-events:none;
+  background:radial-gradient(ellipse 120% 90% at 50% 42%,transparent 35%,rgba(5,10,18,.82) 100%)}
+
+.wrap{position:relative;z-index:2;min-height:100%;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;padding:clamp(1.5rem,5vw,4rem) 1.25rem}
+
+header{text-align:center;margin-bottom:clamp(2rem,6vw,3.5rem)}
+.mark{display:inline-flex;align-items:center;gap:.7rem;margin-bottom:1.1rem}
+.mark .dot{width:9px;height:9px;background:#5aa2e8;border-radius:2px;
+  box-shadow:0 0 14px #5aa2e8;animation:blink 2.6s ease-in-out infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.35}}
+.mark span{font-size:.78rem;letter-spacing:.22em;text-transform:uppercase;color:var(--muted)}
+h1{margin:0 0 .6rem;font-size:clamp(2.1rem,6.5vw,3.6rem);font-weight:750;letter-spacing:-.02em;
+  line-height:1.05}
+h1 em{font-style:normal;background:linear-gradient(100deg,#5aa2e8,#4fc79b 55%,#c78af0);
+  -webkit-background-clip:text;background-clip:text;color:transparent}
+.tag{margin:0;color:var(--muted);font-size:clamp(.95rem,2.4vw,1.08rem);max-width:34rem;
+  margin-inline:auto}
+
+.grid{display:grid;gap:1rem;width:min(980px,100%);
+  grid-template-columns:repeat(auto-fit,minmax(258px,1fr))}
+
+a.card{
+  position:relative;display:flex;flex-direction:column;gap:.55rem;
+  padding:1.5rem 1.4rem 1.6rem;border-radius:16px;text-decoration:none;color:inherit;
+  background:var(--panel);border:1px solid var(--line);
+  backdrop-filter:blur(11px) saturate(1.25);-webkit-backdrop-filter:blur(11px) saturate(1.25);
+  overflow:hidden;isolation:isolate;
+  transition:transform .28s cubic-bezier(.2,.8,.3,1),border-color .28s,background .28s;
+}
+a.card::before{ /* accent wash, revealed on hover */
+  content:"";position:absolute;inset:0;z-index:-1;opacity:0;transition:opacity .3s;
+  background:radial-gradient(120% 90% at 12% 0%,var(--accent),transparent 62%);
+}
+a.card::after{ /* top edge light */
+  content:"";position:absolute;left:1.3rem;right:1.3rem;top:0;height:1px;
+  background:linear-gradient(90deg,transparent,var(--accent),transparent);
+  opacity:.45;transition:opacity .3s;
+}
+a.card:hover,a.card:focus-visible{transform:translateY(-4px);
+  border-color:color-mix(in srgb,var(--accent) 55%,transparent)}
+a.card:hover::before,a.card:focus-visible::before{opacity:.14}
+a.card:hover::after,a.card:focus-visible::after{opacity:1}
+a.card:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+
+.ico{width:42px;height:42px;border-radius:11px;display:grid;place-items:center;
+  background:color-mix(in srgb,var(--accent) 15%,transparent);
+  border:1px solid color-mix(in srgb,var(--accent) 32%,transparent);margin-bottom:.35rem}
+.ico svg{width:21px;height:21px;stroke:var(--accent);fill:none;stroke-width:1.7;
+  stroke-linecap:round;stroke-linejoin:round}
+.card h2{margin:0;font-size:1.32rem;font-weight:700;letter-spacing:-.01em}
+.card .sub{margin:0;font-size:.82rem;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--accent);opacity:.9}
+.card p{margin:.25rem 0 0;color:var(--muted);font-size:.94rem;line-height:1.5}
+.card .go{margin-top:.9rem;font-size:.88rem;font-weight:600;color:var(--accent);
+  display:inline-flex;align-items:center;gap:.4rem}
+.card .go svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:2;
+  transition:transform .28s cubic-bezier(.2,.8,.3,1)}
+a.card:hover .go svg{transform:translateX(4px)}
+
+footer{margin-top:clamp(2.2rem,6vw,3.5rem);text-align:center;color:var(--muted);
+  font-size:.8rem;line-height:1.7}
+footer .sep{opacity:.4;margin:0 .5rem}
+
+/* --- the sign-in button, top right ---------------------------------------
+   Fixed rather than absolute so it stays put while the page scrolls - on a
+   phone the header scrolls away almost immediately, and a button you have to
+   scroll back up for is a button you stop using.
+   viewport-fit=cover is already set in the head, so env(safe-area-inset-*)
+   keeps it clear of the notch and the rounded corners on an iPhone. */
+.signin{
+  position:fixed;
+  top:calc(env(safe-area-inset-top, 0px) + .9rem);
+  right:calc(env(safe-area-inset-right, 0px) + 1rem);
+  z-index:20;
+  display:inline-flex;align-items:center;gap:.4rem;
+  padding:.45rem .8rem;border-radius:999px;
+  border:1px solid var(--line);
+  background:rgba(10,18,32,.72);
+  /* Sits over an animated canvas, so it needs its own backdrop to stay
+     readable when a bright circuit trace passes underneath. */
+  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+  color:var(--muted);text-decoration:none;
+  font-size:.78rem;letter-spacing:.02em;
+  transition:color .18s ease,border-color .18s ease,background .18s ease;
+}
+.signin:hover,.signin:focus-visible{
+  color:var(--ink);border-color:rgba(120,170,225,.45);background:rgba(14,26,44,.9);
+}
+.signin svg{width:13px;height:13px;stroke:currentColor;stroke-width:2;
+  fill:none;stroke-linecap:round;stroke-linejoin:round}
+@media (max-width:420px){
+  /* Just the icon on a narrow screen - the word is the first thing worth
+     losing before it starts crowding the heading. */
+  .signin .label{display:none}
+  .signin{padding:.5rem}
+}
+@media (prefers-reduced-motion:reduce){ .signin{transition:none} }
+kbd{font:inherit;font-size:.78rem;background:rgba(255,255,255,.06);
+  border:1px solid var(--line);border-radius:5px;padding:.05rem .35rem}
+
+@media (prefers-reduced-motion:reduce){
+  .mark .dot{animation:none}
+  a.card{transition:none}
+}
+</style>
+</head>
+<body>
+
+<canvas id="bg" aria-hidden="true"></canvas>
+<div class="vignette" aria-hidden="true"></div>
+
+{% if !admin_href.is_empty() %}
+<a class="signin" href="{{ admin_href }}" rel="nofollow">
+  <svg viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
+    <path d="M10 17l5-5-5-5"/><path d="M15 12H3"/>
+  </svg>
+  <span class="label">Sign in</span>
+</a>
+{% endif %}
+
+<div class="wrap">
+  <header>
+    <div class="mark"><span class="dot"></span><span>Running at home</span></div>
+    <h1>Built and hosted<br><em>on my own hardware</em></h1>
+    {# THIS LINE USED TO SAY "Nothing here touches a cloud AI service."
+       It stopped being true the day a cloud model was added as an escalation
+       for the hardest questions, so it changed the same day rather than
+       later. A privacy claim on a public page is a promise, and a stale one is
+       worse than none: it is the sentence somebody would point at.
+
+       What replaces it is narrower and still true -- the models run here, and
+       the cloud is the exception rather than the default. If cloud escalation
+       is ever switched off again, the old sentence can come back. #}
+    <p class="tag">Private tools for the people I build them for. The models
+      run on the machine in my house; the hardest questions can be sent on,
+      and only those.</p>
+  </header>
+
+  <nav class="grid">
+    {% for s in sections %}
+    <a class="card" href="{{ s.href }}" style="--accent:{{ s.accent }}">
+      <span class="ico" aria-hidden="true">
+        <svg viewBox="0 0 24 24">{{ s.icon|safe }}</svg>
+      </span>
+      <p class="sub">{{ s.sub }}</p>
+      <h2>{{ s.name }}</h2>
+      <p>{{ s.desc }}</p>
+      <span class="go">Open
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg>
+      </span>
+    </a>
+    {% endfor %}
+  </nav>
+
+  <footer>
+    <div>Self-hosted &middot; no tracking &middot; no third-party requests</div>
+    <div style="margin-top:.4rem">
+      &copy; {{ year }} Jason Gibson<span class="sep">|</span>
+      <kbd>M</kbd> toggles the background
+    </div>
+  </footer>
+</div>
+
+<script>
+/* ============================================================================
+   Live circuit background — Canvas 2D, no libraries, no video.
+
+   How it works, briefly:
+     * Traces are generated once as orthogonal ("Manhattan") polylines on a grid,
+       which is what gives the blocky circuit-board look rather than curves.
+     * Those static traces are drawn ONCE into an offscreen canvas. Every frame
+       only redraws the moving pulses, so the per-frame cost stays low even with
+       a few hundred traces on a 4K display.
+     * Pulses travel along a trace, lighting pads as they pass, then respawn.
+
+   Performance guards:
+     * Device pixel ratio is capped at 2 — beyond that you cannot see the
+       difference but you quadruple the fill cost.
+     * Animation pauses entirely when the tab is hidden.
+     * prefers-reduced-motion draws one static frame and stops.
+     * Trace and pulse counts scale with viewport area, so a phone does less work.
+   ========================================================================== */
+(function () {
+  'use strict';
+  var canvas = document.getElementById('bg');
+  var ctx = canvas.getContext('2d', { alpha: false });
+
+  var COLORS = ['#5aa2e8', '#4fc79b', '#c78af0'];
+  var BG = '#050a12';
+  var GRID = 26;               // px between grid lines — the "blockiness"
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  var W = 0, H = 0, dpr = 1;
+  var traces = [], pulses = [], nodes = [];
+  var still = null, stillCtx = null;
+  var running = true, paused = false, raf = 0;
+  var mx = 0.5, my = 0.5, tx = 0.5, ty = 0.5;
+
+  function rnd(a, b) { return a + Math.random() * (b - a); }
+  function pick(a) { return a[(Math.random() * a.length) | 0]; }
+
+  /* Build one orthogonal trace: start somewhere on the grid, then take a run of
+     axis-aligned steps, turning at right angles. Occasionally drop a pad. */
+  function makeTrace() {
+    var cols = Math.ceil(W / GRID), rows = Math.ceil(H / GRID);
+    var cx = (Math.random() * cols) | 0, cy = (Math.random() * rows) | 0;
+    var pts = [[cx * GRID, cy * GRID]];
+    var horiz = Math.random() < 0.5;
+    var segs = 3 + ((Math.random() * 5) | 0);
+    var len = 0;
+
+    for (var i = 0; i < segs; i++) {
+      var step = (2 + ((Math.random() * 7) | 0)) * (Math.random() < 0.5 ? -1 : 1);
+      if (horiz) cx += step; else cy += step;
+      cx = Math.max(-2, Math.min(cols + 2, cx));
+      cy = Math.max(-2, Math.min(rows + 2, cy));
+      var last = pts[pts.length - 1];
+      var nx = cx * GRID, ny = cy * GRID;
+      if (nx === last[0] && ny === last[1]) continue;
+      len += Math.abs(nx - last[0]) + Math.abs(ny - last[1]);
+      pts.push([nx, ny]);
+      horiz = !horiz;
+    }
+    if (pts.length < 2 || len < GRID * 3) return null;
+
+    return {
+      pts: pts,
+      len: len,
+      color: pick(COLORS),
+      depth: rnd(0.3, 1),        // drives opacity, width and parallax
+      dim: rnd(0.06, 0.20)
+    };
+  }
+
+  /* Walk a trace and return the x,y at distance d along it. */
+  function pointAt(tr, d) {
+    var pts = tr.pts;
+    for (var i = 1; i < pts.length; i++) {
+      var ax = pts[i - 1][0], ay = pts[i - 1][1];
+      var bx = pts[i][0], by = pts[i][1];
+      var seg = Math.abs(bx - ax) + Math.abs(by - ay);
+      if (d <= seg) {
+        var t = seg === 0 ? 0 : d / seg;
+        return [ax + (bx - ax) * t, ay + (by - ay) * t];
+      }
+      d -= seg;
+    }
+    return pts[pts.length - 1];
+  }
+
+  function build() {
+    var area = W * H;
+    var nTrace = Math.min(190, Math.max(38, Math.round(area / 12000)));
+    var nPulse = Math.min(58, Math.max(12, Math.round(area / 42000)));
+
+    traces = [];
+    for (var i = 0; i < nTrace * 1.5 && traces.length < nTrace; i++) {
+      var t = makeTrace();
+      if (t) traces.push(t);
+    }
+
+    /* Pads at trace endpoints and corners — the little squares and vias. */
+    nodes = [];
+    traces.forEach(function (tr) {
+      tr.pts.forEach(function (p, i) {
+        if (i === 0 || i === tr.pts.length - 1 || Math.random() < 0.28) {
+          nodes.push({ x: p[0], y: p[1], c: tr.color, d: tr.depth,
+                       r: (i === 0 || i === tr.pts.length - 1) ? 2.6 : 1.7,
+                       square: Math.random() < 0.55 });
+        }
+      });
+    });
+
+    pulses = [];
+    for (var j = 0; j < nPulse; j++) spawn();
+
+    renderStill();
+  }
+
+  function spawn(p) {
+    var tr = traces[(Math.random() * traces.length) | 0];
+    if (!tr) return;
+    var o = p || {};
+    o.tr = tr;
+    o.d = Math.random() * tr.len;
+    o.speed = rnd(28, 95) * (0.5 + tr.depth);
+    o.life = 0;
+    o.tail = rnd(28, 78);
+    if (!p) pulses.push(o);
+  }
+
+  /* Static layer: traces + pads, drawn once per resize. */
+  function renderStill() {
+    if (!still) {
+      still = document.createElement('canvas');
+      stillCtx = still.getContext('2d');
+    }
+    still.width = W * dpr;
+    still.height = H * dpr;
+    var c = stillCtx;
+    c.setTransform(dpr, 0, 0, dpr, 0, 0);
+    c.clearRect(0, 0, W, H);
+
+    // faint grid dots
+    c.fillStyle = 'rgba(120,170,225,.055)';
+    for (var gx = 0; gx < W; gx += GRID * 2) {
+      for (var gy = 0; gy < H; gy += GRID * 2) c.fillRect(gx, gy, 1, 1);
+    }
+
+    c.lineCap = 'square';
+    c.lineJoin = 'miter';
+    traces.forEach(function (tr) {
+      c.beginPath();
+      c.moveTo(tr.pts[0][0], tr.pts[0][1]);
+      for (var i = 1; i < tr.pts.length; i++) c.lineTo(tr.pts[i][0], tr.pts[i][1]);
+      c.strokeStyle = tr.color;
+      c.globalAlpha = tr.dim;
+      c.lineWidth = 0.6 + tr.depth * 1.3;
+      c.stroke();
+    });
+
+    nodes.forEach(function (n) {
+      c.globalAlpha = 0.10 + n.d * 0.16;
+      c.fillStyle = n.c;
+      if (n.square) c.fillRect(n.x - n.r, n.y - n.r, n.r * 2, n.r * 2);
+      else { c.beginPath(); c.arc(n.x, n.y, n.r, 0, 6.2832); c.fill(); }
+    });
+    c.globalAlpha = 1;
+  }
+
+  function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth;
+    H = window.innerHeight;
+    canvas.width = W * dpr;
+    canvas.height = H * dpr;
+    canvas.style.width = W + 'px';
+    canvas.style.height = H + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    build();
+    if (reduce || paused) drawFrame(0);
+  }
+
+  var last = 0;
+  function drawFrame(dt) {
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.fillStyle = BG;
+    ctx.fillRect(0, 0, W, H);
+
+    // gentle parallax toward the cursor
+    tx += (mx - tx) * 0.045;
+    ty += (my - ty) * 0.045;
+    var ox = (tx - 0.5) * -22, oy = (ty - 0.5) * -22;
+
+    ctx.save();
+    ctx.translate(ox * 0.35, oy * 0.35);
+    ctx.drawImage(still, 0, 0, W, H);
+    ctx.restore();
+
+    ctx.save();
+    ctx.translate(ox, oy);
+    ctx.globalCompositeOperation = 'lighter';
+
+    for (var i = 0; i < pulses.length; i++) {
+      var p = pulses[i], tr = p.tr;
+      p.d += p.speed * dt;
+      p.life += dt;
+      if (p.d > tr.len) { spawn(p); continue; }
+
+      // trail: a few samples behind the head, fading out
+      var steps = 7;
+      for (var s = steps; s >= 0; s--) {
+        var dd = p.d - (p.tail * s / steps);
+        if (dd < 0) continue;
+        var pt = pointAt(tr, dd);
+        var a = (1 - s / steps);
+        ctx.globalAlpha = a * a * (0.16 + tr.depth * 0.5);
+        ctx.strokeStyle = tr.color;
+        ctx.lineWidth = (0.8 + tr.depth * 1.9) * (0.35 + a * 0.65);
+        ctx.beginPath();
+        ctx.moveTo(pt[0], pt[1]);
+        var pt2 = pointAt(tr, Math.max(0, dd - p.tail / steps));
+        ctx.lineTo(pt2[0], pt2[1]);
+        ctx.stroke();
+      }
+
+      // head
+      var h = pointAt(tr, p.d);
+      var g = ctx.createRadialGradient(h[0], h[1], 0, h[0], h[1], 9 + tr.depth * 9);
+      g.addColorStop(0, tr.color);
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.globalAlpha = 0.5 + tr.depth * 0.45;
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(h[0], h[1], 9 + tr.depth * 9, 0, 6.2832);
+      ctx.fill();
+
+      ctx.globalAlpha = 0.85;
+      ctx.fillStyle = '#dff1ff';
+      ctx.fillRect(h[0] - 1, h[1] - 1, 2, 2);
+    }
+
+    ctx.restore();
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
+  }
+
+  function loop(now) {
+    if (!running) return;
+    var dt = Math.min((now - last) / 1000, 0.05);   // clamp after a tab stall
+    last = now;
+    if (!paused) drawFrame(dt);
+    raf = requestAnimationFrame(loop);
+  }
+
+  window.addEventListener('resize', function () {
+    clearTimeout(window.__rz);
+    window.__rz = setTimeout(resize, 140);
+  });
+  window.addEventListener('pointermove', function (e) {
+    mx = e.clientX / W; my = e.clientY / H;
+  }, { passive: true });
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) { running = false; cancelAnimationFrame(raf); }
+    else if (!reduce) { running = true; last = performance.now(); raf = requestAnimationFrame(loop); }
+  });
+  // M toggles the animation, for when you want to read without movement.
+  window.addEventListener('keydown', function (e) {
+    if (e.key === 'm' || e.key === 'M') { paused = !paused; if (!paused) last = performance.now(); }
+  });
+
+  resize();
+  if (reduce) { drawFrame(0); }
+  else { last = performance.now(); raf = requestAnimationFrame(loop); }
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#050a12">
+<meta name="robots" content="noindex, nofollow">
+<title>{% if forced %}Choose your own password{% else %}Change your password{% endif %}</title>
+<link rel="stylesheet" href="/theme.css">
+<style>
+  .card-form{width:min(380px,100%)}
+</style>
+</head>
+<body>
+<div class="centre">
+  <form class="panel card-form" method="post" action="change">
+    {% if forced %}
+      <h1>Choose your own password</h1>
+      <p class="sub">The one you were given has done its job. Pick something only
+        you know &mdash; this is the last time you'll need the old one.</p>
+    {% else %}
+      <h1>Change your password</h1>
+    {% endif %}
+    {% if !error.is_empty() %}<p class="note bad">{{ error }}</p>{% endif %}
+
+    <!-- Not editable. On the forced path this identifies the account being
+         changed, and letting it be edited would turn this form into "change
+         somebody else's password if you know theirs". -->
+    <input type="hidden" name="email" value="{{ email }}">
+    <p class="sub" style="margin:.2rem 0 1rem">Signed in as <b>{{ email }}</b></p>
+
+    <label for="c">{% if forced %}The password you were given{% else %}Current password{% endif %}</label>
+    <input id="c" name="current" type="password" autocomplete="current-password" autofocus required>
+
+    <label for="n" style="margin-top:.8rem">New password</label>
+    <input id="n" name="password" type="password" autocomplete="new-password"
+           minlength="{{ min }}" required>
+    <p class="muted" style="margin:.25rem 0 .75rem">
+      At least {{ min }} characters, with an uppercase letter, a lowercase
+      letter, a number and a symbol. <strong>Your password is never stored
+      anywhere it can be read back</strong> &mdash; only a one-way argon2id
+      verifier is kept, so nobody here can look it up.
+    </p>
+
+    <label for="n2" style="margin-top:.8rem">New password again</label>
+    <input id="n2" name="confirm" type="password" autocomplete="new-password"
+           minlength="{{ min }}" required>
+
+    <input type="hidden" name="next" value="{{ next }}">
+    <button class="wide" type="submit" style="margin-top:1rem">Save it</button>
+    <footer>At least {{ min }} characters. Everywhere you're currently signed in
+      will be signed out.</footer>
+  </form>
+</div>
+</body>
+</html>

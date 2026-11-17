@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0d0a12">
+<meta name="robots" content="noindex, nofollow, noarchive, noimageindex">
+<title>{{ title }} &middot; {{ site_title }}</title>
+<style>
+:root{--bg:#0d0a12;--ink:#f2ecf0;--muted:#a08fa0;--line:rgba(217,138,176,.22);--accent:#d98ab0}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+     font:16px/1.6 system-ui,-apple-system,"Segoe UI",sans-serif;padding:28px 20px 48px}
+.wrap{max-width:1100px;margin:0 auto}
+.back{display:inline-block;margin-bottom:16px;color:var(--muted);font-size:.84rem;text-decoration:none}
+.back:hover{color:var(--ink)}
+h1{margin:0 0 .2rem;font-size:1.35rem;font-weight:600}
+.note{margin:0 0 24px;color:var(--muted);font-size:.88rem}
+.grid{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(160px,1fr))}
+.grid a{display:block;aspect-ratio:1;border-radius:10px;overflow:hidden;background:#160f1a;
+  border:1px solid var(--line)}
+.grid img{width:100%;height:100%;object-fit:cover;display:block;
+  transition:transform .25s ease,opacity .3s ease}
+.grid a:hover img,.grid a:focus-visible img{transform:scale(1.05)}
+footer{margin-top:34px;color:var(--muted);font-size:.72rem;text-align:center}
+@media (prefers-reduced-motion:reduce){.grid img{transition:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="../">&larr; all albums</a>
+  <h1>{{ title }}</h1>
+  {% if !note.is_empty() %}<p class="note">{{ note }}</p>{% endif %}
+
+  <div class="grid">
+    {% for i in indexes %}
+    <a href="../p/{{ id }}/{{ i }}" target="_blank" rel="noopener">
+      <!-- loading="lazy" is the whole reason this page is usable: the browser
+           only fetches a tile when it is close to the viewport, so an album of
+           three hundred photos costs the same to open as one of twelve. -->
+      <img src="../t/{{ id }}/{{ i }}" alt="" loading="lazy" decoding="async" width="480" height="480">
+    </a>
+    {% endfor %}
+  </div>
+
+  <footer>&copy; {{ year }}</footer>
+</div>
+</body>
+</html>

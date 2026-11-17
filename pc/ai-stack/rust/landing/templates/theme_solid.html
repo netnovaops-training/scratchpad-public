@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="{{ ground }}">
+<meta name="robots" content="noindex">
+<title>{{ who }}&rsquo;s page</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700&display=swap">
+<style>
+/* ===========================================================================
+   JUST A COLOUR — one template, five themes.
+
+   FOR PEOPLE WHO DO NOT WANT SCENERY. Every other theme has something going
+   on: waves, jets, a mirror ball. Somebody who just wants a calm page and no
+   weather should not have to accept a beach, and building five near-identical
+   files to give them the choice would be five files to fix every time the
+   card markup changes.
+
+   So the ground and the accent arrive as values and everything else is
+   shared. Adding a sixth colour is one line in solid_hue() -- no template,
+   no dispatch arm.
+
+   THE COLOURS ARE CHECKED, NOT PICKED OFF A WHEEL. Each ground is dark
+   enough to carry the same light text, so a new one cannot quietly land at a
+   lightness where the text stops being readable. Cards are a lightened layer
+   over the ground rather than a fixed panel colour, which keeps the whole
+   page in one family whatever the hue.
+   =========================================================================== */
+
+:root {
+  --ground: {{ ground }};
+  --accent: {{ accent }};
+  --text:   #f4f6f9;
+  --text-2: rgba(244,246,249,.74);
+  --text-3: rgba(244,246,249,.52);
+  --panel:   rgba(255,255,255,.055);
+  --panel-2: rgba(255,255,255,.10);
+  --edge:    rgba(255,255,255,.13);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0; min-height: 100%;
+  background: var(--ground);
+  color: var(--text);
+  font: 17px/1.65 Nunito, ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.content { max-width: 940px; margin: 0 auto; padding: clamp(2.5rem,7vw,4.5rem) 1.25rem 6rem; }
+
+header { text-align: center; margin-bottom: 2.2rem; }
+h1 { font-weight: 700; font-size: clamp(2rem, 6.5vw, 2.8rem); margin: 0 0 .35rem; letter-spacing: -.015em; }
+h1 .name { color: var(--accent); text-transform: capitalize; }
+header p { margin: 0 auto; max-width: 32rem; color: var(--text-2); font-size: 1.02rem; }
+
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(215px, 1fr)); gap: 1rem; }
+
+.card {
+  display: block; text-decoration: none; color: inherit;
+  background: var(--panel); border: 1px solid var(--edge);
+  border-left: 4px solid var(--card-accent, var(--accent));
+  border-radius: 14px; padding: 1.2rem 1.25rem 1.05rem;
+  transition: transform .18s ease, background .18s ease;
+}
+.card:hover, .card:focus-visible { transform: translateY(-4px); background: var(--panel-2); }
+.card:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+.card .ico { display: inline-flex; width: 42px; height: 42px; align-items: center; justify-content: center; border-radius: 11px; background: var(--card-accent, var(--accent)); margin-bottom: .65rem; }
+.card .ico svg { width: 21px; height: 21px; stroke: var(--ground); fill: none; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+.card h2 { font-size: 1.16rem; font-weight: 700; margin: 0 0 .15rem; }
+.card .sub { margin: 0 0 .42rem; font-size: .73rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--text-3); }
+.card p.desc { margin: 0; color: var(--text-2); font-size: .94rem; line-height: 1.55; }
+.card .go { display: inline-block; margin-top: .78rem; font-weight: 700; color: var(--accent); }
+
+.nothing { background: var(--panel); border: 2px dashed var(--edge); border-radius: 14px; padding: 2rem; text-align: center; color: var(--text-2); }
+
+footer { margin-top: 2.4rem; text-align: center; color: var(--text-3); font-size: .92rem; }
+footer a { color: var(--accent); font-weight: 700; }
+
+@media (prefers-reduced-motion: reduce) { .card { transition: none; } }
+{% include "_effects.html" %}
+
+/* --- applying the effects (2026-09-07) -------------------------------------
+   The classes existed and nothing wore them, so the page looked unchanged.
+   These three lines are what make the difference visible. */
+
+/* The entrance, staggered by --i. Capped in the template at 10: past that a
+   stagger stops reading as choreography and starts reading as a slow page. */
+.card.enter { animation-delay: calc(var(--i, 0) * 45ms); }
+
+/* The glow needs somewhere to sit above the card's own background. */
+.card.lit { isolation: isolate; }
+</style>
+</head>
+<body>
+
+<div class="content">
+  <header>
+    <h1>Hi <span class="name">{{ who }}</span></h1>
+    <p>Everything of yours, in one place. Pick something and go.</p>
+  </header>
+
+  {% if sections.is_empty() %}
+  <div class="nothing">Nothing has been set up for you yet. Give Jason a nudge.</div>
+  {% else %}
+  {% include "_search.html" %}
+  <div class="grid">
+    {% for s in sections %}
+    <a class="card" href="{{ s.href }}" style="--card-accent:{{ s.accent }}">
+      <span class="ico"><svg viewBox="0 0 24 24">{{ s.icon|safe }}</svg></span>
+      <p class="sub">{{ s.sub }}</p>
+      <h2>{{ s.name }}</h2>
+      <p class="desc">{{ s.desc }}</p>
+      <span class="go">Open &rarr;</span>
+    </a>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <footer>
+    <a href="/looks">Change look</a> &middot; <a href="/auth/logout">Sign out</a> &middot; {{ year }}
+  </footer>
+</div>
+<script>
+/* Entrance animations run once per device, then stop.
+   Jason, 2026-09-07: "turn off animations after the person logs in."
+
+   localStorage, not a session flag: he means the daily user, and a session
+   flag replays the whole entrance every morning -- the thing being removed.
+
+   Set BEFORE first paint and wrapped in try/catch: a private window throws on
+   storage access, and an exception here would leave the class unset and the
+   animation running forever for that person -- invisible in testing,
+   permanent for them. Animating is the safe default when storage is gone. */
+(function () {
+  try {
+    if (localStorage.getItem('seen-entrance')) {
+      document.documentElement.classList.add('pre-seen');
+    } else { localStorage.setItem('seen-entrance', '1'); }
+  } catch (e) {}
+  document.addEventListener('DOMContentLoaded', function () {
+    var t = document.querySelectorAll('.tally[style*="--n"]');
+    if (!t.length || !window.IntersectionObserver) return;
+    /* Count-ups start only once visible, so a number below the fold has not
+       already finished counting by the time it is scrolled to. */
+    var io = new IntersectionObserver(function (es) {
+      es.forEach(function (e) {
+        if (e.isIntersecting) { e.target.classList.add('run'); io.unobserve(e.target); }
+      });
+    }, { threshold: 0.4 });
+    t.forEach(function (el) { io.observe(el); });
+  });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>{% block title %}{{ site_name }}{% endblock %}</title>
+<link rel="stylesheet" href="/theme.css">
+<style>
+  body{max-width:60rem;margin:0 auto;padding:1.2rem}
+  .card{border:1px solid var(--line,#2a2f38);border-radius:8px;
+    padding:1rem 1.2rem;margin:1rem 0}
+  .row{display:flex;gap:.8rem;align-items:center;flex-wrap:wrap}
+  .muted{opacity:.7}.small{font-size:.86rem}
+  table{width:100%;border-collapse:collapse}
+  td,th{padding:.45rem .5rem;text-align:left;border-bottom:1px solid var(--line,#2a2f38)}
+  td.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .warnbox{border-left:3px solid var(--warn,#b4690e);padding:.5rem .8rem;
+    background:rgba(180,105,14,.08);border-radius:4px;margin:.6rem 0}
+  .okbox{border-left:3px solid var(--ok,#2e7d32);padding:.5rem .8rem;
+    background:rgba(46,125,50,.08);border-radius:4px;margin:.6rem 0}
+  a.crumb{margin-right:.3rem}
+  header.top{display:flex;justify-content:space-between;align-items:baseline;
+    flex-wrap:wrap;gap:.6rem;margin-bottom:.4rem}
+</style>
+</head>
+<body>
+<header class="top">
+  <a href="{{ root }}/"><strong>{{ site_name }}</strong></a>
+  <span class="small muted">{{ email }}</span>
+</header>
+{% block body %}{% endblock %}
+<footer class="small muted" style="margin-top:2rem">
+  You are shown only what belongs to you. Files are served for download,
+  never opened in the browser.
+</footer>
+</body>
+</html>

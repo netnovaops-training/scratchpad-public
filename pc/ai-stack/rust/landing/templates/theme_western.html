@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#2b1a14">
+<meta name="robots" content="noindex">
+<title>{{ who }}&rsquo;s page</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rye&family=Bitter:wght@400;600;700&display=swap">
+<style>
+/* ---------------------------------------------------------------------------
+   WESTERN -- desert dusk.
+
+   Committed to one look rather than following the viewer's light/dark
+   setting. A theme is a chosen thing; a sunset that turns white at noon is
+   not a sunset. Every colour is stated, so it holds on any host background.
+
+   The mesas are three layered SVG silhouettes at different opacities. Depth
+   from overlap and value alone -- no parallax, no scroll listener. The only
+   thing that moves is the sun's glow, very slowly, which reads as heat haze
+   rather than as an animation.
+--------------------------------------------------------------------------- */
+:root{
+  --sand:#e8d5b7; --dust:#c9a87f; --rust:#b4552d; --ember:#e08b3c;
+  --dusk:#2b1a14; --deep:#1a0f0b; --ink:#f4e6d2; --muted:#c4a68a;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  min-height:100vh;
+  background:
+    radial-gradient(120% 80% at 50% 88%, #6b3a24 0%, transparent 55%),
+    linear-gradient(#1a0f0b 0%, #46251a 42%, #8f4a28 72%, #d98544 100%);
+  color:var(--ink);
+  font:400 17px/1.6 Bitter,Georgia,serif;
+  -webkit-font-smoothing:antialiased;
+  position:relative;
+  overflow-x:hidden;
+}
+
+/* --- the sun and the mesas ------------------------------------------------ */
+.scene{position:fixed;inset:0;z-index:0;pointer-events:none}
+.sun{
+  position:absolute;left:50%;bottom:16vh;width:34vmin;height:34vmin;
+  transform:translateX(-50%);border-radius:50%;
+  background:radial-gradient(circle,#ffd9a0 0%,#ffb055 45%,#e8722d 70%,transparent 72%);
+  filter:blur(2px);
+  animation:haze 14s ease-in-out infinite;
+}
+@keyframes haze{
+  0%,100%{opacity:.92;transform:translateX(-50%) scale(1)}
+  50%    {opacity:1;  transform:translateX(-50%) scale(1.035)}
+}
+.mesa{position:absolute;left:0;right:0;bottom:0;width:100%;display:block}
+.mesa.far {opacity:.42}
+.mesa.mid {opacity:.72}
+.mesa.near{opacity:1}
+
+/* --- content -------------------------------------------------------------- */
+.wrap{position:relative;z-index:1;max-width:1080px;margin:0 auto;padding:clamp(28px,6vw,72px) 22px 40px}
+header{text-align:center;margin-bottom:clamp(26px,5vw,52px)}
+.badge{
+  display:inline-block;font:400 12px/1 Rye,Georgia,serif;letter-spacing:.22em;
+  text-transform:uppercase;color:var(--sand);
+  border:1px solid rgba(232,213,183,.45);border-radius:2px;
+  padding:8px 16px;margin-bottom:18px;
+  background:rgba(26,15,11,.35);
+}
+h1{
+  font:400 clamp(34px,7.5vw,66px)/1.05 Rye,Georgia,serif;
+  margin:0 0 10px;color:#fff4e2;
+  text-shadow:0 3px 0 rgba(0,0,0,.28),0 0 34px rgba(255,170,90,.28);
+  text-wrap:balance;
+}
+.lede{margin:0 auto;max-width:52ch;color:var(--sand);font-size:clamp(15px,2vw,18px)}
+
+/* --- cards, cut like painted board signs ---------------------------------- */
+nav{display:grid;grid-template-columns:repeat(auto-fit,minmax(248px,1fr));gap:16px;margin-top:clamp(24px,4vw,44px)}
+.card{
+  --accent:#b4552d;
+  display:block;text-decoration:none;color:inherit;
+  background:linear-gradient(#3a2119,#2b1a14);
+  border:1px solid rgba(232,213,183,.20);
+  border-top:3px solid var(--accent);
+  border-radius:3px;
+  padding:20px 20px 17px;
+  box-shadow:0 10px 26px rgba(0,0,0,.34);
+  transition:transform .16s ease,box-shadow .16s ease,border-color .16s ease;
+}
+.card:hover,.card:focus-visible{
+  transform:translateY(-3px);
+  box-shadow:0 16px 34px rgba(0,0,0,.44);
+  border-color:rgba(232,213,183,.42);
+  outline:none;
+}
+.card:focus-visible{outline:2px solid var(--ember);outline-offset:3px}
+.ico{display:inline-flex;width:38px;height:38px;align-items:center;justify-content:center;
+  border-radius:50%;background:rgba(232,213,183,.10);border:1px solid rgba(232,213,183,.22);margin-bottom:12px}
+.ico svg{width:21px;height:21px;fill:none;stroke:var(--accent);stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.sub{margin:0 0 3px;font:600 10.5px/1 Bitter,serif;letter-spacing:.17em;text-transform:uppercase;color:var(--dust)}
+.card h2{margin:0 0 7px;font:400 24px/1.15 Rye,Georgia,serif;color:#fff4e2}
+.card p{margin:0;color:var(--muted);font-size:14.5px;line-height:1.55}
+.go{display:inline-flex;align-items:center;gap:6px;margin-top:13px;
+  font:700 12px/1 Bitter,serif;letter-spacing:.13em;text-transform:uppercase;color:var(--ember)}
+.go svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;
+  transition:transform .16s ease}
+.card:hover .go svg{transform:translateX(4px)}
+
+footer{margin-top:clamp(34px,6vw,64px);text-align:center;font-size:13px;color:var(--dust);
+  border-top:1px solid rgba(232,213,183,.16);padding-top:20px}
+footer a{color:var(--sand);text-decoration:none;border-bottom:1px dotted rgba(232,213,183,.5)}
+footer a:hover{color:#fff4e2}
+
+@media (prefers-reduced-motion:reduce){.sun{animation:none}.card{transition:none}}
+
+/* Somebody whose account has been created but not yet given anything. A blank
+   page would read as broken; this says the sign-in worked and what to do next.
+   Neutral greys with alpha, so the one rule sits correctly on the light themes
+   and the dark ones alike. */
+.nothing{max-width:56ch;margin:0 auto;padding:20px 22px;border-radius:4px;
+  border:1px solid rgba(128,128,128,.35);background:rgba(128,128,128,.10);
+  font-size:15px;line-height:1.65}
+.nothing strong{display:block;margin-bottom:6px}
+.shelfhead{
+  font-size:.82rem;letter-spacing:.26em;text-transform:uppercase;
+  color:#c9a36a;margin:36px 0 4px;padding-bottom:8px;
+  border-bottom:2px dashed rgba(201,163,106,.4);
+}
+.shelfhead:first-of-type{margin-top:12px}
+.shelfbox{margin:26px 0;border:0}
+.shelfbox summary{
+  list-style:none;cursor:pointer;display:flex;align-items:center;gap:12px;
+  font-size:.86rem;letter-spacing:.24em;text-transform:uppercase;
+  padding:14px 18px;border-radius:12px;user-select:none;
+  border:1px solid rgba(160,160,160,.35);transition:border-color .25s;
+}
+.shelfbox summary::-webkit-details-marker{display:none}
+.shelfbox summary::before{content:"\25B8";transition:transform .25s;font-size:.9em}
+.shelfbox[open] summary::before{transform:rotate(90deg)}
+.shelfbox summary:hover{border-color:rgba(200,200,200,.7)}
+.shelfcount{margin-left:auto;font-size:.72rem;letter-spacing:.06em;
+  border:1px solid currentColor;border-radius:99px;padding:2px 10px;opacity:.75}
+.shelfbox>nav{animation:shelfdown .3s ease}
+@keyframes shelfdown{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion: reduce){.shelfbox>nav{animation:none}}
+{% include "_effects.html" %}
+
+/* --- applying the effects (2026-09-07) -------------------------------------
+   The classes existed and nothing wore them, so the page looked unchanged.
+   These three lines are what make the difference visible. */
+
+/* The entrance, staggered by --i. Capped in the template at 10: past that a
+   stagger stops reading as choreography and starts reading as a slow page. */
+.card.enter { animation-delay: calc(var(--i, 0) * 45ms); }
+
+/* The glow needs somewhere to sit above the card's own background. */
+.card.lit { isolation: isolate; }
+</style>
+</head>
+<body>
+
+<div class="scene" aria-hidden="true">
+  <div class="sun"></div>
+  <svg class="mesa far"  viewBox="0 0 1200 300" preserveAspectRatio="none" style="height:38vh">
+    <path fill="#3d2018" d="M0 300V190l90-14 40-56h150l34 52 96 8 60-72h130l52 66 118 10 46-40h120l64 58 100 12v86z"/>
+  </svg>
+  <svg class="mesa mid"  viewBox="0 0 1200 260" preserveAspectRatio="none" style="height:28vh">
+    <path fill="#2b1610" d="M0 260V170l120-10 52-46h120l40 44 110 8 70-56h140l58 52 130 10 60-36h100l60 44 140 10v70z"/>
+  </svg>
+  <svg class="mesa near" viewBox="0 0 1200 200" preserveAspectRatio="none" style="height:17vh">
+    <path fill="#1a0d09" d="M0 200v-72l140-16 70-32h160l56 34 140 10 84-40h150l70 38 150 12 180-20v86z"/>
+  </svg>
+</div>
+
+<div class="wrap">
+  <header>
+    <span class="badge">Territory of {{ who }}</span>
+    <h1>{{ who }}&rsquo;s Place</h1>
+    <p class="lede">Everything of yours, out here where the light goes long.</p>
+  </header>
+
+  {% if sections.is_empty() %}
+  <div class="nothing">
+    <strong>Nothing has been shared with you yet.</strong>
+    Your sign-in works, so the account is real &mdash; it just has not been
+    given anything to open. Ask Jason to add something to it.
+  </div>
+  {% else %}
+  {% include "_search.html" %}
+  {% for shelf in shelves %}
+  {% if !shelf.name.is_empty() %}
+  <details class="shelfbox">
+    <summary><span>{{ shelf.name }}</span>
+      <span class="shelfcount"><span class="tally" style="--n:{{ shelf.sections.len() }}">{{ shelf.sections.len() }}</span> cards</span></summary>
+  {% endif %}
+  <nav>
+    {% for s in shelf.sections %}
+    <a class="card enter{% if s.href == "/ability/" %} lit{% endif %}" href="{{ s.href }}" style="--accent:{{ s.accent }};--i:{{ loop.index0 }}">
+      <span class="ico" aria-hidden="true">
+        <svg viewBox="0 0 24 24">{{ s.icon|safe }}</svg>
+      </span>
+      <p class="sub">{{ s.sub }}</p>
+      <h2>{{ s.name }}</h2>
+      <p>{{ s.desc }}</p>
+      <span class="go">Open
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg>
+      </span>
+    </a>
+    {% endfor %}
+  </nav>
+  {% if !shelf.name.is_empty() %}
+  </details>
+  {% endif %}
+  {% endfor %}
+  {% endif %}
+
+  <footer>
+    <a href="/looks">Change look</a> &middot; <a href="/auth/logout">Sign out</a> &middot; &copy; {{ year }}
+  </footer>
+</div>
+<script>
+/* Entrance animations run once per device, then stop.
+   Jason, 2026-09-07: "turn off animations after the person logs in."
+
+   localStorage, not a session flag: he means the daily user, and a session
+   flag replays the whole entrance every morning -- the thing being removed.
+
+   Set BEFORE first paint and wrapped in try/catch: a private window throws on
+   storage access, and an exception here would leave the class unset and the
+   animation running forever for that person -- invisible in testing,
+   permanent for them. Animating is the safe default when storage is gone. */
+(function () {
+  try {
+    if (localStorage.getItem('seen-entrance')) {
+      document.documentElement.classList.add('pre-seen');
+    } else { localStorage.setItem('seen-entrance', '1'); }
+  } catch (e) {}
+  document.addEventListener('DOMContentLoaded', function () {
+    var t = document.querySelectorAll('.tally[style*="--n"]');
+    if (!t.length || !window.IntersectionObserver) return;
+    /* Count-ups start only once visible, so a number below the fold has not
+       already finished counting by the time it is scrolled to. */
+    var io = new IntersectionObserver(function (es) {
+      es.forEach(function (e) {
+        if (e.isIntersecting) { e.target.classList.add('run'); io.unobserve(e.target); }
+      });
+    }, { threshold: 0.4 });
+    t.forEach(function (el) { io.observe(el); });
+  });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,238 @@
+# ---------------------------------------------------------------------------
+#  sachin -- the Raspberry Pi 5, as a low-power always-on node.
+#
+#  Jason, 2026-09-10: "offload things like a emails to this be the n8n
+#  gatekeeper and other containers that take the load of my pc and nuc that
+#  this pi can do effiecnetly with less power".
+#
+#  WHAT BELONGS HERE, AND WHY IT IS NOT "WHATEVER FITS".
+#
+#  This is 4 cores, 4GB and no GPU, drawing about 3W idle against the NUC's
+#  ~12W and the PC's far more. The saving is real, but only for work that is
+#  IDLE MOST OF THE TIME AND MUST NEVER STOP. Move a job here because it
+#  spends its life waiting, not because it is small.
+#
+#    n8n            waits on a Gmail poll, works for two seconds, waits again.
+#    uptime-kuma    sends a request every 60s and sleeps.
+#    node-exporter  reads /proc.
+#
+#  WHAT MUST NOT MOVE HERE, written down so it is not re-litigated later:
+#  Ollama and anything LLM (4GB, no GPU -- a 7B model does not fit and would
+#  be unusably slow if it did), the XTTS voice cloning, Whisper, Immich's
+#  machine learning, and the Meilisearch index. Those are why the PC has a
+#  GPU. Moving them here would not save power, it would just make them take
+#  fifty times longer at 8W instead of five seconds at 200W.
+#
+#  THE WATCHDOG IS THE POINT, NOT A BONUS. Uptime Kuma already runs on the
+#  NUC at :3001 -- which means when the NUC went down on 2026-09-10 and took
+#  every public site with it for several hours, the thing that was supposed
+#  to notice was inside the outage. A monitor on the machine it monitors is
+#  not a monitor. This instance watches the PC and the NUC from a third box
+#  that depends on neither, and it PUSHES alerts out rather than waiting to
+#  be visited -- because if the PC is down, its web UI is not reachable
+#  either.
+#
+#  EVERYTHING BINDS TO THE LAN ADDRESS, NEVER 0.0.0.0. The Pi is not
+#  internet-facing and has no business being reachable from outside. Public
+#  access is the PC's Caddy, with the household forward_auth gate in front,
+#  exactly as every other app on this stack works.
+#
+#  SD CARD: the root filesystem is a consumer SD card from 2018 with no wear
+#  reporting, and this stack writes constantly. Every data path below is a
+#  named volume so that moving to an NVMe HAT is a docker volume relocation
+#  and not a rebuild.
+# ---------------------------------------------------------------------------
+name: sachin
+
+services:
+
+  # -------------------------------------------------------------------------
+  #  n8n -- THE MAIL GATEKEEPER
+  #
+  #  This is the piece that was missing from the mail pipeline designed
+  #  earlier today. The shape Jason asked for was:
+  #
+  #    Gmail sorts by sender/label  ->  Paperless reads and tags it
+  #                                 ->  the right app gets it, for the right person
+  #
+  #  and "i dont want spam being filtered in just senders in my sso list".
+  #  That sender check is a gate, and a gate should be one thing, in one
+  #  place, that you can look at. n8n is that place: it polls the label,
+  #  checks the From address against the household SSO list, and either
+  #  hands the attachment to Paperless or drops it. Nothing downstream has
+  #  to re-check who sent it.
+  #
+  #  WHY ON THE PI. It is idle except for a poll every few minutes, it must
+  #  run whether or not the PC is awake, and if it falls over nothing else
+  #  breaks -- mail simply queues in Gmail until it comes back. That is the
+  #  ideal profile for this box.
+  #
+  #  N8N_ENCRYPTION_KEY IS NOT OPTIONAL AND MUST NEVER CHANGE. It encrypts
+  #  every stored credential, including the Gmail OAuth token. If n8n starts
+  #  without it, it generates one and writes it into the volume; if that
+  #  volume is ever lost or the key changes, every credential becomes
+  #  undecryptable ciphertext and each one has to be re-authorised by hand.
+  #  It lives in .env, which is gitignored.
+  #
+  #  SQLITE, NOT POSTGRES. The default. A Postgres container for a workflow
+  #  engine that fires a few times an hour would cost more RAM than n8n
+  #  itself and add a second thing writing to a dying SD card.
+  #
+  #  NO OIDC HERE, DELIBERATELY. n8n's SSO is an enterprise feature; the
+  #  community edition has only its own owner account. So it gets BOTH: its
+  #  own owner login, and the household forward_auth gate in front of it in
+  #  Caddy. Two locks, because the one it ships with is not the household's.
+  # -------------------------------------------------------------------------
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:latest
+    container_name: n8n
+    restart: unless-stopped
+    ports:
+      - "192.168.1.69:5678:5678"
+    environment:
+      - TZ=America/New_York
+      - GENERIC_TIMEZONE=America/New_York
+      # Behind a reverse proxy on a different hostname, n8n has to be told
+      # what it is called, or the OAuth callback URLs it generates point at
+      # localhost and every Google authorisation fails.
+      - N8N_HOST=n8n.home.example.net
+      - N8N_PROTOCOL=https
+      - N8N_PORT=5678
+      # N8N_WEBHOOK_URL, not WEBHOOK_URL -- 2.38 deprecated the old name and
+      # warns on every boot. It sets the base URL for both test and
+      # production webhooks.
+      - N8N_WEBHOOK_URL=https://n8n.home.example.net/
+      - N8N_EDITOR_BASE_URL=https://n8n.home.example.net/
+      - N8N_PROXY_HOPS=1
+      - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY:?set N8N_ENCRYPTION_KEY in ai-stack/pi/.env}
+      - N8N_DIAGNOSTICS_ENABLED=false
+      - N8N_VERSION_NOTIFICATIONS_ENABLED=false
+      # Executions accumulate forever by default. On this card that is the
+      # difference between a database of a few MB and a few GB.
+      # Pin the defaults n8n warns are about to change under us, so an
+      # image update does not quietly alter behaviour.
+      - N8N_RUNNERS_TASK_TIMEOUT=300
+      - N8N_UNVERIFIED_PACKAGES_ENABLED=false
+      - EXECUTIONS_DATA_PRUNE=true
+      - EXECUTIONS_DATA_MAX_AGE=336
+      - EXECUTIONS_DATA_PRUNE_MAX_COUNT=5000
+    volumes:
+      - n8n_data:/home/node/.n8n
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:5678/healthz || exit 1"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  # -------------------------------------------------------------------------
+  #  uptime-kuma -- THE OUTSIDE-IN WATCHDOG
+  #
+  #  Deliberately a SECOND instance, not a move. The NUC's copy watches the
+  #  house from inside; this one watches the house from a box that is not
+  #  the house. Both are useful and they answer different questions.
+  #
+  #  Configure it to check the PUBLIC URLs -- https://example.org,
+  #  the DJ stream, the status page -- not LAN addresses. On 2026-09-10 every
+  #  container on the PC was running and healthy while nothing was reachable
+  #  from the internet, because haproxy-relay had exited during a reboot. An
+  #  internal check would have reported all-green for the entire outage.
+  #
+  #  AND IT MUST PUSH. Set up a notification channel (email via the Gmail
+  #  account, or ntfy) before trusting it. A dashboard you have to remember
+  #  to open has never once caught an outage at 2am, and this one's own UI
+  #  goes through the PC's Caddy -- so a PC outage hides the page that would
+  #  have told you about it.
+  # -------------------------------------------------------------------------
+  uptime-kuma:
+    image: louislam/uptime-kuma:1
+    container_name: uptime-kuma-pi
+    restart: unless-stopped
+    ports:
+      - "192.168.1.69:3002:3001"
+    environment:
+      - TZ=America/New_York
+      - UPTIME_KUMA_DISABLE_FRAME_SAMEORIGIN=false
+    volumes:
+      - kuma_data:/app/data
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  # -------------------------------------------------------------------------
+  #  node-exporter -- so the Pi appears on the PC's Grafana alongside the
+  #  others. A node you cannot see the load of is a node you will overload.
+  #  Read-only mounts of the host's own metrics; it collects nothing else.
+  # -------------------------------------------------------------------------
+  node-exporter:
+    image: quay.io/prometheus/node-exporter:latest
+    container_name: node-exporter
+    restart: unless-stopped
+    command:
+      - --path.rootfs=/host
+      - --collector.thermal_zone
+      - --no-collector.wifi
+    pid: host
+    ports:
+      - "192.168.1.69:9100:9100"
+    volumes:
+      - /:/host:ro,rslave
+    logging:
+      driver: json-file
+      options: { max-size: "5m", max-file: "2" }
+
+  # -------------------------------------------------------------------------
+  #  ntfy -- the push channel. THIS IS WHAT MAKES THE WATCHDOG REAL.
+  #
+  #  uptime-kuma above watches the public URLs from a machine that is
+  #  neither the PC nor the NUC. That solved half the problem exposed on
+  #  2026-09-10. This solves the other half: its dashboard is served
+  #  through the PC's Caddy, so the outage it exists to catch is the
+  #  outage that hides the page reporting it. It has to reach a phone.
+  #
+  #  On the Pi rather than the NUC for the same reason Kuma is: an alerter
+  #  that shares a failure domain with the thing it alerts about is not an
+  #  alerter. Putting the notifier on the NUC and then having the NUC go
+  #  down would repeat the exact mistake, one layer further out.
+  #
+  #  See ntfy-server.yml for why auth-default-access is deny-all and why
+  #  this one site is NOT behind the household SSO gate.
+  #
+  #  iOS NOTE, because it looks like a privacy leak and is not one:
+  #  upstream-base-url proxies a wake-up through ntfy.sh, because Apple
+  #  only delivers instant push via APNs and a self-hosted server has no
+  #  APNs certificate. What travels through ntfy.sh is a message ID, not
+  #  the message -- the phone then fetches the actual content from here.
+  #  Android polls this server directly and does not use it at all.
+  # -------------------------------------------------------------------------
+  ntfy:
+    image: binwiederhier/ntfy:latest
+    container_name: ntfy
+    restart: unless-stopped
+    command: ["serve"]
+    ports:
+      - "192.168.1.69:8093:80"
+    environment:
+      - TZ=America/New_York
+    volumes:
+      - ./ntfy-server.yml:/etc/ntfy/server.yml:ro
+      - ntfy_data:/var/lib/ntfy
+      - ntfy_cache:/var/cache/ntfy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/v1/health || exit 1"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+volumes:
+  n8n_data:
+  kuma_data:
+  ntfy_data:
+  ntfy_cache:

@@ -1,0 +1,59 @@
+# =============================================================================
+#  Which voice speaks for which site and which surface.
+#
+#  THE FILENAME IS THE VOICE. Put a recording at voices/jason.wav and the voice
+#  is called "jason". Nothing else registers it; there is no list to keep in
+#  step. Renaming the file renames the voice.
+#
+#  REQUIRES A CLONING ENGINE. Set VOICE_ENGINE=luxtts in .env. With
+#  VOICE_ENGINE=kokoro every name below is ignored, silently, and a preset is
+#  used instead -- no error, no warning. That is the single thing most likely
+#  to waste your evening, so it is said twice.
+#
+#  Check what's actually in effect:   voices.cmd
+#  Hear one:                          voices.cmd -Preview jason
+# =============================================================================
+
+# Which engine is expected. Informational -- .env is what actually decides.
+# Kept here so this file records the requirement rather than assuming it.
+requires_engine: luxtts
+
+# -----------------------------------------------------------------------------
+#  BY SITE — keyed on the hostname Caddy serves, so there is no ambiguity
+#  about which site is which.
+# -----------------------------------------------------------------------------
+sites:
+
+  example.org:
+    voice: jason
+    clip: voices/jason.wav
+    whose: Jason's own voice
+    used_by: [landing page, /casey, /jason]
+
+  teewithmsdee.example.org:
+    voice: dee
+    clip: voices/dee.wav
+    whose: Miss Dee's own voice
+    used_by: [booking site, the phone line]
+    note: >
+      The same voice answers the phone. Keep them the same on purpose -- a
+      client who hears one voice on the website and a different one when they
+      call has been given two different businesses.
+
+  peeweelegacy.ddns.net:
+    voice: randy
+    clip: voices/randy.wav
+    whose: Randy
+    used_by: [the legacy photo site]
+
+# -----------------------------------------------------------------------------
+#  BY SURFACE — the things that aren't websites.
+# -----------------------------------------------------------------------------
+surfaces:
+  phone:    dee      # answers the business line
+  hermes:   jason    # the CLI, when /speak is on
+  telegram: jason    # spoken replies on your phone
+
+# What to use if a lookup above misses. Deliberately a real voice rather than
+# silence: a surface that can't find its voice should still speak.
+fallback: dee

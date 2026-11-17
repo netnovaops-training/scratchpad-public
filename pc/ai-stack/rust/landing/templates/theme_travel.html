@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f3ece0">
+<meta name="robots" content="noindex">
+<title>{{ who }}&rsquo;s page</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Karla:wght@400;600;800&display=swap">
+<style>
+/* ---------------------------------------------------------------------------
+   TRAVEL -- a page that looks like the inside of a well-used passport.
+
+   The structural idea: cards are luggage tags and the header is a stamp. The
+   monospace face is doing real work here rather than decoration -- ticket
+   stubs, boarding passes and customs stamps are all set in fixed-width type,
+   so it is the vernacular of the subject rather than a "techy" choice.
+
+   The dashed route line draws itself once on load, left to right, the way a
+   flight path animates on a seat-back screen. It runs once and stops: a route
+   that loops forever is a screensaver, not a page.
+--------------------------------------------------------------------------- */
+:root{
+  --paper:#f3ece0; --paper2:#e9e0cf; --ink:#22201c; --muted:#6e675c;
+  --stamp:#b23a34; --stamp2:#2f5d7c; --line:#cbbfa9; --gold:#a8843c;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  min-height:100vh;
+  background:
+    repeating-linear-gradient(90deg,transparent 0 39px,rgba(203,191,169,.16) 39px 40px),
+    radial-gradient(90% 60% at 50% 0%,#fbf6ec 0%,transparent 60%),
+    var(--paper);
+  color:var(--ink);
+  font:400 17px/1.62 Karla,system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+
+.wrap{max-width:1060px;margin:0 auto;padding:clamp(26px,5vw,64px) 22px 40px}
+
+/* --- header, stamped ------------------------------------------------------ */
+header{position:relative;text-align:center;margin-bottom:clamp(28px,5vw,54px)}
+.stamp{
+  display:inline-block;transform:rotate(-7deg);
+  border:2.5px solid var(--stamp);border-radius:5px;
+  color:var(--stamp);
+  font:700 11px/1 Space Mono,monospace;letter-spacing:.22em;text-transform:uppercase;
+  padding:9px 15px;margin-bottom:20px;
+  /* Ink never lands evenly on paper. */
+  opacity:.88;
+  box-shadow:inset 0 0 0 1px rgba(178,58,52,.25);
+}
+h1{
+  font:800 clamp(32px,7vw,60px)/1.04 Karla,system-ui,sans-serif;
+  letter-spacing:-.022em;margin:0 0 10px;text-wrap:balance;
+}
+.lede{margin:0 auto;max-width:52ch;color:var(--muted);font-size:clamp(15px,2vw,18px)}
+
+/* --- the route ------------------------------------------------------------ */
+.route{display:block;width:100%;max-width:640px;margin:22px auto 0;height:44px}
+.route .path{
+  fill:none;stroke:var(--stamp2);stroke-width:2;stroke-linecap:round;
+  stroke-dasharray:6 7;
+  stroke-dashoffset:640;
+  animation:fly 2.2s ease-out .25s forwards;
+}
+@keyframes fly{to{stroke-dashoffset:0}}
+.route .pin{fill:var(--stamp)}
+.route .plane{fill:var(--ink);opacity:0;animation:land .5s ease-out 2.1s forwards}
+@keyframes land{to{opacity:1}}
+
+/* --- cards as luggage tags ------------------------------------------------ */
+nav{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:16px;margin-top:clamp(24px,4vw,44px)}
+.card{
+  --accent:#2f5d7c;
+  position:relative;display:block;text-decoration:none;color:inherit;
+  background:linear-gradient(#fffdf8,#f6f0e4);
+  border:1px solid var(--line);
+  border-radius:4px;
+  padding:20px 20px 17px;
+  box-shadow:0 2px 0 rgba(203,191,169,.6),0 10px 22px rgba(60,48,30,.09);
+  transition:transform .16s ease,box-shadow .16s ease;
+}
+/* The punched hole and its reinforcement ring -- what makes it a tag and not
+   a rounded rectangle. */
+.card::before{
+  content:"";position:absolute;top:13px;right:15px;width:11px;height:11px;
+  border-radius:50%;background:var(--paper);
+  box-shadow:0 0 0 2.5px rgba(203,191,169,.85);
+}
+.card:hover,.card:focus-visible{transform:translateY(-3px) rotate(-.35deg);
+  box-shadow:0 3px 0 rgba(203,191,169,.6),0 16px 30px rgba(60,48,30,.15);outline:none}
+.card:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.ico{display:inline-flex;width:36px;height:36px;align-items:center;justify-content:center;
+  border-radius:4px;background:rgba(47,93,124,.08);border:1px solid rgba(47,93,124,.18);margin-bottom:12px}
+.ico svg{width:20px;height:20px;fill:none;stroke:var(--accent);stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.sub{margin:0 0 4px;font:700 10px/1 Space Mono,monospace;letter-spacing:.2em;text-transform:uppercase;color:var(--gold)}
+.card h2{margin:0 0 7px;font:800 21px/1.16 Karla,sans-serif;letter-spacing:-.012em}
+.card p{margin:0;color:var(--muted);font-size:14.5px;line-height:1.55}
+.go{display:inline-flex;align-items:center;gap:6px;margin-top:13px;
+  font:700 11px/1 Space Mono,monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--accent)}
+.go svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;
+  transition:transform .16s ease}
+.card:hover .go svg{transform:translateX(4px)}
+
+footer{margin-top:clamp(34px,6vw,62px);text-align:center;
+  font:400 12.5px/1.6 Space Mono,monospace;color:var(--muted);
+  border-top:1px dashed var(--line);padding-top:20px}
+footer a{color:var(--stamp2);text-decoration:none;border-bottom:1px solid rgba(47,93,124,.35)}
+footer a:hover{color:var(--stamp)}
+
+@media (prefers-reduced-motion:reduce){
+  .route .path{animation:none;stroke-dashoffset:0}
+  .route .plane{animation:none;opacity:1}
+  .card{transition:none}
+}
+
+/* Somebody whose account has been created but not yet given anything. A blank
+   page would read as broken; this says the sign-in worked and what to do next.
+   Neutral greys with alpha, so the one rule sits correctly on the light themes
+   and the dark ones alike. */
+.nothing{max-width:56ch;margin:0 auto;padding:20px 22px;border-radius:4px;
+  border:1px solid rgba(128,128,128,.35);background:rgba(128,128,128,.10);
+  font-size:15px;line-height:1.65}
+.nothing strong{display:block;margin-bottom:6px}
+{% include "_effects.html" %}
+
+/* --- applying the effects (2026-09-07) -------------------------------------
+   The classes existed and nothing wore them, so the page looked unchanged.
+   These three lines are what make the difference visible. */
+
+/* The entrance, staggered by --i. Capped in the template at 10: past that a
+   stagger stops reading as choreography and starts reading as a slow page. */
+.card.enter { animation-delay: calc(var(--i, 0) * 45ms); }
+
+/* The glow needs somewhere to sit above the card's own background. */
+.card.lit { isolation: isolate; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <span class="stamp">Admitted &middot; {{ year }} &middot; {{ who }}</span>
+    <h1>{{ who }}&rsquo;s itinerary</h1>
+    <p class="lede">Where everything of yours is, and how to get to it.</p>
+
+    <svg class="route" viewBox="0 0 640 44" aria-hidden="true">
+      <path class="path" d="M14 32 C 150 4, 250 44, 380 20 S 560 6, 626 16"/>
+      <circle class="pin" cx="14" cy="32" r="4.5"/>
+      <path class="plane" d="M626 16 l-13 -6 3 6 -3 6 z"/>
+    </svg>
+  </header>
+
+  {% if sections.is_empty() %}
+  <div class="nothing">
+    <strong>Nothing has been shared with you yet.</strong>
+    Your sign-in works, so the account is real &mdash; it just has not been
+    given anything to open. Ask Jason to add something to it.
+  </div>
+  {% else %}
+  <nav>
+    {% include "_search.html" %}
+    {% for s in sections %}
+    <a class="card enter{% if s.href == "/ability/" %} lit{% endif %}" href="{{ s.href }}" style="--accent:{{ s.accent }};--i:{{ loop.index0 }}">
+      <span class="ico" aria-hidden="true">
+        <svg viewBox="0 0 24 24">{{ s.icon|safe }}</svg>
+      </span>
+      <p class="sub">{{ s.sub }}</p>
+      <h2>{{ s.name }}</h2>
+      <p>{{ s.desc }}</p>
+      <span class="go">Open
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg>
+      </span>
+    </a>
+    {% endfor %}
+  </nav>
+  {% endif %}
+
+  <footer>
+    <a href="/looks">Change look</a> &middot; <a href="/auth/logout">Sign out</a> &middot; &copy; {{ year }}
+  </footer>
+</div>
+<script>
+/* Entrance animations run once per device, then stop.
+   Jason, 2026-09-07: "turn off animations after the person logs in."
+
+   localStorage, not a session flag: he means the daily user, and a session
+   flag replays the whole entrance every morning -- the thing being removed.
+
+   Set BEFORE first paint and wrapped in try/catch: a private window throws on
+   storage access, and an exception here would leave the class unset and the
+   animation running forever for that person -- invisible in testing,
+   permanent for them. Animating is the safe default when storage is gone. */
+(function () {
+  try {
+    if (localStorage.getItem('seen-entrance')) {
+      document.documentElement.classList.add('pre-seen');
+    } else { localStorage.setItem('seen-entrance', '1'); }
+  } catch (e) {}
+  document.addEventListener('DOMContentLoaded', function () {
+    var t = document.querySelectorAll('.tally[style*="--n"]');
+    if (!t.length || !window.IntersectionObserver) return;
+    /* Count-ups start only once visible, so a number below the fold has not
+       already finished counting by the time it is scrolled to. */
+    var io = new IntersectionObserver(function (es) {
+      es.forEach(function (e) {
+        if (e.isIntersecting) { e.target.classList.add('run'); io.unobserve(e.target); }
+      });
+    }, { threshold: 0.4 });
+    t.forEach(function (el) { io.observe(el); });
+  });
+})();
+</script>
+</body>
+</html>

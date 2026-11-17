@@ -1,0 +1,15 @@
+# =============================================================================
+#  Chatterbox Turbo TRIAL image (2026-09-01).
+#
+#  Layered ON TOP of the approved voice image so the engines Jason's ear has
+#  certified (LuxTTS quick, Chatterbox expressive) cannot shift underneath
+#  him: their image is untouched, this one adds the newer chatterbox build
+#  that ships the 350M Turbo model (PyPI stops at 0.1.7, which predates it).
+#
+#  If the trial wins, Turbo replaces LuxTTS in the quick slot by promoting
+#  this image; if it loses, delete this file and the voice-turbo service.
+# =============================================================================
+FROM ai-stack/voice:latest
+
+RUN pip install --no-cache-dir --upgrade \
+    "git+https://github.com/resemble-ai/chatterbox.git"

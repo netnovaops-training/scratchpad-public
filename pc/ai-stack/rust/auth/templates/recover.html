@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#070a18">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<title>Add a passkey</title>
+<link rel="stylesheet" href="static/auth.css">
+</head>
+<body>
+{% include "sky.html" %}
+<main>
+  <div class="brand"><div class="mark" aria-hidden="true"></div><b>ULTRANOVA</b></div>
+  <div class="card">
+    <h1>Add a passkey</h1>
+    {% if !enabled %}
+      <p class="note bad">Passkeys are switched off on this site. Sign in with your password.</p>
+    {% else if mode == "sent" %}
+      <p class="sub">If that address has an account, a link is on its way. It works once
+        and lasts 15 minutes. Open it on the device you want to add.</p>
+    {% else if mode == "use" %}
+      <p class="sub">Give this device a name, then follow the prompt. This link can only
+        add a passkey; it doesn't sign you in. Afterwards, sign in with the passkey.</p>
+      <form id="pk-recover" class="stack">
+        <input type="hidden" name="token" value="{{ token }}">
+        <p class="fine">It is saved under your own name automatically.</p>
+        <div><label for="d">How long should it last?</label>
+          <select id="d" name="days">
+            <option value="0" selected>Keep it (my own device)</option>
+            <option value="1">A loaner: 1 day</option>
+            <option value="7">A loaner: 7 days</option>
+            <option value="30">A loaner: 30 days</option>
+          </select></div>
+        <button class="btn main wide" type="submit">Add this device</button>
+      </form>
+    {% else %}
+      {% if !error.is_empty() %}<p class="note bad">{{ error }}</p>{% endif %}
+      <p class="sub">Lost a device, or setting up a new one? Type your email and we'll send
+        a one-time link that lets you add a passkey.</p>
+      <form method="post" action="recover" class="stack">
+        <div><label for="e">Email</label>
+          <input id="e" name="email" type="email" inputmode="email" autocomplete="username"
+                 autocapitalize="off" autocorrect="off" spellcheck="false" required autofocus></div>
+        <button class="btn main wide" type="submit">Email me a link</button>
+      </form>
+    {% endif %}
+    <p id="pk-msg" class="note" style="display:none"></p>
+    <p class="fine"><a href="./">Back to sign in</a></p>
+  </div>
+</main>
+<script src="passkey/passkey.js" defer></script>
+</body>
+</html>

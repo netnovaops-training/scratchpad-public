@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>Your files</h1>
+
+{% if not known %}
+  <div class="warnbox">
+    This account is signed in but has no folders assigned to it yet.
+    Ownership is written down explicitly rather than guessed — ask Jason to add you.
+  </div>
+{% endif %}
+
+{% if backup.ok %}
+  <div class="okbox">
+    <strong>Backed up.</strong> {{ backup.why }}
+    {% if backup.bytes %}{{ human(backup.bytes) }} on the encrypted external drive.{% endif %}
+  </div>
+{% else %}
+  <div class="warnbox">
+    <strong>Backup:</strong> {{ backup.why }}
+    {% if backup.vault_verified == false and backup.when %}
+      The last run did not confirm the encrypted drive was mounted, so it was stopped
+      rather than writing somewhere unencrypted.
+    {% endif %}
+  </div>
+{% endif %}
+
+{% for t in trees %}
+<div class="card">
+  <div class="row" style="justify-content:space-between">
+    <h2 style="margin:0">{{ t.label }}</h2>
+    <a href="{{ root }}/browse/{{ t.key }}">Open</a>
+  </div>
+  <p class="small muted" style="margin:.4rem 0 0">{{ t.blurb }}</p>
+  <p class="small muted" style="margin:.2rem 0 0">{{ t.items }} items at the top level</p>
+</div>
+{% endfor %}
+{% endblock %}

@@ -1,0 +1,1556 @@
+# =============================================================================
+#  Local AI Stack - Docker Desktop for Windows
+#
+#  Everything appears in Docker Desktop under one group: "ai-stack".
+#  Start it, stop it, read logs, and open the Hermes CLI from the Containers tab.
+#
+#  Design rules baked in:
+#   * Every host port is bound to 127.0.0.1 -> nothing is reachable from your
+#     network. Open WebUI and the CLI are local-only by design.
+#   * Everything talks to `litellm` (one OpenAI-compatible endpoint) instead of
+#     talking to ollama directly, so you swap models by editing one file.
+#   * The Telegram bridge uses long polling (outbound only). No inbound port,
+#     no webhook, no port forwarding on your router.
+#   * Every surface writes to the same transcripts folder as JSONL.
+# =============================================================================
+
+name: ai-stack
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # 1. Ollama - local model runtime (uses your NVIDIA GPU)
+  # ---------------------------------------------------------------------------
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    restart: unless-stopped
+    logging: *default-logging
+    labels:
+      ai-stack.role: "model runtime (GPU)"
+      ai-stack.order: "1"
+    # No host ports published -- see the comments below. Every consumer
+    # reaches Ollama at http://ollama:11434 on the Docker network.
+    ports:
+      - "127.0.0.1:11434:11434"   # restored 2026-11-05 for the plant pipeline (setup-gpu-rotation.ps1)
+      # Loopback for everything on this PC, exactly as before.
+      # DISABLED 2026-09-13. A native Windows Ollama install holds
+      # :::11434 (the IPv6 wildcard, which claims IPv4 too on Windows),
+      # so Docker cannot bind this and the container refuses to START.
+      # That second Ollama has NO models -- anything on the host that
+      # used localhost:11434 was talking to an empty one.
+      #
+      # TO RESTORE: kill the native Ollama from an ELEVATED prompt and
+      # remove its Startup shortcut, then uncomment this line:
+      #     taskkill /F /IM "ollama app.exe" /T
+      #     taskkill /F /IM ollama.exe /T
+      # Nothing in the stack needs this line: LiteLLM and the other
+      # containers reach Ollama at http://ollama:11434 on the Docker
+      # network, not through the host.
+      # (the loopback line is now active above)
+      # ALSO on this PC's LAN address, added 2026-08-28, so the NUC's
+      # garden orchestrator can use phi4 to fill in missing plant data
+      # instead of calling a paid cloud API.
+      #
+      # Bound to the LAN IP, NOT 0.0.0.0. That is the important part: the
+      # NUC's haproxy-relay only forwards 80/443/9443/9444/9445, so this
+      # port is not reachable from the internet -- but binding it to every
+      # interface would still be sloppier than naming the one that needs it.
+      #
+      # It is worth being clear-eyed: Ollama has NO authentication. Anything
+      # on the home LAN can now use the GPU and query the models. That is the
+      # trade for letting the NUC use it, and it is why this is a specific
+      # address rather than a wildcard.
+      # CORRECTED 2026-09-13: was 192.168.1.205, an address this PC no
+      # longer has (its reservation moved it to .100), so the NUC could
+      # not actually reach the GPU through it.
+      # ALSO DISABLED 2026-09-13, same cause: the native Windows Ollama
+      # binds :::11434, the IPv6 wildcard, which on Windows claims every
+      # IPv4 address too -- so NO host address can be bound here, not
+      # just localhost. With both lines out, ollama publishes no host
+      # port at all and starts cleanly. Every consumer in this stack
+      # reaches it as http://ollama:11434 on the Docker network.
+      #
+      # The NUC loses its direct route to the GPU until the native
+      # Ollama is removed. That route was ALREADY broken -- it pointed
+      # at .205, an address this PC no longer has.
+      # - "192.168.1.100:11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      # NAMESPACED 2026-09-13. Compose reads ${VAR} from the shell
+      # environment before .env, and this machine had OLLAMA_KEEP_ALIVE=-1
+      # in the USER environment and =24h in the MACHINE environment, left
+      # by the native Ollama installer. So .env's 10m lost silently and
+      # models were pinned in VRAM forever -- which is the opposite of
+      # what Jason asked for ("evict and serve the best at the moment").
+      # AI_STACK_-prefixed names cannot be hijacked that way.
+      - OLLAMA_KEEP_ALIVE=${AI_STACK_OLLAMA_KEEP_ALIVE:-10m}
+      - OLLAMA_MAX_LOADED_MODELS=${AI_STACK_OLLAMA_MAX_LOADED_MODELS:-2}
+      - OLLAMA_FLASH_ATTENTION=1
+      # 2026-10-26, tried for the plant-data run and reverted: OLLAMA_KV_CACHE_TYPE=q8_0 made
+      # llama-server abort on load; OLLAMA_NUM_PARALLEL=2 pushed phi4 17% onto the CPU (vs 5%).
+      # On this 12 GB card one slot is fastest.
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    # GPU passthrough. Docker Desktop honours this when the WSL2 backend is on
+    # and you have a current NVIDIA driver installed on Windows.
+    # No GPU? Use the CPU override:  docker compose -f docker-compose.yml -f docker-compose.cpu.yml up -d
+    #
+    # THIS STANZA IS LOAD-BEARING AND MUST STAY ATTACHED TO OLLAMA. On
+    # 2026-08-31 a new service was inserted between ollama's environment
+    # block and this deploy stanza, which silently reattached it (and the
+    # healthcheck above) to the new service. The next recreate brought
+    # ollama up with NO GPU AT ALL -- "total_vram=0 B", every model on CPU,
+    # nothing erroring anywhere. If ollama is ever mysteriously slow, check
+    # this stanza still belongs to ollama before debugging anything else.
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  # ---------------------------------------------------------------------------
+  #  ai-tagger -- looks at every Immich photo with a local vision model and
+  #  tags what is in it (animals, plants by name, buildings, kinds of place).
+  #
+  #  Faces are deliberately NOT its job: Immich's own recognition clusters
+  #  those, and naming them happens in Immich's People page.
+  #
+  #  Every tag it writes lives under "ai/" -- that namespace is the review
+  #  mechanism. Browse a tag in Immich, remove it from photos it got wrong,
+  #  add your own (unprefixed) tags; nothing is ever re-tagged behind a
+  #  reviewer's back, because the processed-list in tagger_data remembers
+  #  what has been judged.
+  #
+  #  IT SHARES ONE 12GB CARD WITH HERMES' phi4, and the card cannot hold
+  #  both. The arrangement (Jason's design): the tagger takes the GPU when it
+  #  is quiet, backs off for ten minutes the moment anything else loads, and
+  #  when the whole backlog is finished reloads phi4 itself -- so the ~20s
+  #  model-swap cost lands on this batch job, never on a sentence Jason is
+  #  waiting for Hermes to answer.
+  # ---------------------------------------------------------------------------
+  ai-tagger:
+    # RETIRED 2026-11-03 (Jason): data kept. Back: docker compose --profile retired up -d ai-tagger
+    # 2026-11-12: its code moved to D:\ai-stack-archive\outdated\tagger\ in the clean-up; copy it
+    # back to ./tagger before bringing this service back.
+    profiles: ["retired"]
+    build:
+      context: ./tagger
+    image: ai-stack/ai-tagger:latest
+    container_name: ai-tagger
+    restart: unless-stopped
+    logging: *default-logging
+    labels:
+      ai-stack.role: "photo auto-tagging (vision model, tags under ai/)"
+    depends_on:
+      - ollama
+    environment:
+      # THE LAN ADDRESS, NOT THE PUBLIC ONE. This used to point at
+      # photos.home.example.net, which sent every thumbnail
+      # fetch out through DuckDNS to the public IP, back in through the
+      # router, the NUC's relay and Caddy -- to reach a machine on the
+      # same LAN. Measured 2026-09-21: 171 ms against 4 ms, and it was
+      # the source of the "Temporary failure in name resolution" and
+      # "SSL: UNEXPECTED_EOF" errors that were costing whole photos.
+      #
+      # At two calls per photo across 79,642 photos that round trip was
+      # about seven hours of pure latency. HOUSE_IMMICH_URL elsewhere in
+      # this file already used the LAN address; the tagger was the odd
+      # one out.
+      - IMMICH_URL=${IMMICH_URL:-http://192.168.1.86:2283}
+      # An Immich API key. TAGS BELONG TO THE KEY'S ACCOUNT -- this one is
+      # Jason's, so it tags Jason's library. Other people's libraries need
+      # their own keys once their accounts exist.
+      - 'IMMICH_API_KEY=${IMMICH_TAGGER_KEY:-}'
+      - OLLAMA_URL=http://ollama:11434
+      - VISION_MODEL=${TAGGER_VISION_MODEL:-gemma4:12b}
+      - RESTORE_MODEL=${TAGGER_RESTORE_MODEL:-gemma4:12b}
+      - GPU_COOLDOWN_SECONDS=${TAGGER_COOLDOWN:-600}
+      - SWEEP_MINUTES=${TAGGER_SWEEP_MINUTES:-60}
+    volumes:
+      - tagger_data:/data
+
+  # ---------------------------------------------------------------------------
+  # 2. One-shot model puller. Runs, pulls, exits. It is SUPPOSED to show up
+  #    as "Exited (0)" in Docker Desktop when it's finished - that's success.
+  #    Re-run it any time you add a model to PULL_MODELS in .env.
+  # ---------------------------------------------------------------------------
+  ollama-init:
+    image: ollama/ollama:latest
+    container_name: ollama_init
+    labels:
+      ai-stack.role: "one-shot model downloader (exits when done)"
+      ai-stack.order: "2"
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+      - PULL_MODELS=${PULL_MODELS:-gemma4:12b nomic-embed-text}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        for m in $${PULL_MODELS}; do
+          echo "==> pulling $$m"
+          ollama pull "$$m" || echo "!! failed to pull $$m (skipping)"
+        done
+        echo "==> all models ready"
+    restart: "no"
+    profiles: ["init"]
+
+  # ---------------------------------------------------------------------------
+  # 2b. Postgres - LiteLLM's database.
+  #
+  #  WHY THIS EXISTS AT ALL
+  #  The LiteLLM admin UI cannot log you in without one. The login page reads
+  #  like a password problem ("Authentication Error"), but the real message is
+  #  the second half: "Not connected to DB!". LiteLLM writes a user record as
+  #  part of logging in, and with nowhere to write it, the correct password
+  #  fails exactly like a wrong one.
+  #
+  #  It also fixes something more useful than the UI. Without a database,
+  #  LiteLLM's usage counters live in memory, so every restart resets your
+  #  token totals to zero -- /usage can only ever tell you "since LiteLLM last
+  #  started". With one, usage and spend accumulate properly over weeks.
+  #
+  #  NO HOST PORT, on purpose. Nothing outside Docker needs to reach this, so
+  #  it is not published at all -- not even on 127.0.0.1. Only containers on
+  #  the ai-stack network can see it.
+  #
+  #  THE PASSWORD IS ONLY READ ONCE. Postgres sets it when it first creates
+  #  the data directory and never again. Changing LITELLM_DB_PASSWORD later
+  #  will NOT change the database's actual password -- it will just make
+  #  LiteLLM fail to log in. To really change it:
+  #      docker compose down postgres
+  #      docker volume rm ai-stack_litellm_db
+  #      docker compose up -d postgres
+  #  (that discards usage history, which is the only thing stored here)
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: litellm_db
+    restart: unless-stopped
+    logging: *default-logging
+    labels:
+      ai-stack.role: "database for the router's UI and usage history"
+      ai-stack.order: "2b"
+    volumes:
+      - litellm_db:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=litellm
+      - POSTGRES_DB=litellm
+      - POSTGRES_PASSWORD=${LITELLM_DB_PASSWORD:?run env-sync.cmd - it generates this}
+      # Postgres defaults to a very chatty log. This keeps it to things that
+      # matter, so `logs.cmd postgres` is readable.
+      - POSTGRES_INITDB_ARGS=--auth-host=scram-sha-256
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U litellm -d litellm"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  # ---------------------------------------------------------------------------
+  # 3. LiteLLM - THE ROUTER. This is what makes "the right model for each job"
+  #    work. Everything else points here. Edit litellm/config.yaml to remap,
+  #    then hit Restart on this container in Docker Desktop.
+  # ---------------------------------------------------------------------------
+  litellm:
+    image: ghcr.io/berriai/litellm:main-stable
+    container_name: litellm
+    restart: unless-stopped
+    logging: *default-logging
+    labels:
+      ai-stack.role: "model router - edit litellm/config.yaml then restart me"
+      ai-stack.order: "3"
+    depends_on:
+      ollama:
+        condition: service_healthy
+      # service_healthy, not service_started: LiteLLM runs its schema
+      # migration on boot, and against a Postgres that is still starting that
+      # fails and leaves the proxy up but database-less -- which presents as
+      # the same "Not connected to DB!" this was added to fix.
+      postgres:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:4000:4000"     # localhost only
+    volumes:
+      - ./litellm/config.yaml:/app/config.yaml:ro
+    command: ["--config", "/app/config.yaml", "--port", "4000", "--num_workers", "1"]
+    environment:
+      - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY:?run setup.cmd first - it creates .env}
+      - LITELLM_LOG=${LITELLM_LOG:-INFO}
+      # --- the admin UI login (http://localhost:4000/ui) --------------------
+      # WITHOUT these, LiteLLM's login is username `admin` and password = your
+      # LITELLM_MASTER_KEY -- a 51-character key you have to go and copy out of
+      # .env every single time. That is not a security feature, it is just
+      # friction, and friction is what makes people paste secrets into places
+      # they shouldn't.
+      #
+      # Set UI_USERNAME and UI_PASSWORD in .env for a login you can actually
+      # type. Left blank, the master-key behaviour above still applies, so
+      # nothing breaks if you never set them.
+      #
+      # Safe to keep simple: this UI is bound to 127.0.0.1 like everything
+      # else, so it is not reachable from your network, let alone the
+      # internet. It is a lock on a door inside the house.
+      - UI_USERNAME=${UI_USERNAME:-}
+      - UI_PASSWORD=${UI_PASSWORD:-}
+      # The database. Without this the admin UI cannot log in at all, and
+      # token counts reset to zero on every restart.
+      - DATABASE_URL=postgresql://litellm:${LITELLM_DB_PASSWORD}@postgres:5432/litellm
+      # Keeps model config in the database so edits made in the UI survive a
+      # restart. config.yaml is still the source of truth on boot.
+      - STORE_MODEL_IN_DB=${STORE_MODEL_IN_DB:-False}
+      # Optional cloud providers. Blank = stay 100% local.
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:4000/health/liveliness',timeout=3).status==200 else 1)\""]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 40s
+
+  # ---------------------------------------------------------------------------
+  # 4. Open WebUI - the browser front end.
+  #    In Docker Desktop, click the 3000:8080 link on this row to open it.
+  # ---------------------------------------------------------------------------
+  # OFF BY DEFAULT. Hermes is the interface now -- in the terminal, and the same
+  # agent over Telegram. This is kept rather than deleted because turning it
+  # back on is one flag and its chat history is still in the open_webui_data
+  # volume, untouched:
+  #     docker compose --profile webui up -d open-webui
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: open_webui
+    restart: unless-stopped
+    logging: *default-logging
+    profiles: ["webui"]
+    labels:
+      ai-stack.role: "web interface - OFF by default, --profile webui to start"
+      ai-stack.order: "4"
+    depends_on:
+      litellm:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:3000:8080"     # localhost only - no outside access
+    volumes:
+      - open_webui_data:/app/backend/data
+      - ./transcripts:/transcripts
+    environment:
+      # --- models come from the router, so the dropdown shows job routes ---
+      - OPENAI_API_BASE_URL=http://litellm:4000/v1
+      - OPENAI_API_KEY=${LITELLM_MASTER_KEY}
+      - ENABLE_OLLAMA_API=false
+      # --- voice out: your cloned voice ---
+      - AUDIO_TTS_ENGINE=openai
+      # LuxTTS at 16 steps (the fast container's default): near-expressive
+      # finish, instant renders -- Jason's 2026-09-01 revision after the
+      # step flight. Telegram alone pins the 4-step quick path.
+      - AUDIO_TTS_OPENAI_API_BASE_URL=http://voice:8091/v1
+      - AUDIO_TTS_OPENAI_API_KEY=none
+      - AUDIO_TTS_MODEL=tts-1
+      - AUDIO_TTS_VOICE=Jason
+      # --- voice in: cloud STT is fine; the transcript is the point ---
+      - AUDIO_STT_ENGINE=${AUDIO_STT_ENGINE:-}
+      - AUDIO_STT_MODEL=${STT_MODEL:-whisper-1}
+      - AUDIO_STT_OPENAI_API_BASE_URL=${STT_API_BASE:-https://api.openai.com/v1}
+      - AUDIO_STT_OPENAI_API_KEY=${STT_API_KEY:-}
+      # --- local-only posture ---
+      - WEBUI_AUTH=${WEBUI_AUTH:-true}
+      - ENABLE_SIGNUP=${ENABLE_SIGNUP:-true}
+      - WEBUI_URL=http://localhost:3000
+      - ENABLE_COMMUNITY_SHARING=false
+
+  # ---------------------------------------------------------------------------
+  # 5. Voice - Kokoro by default; LuxTTS for Dee's cloned voice. See VOICE_ENGINE.
+  #
+  #    Serves three consumers from ONE copy of the weights:
+  #      POST /synthesize-array  the phone line
+  #      POST /v1/audio/speech   OpenAI-compatible, for Open WebUI and Hermes
+  #      POST /preview           a playable WAV, so you can audition a voice
+  #
+  #    Drop a clean 10-30s clip at voices/dee.wav and that becomes the voice.
+  #    FIRST START IS SLOW - it downloads model weights. Watch the Logs tab.
+  # ---------------------------------------------------------------------------
+  voice:
+    build:
+      context: .
+      dockerfile: voice/Dockerfile
+    image: ai-stack/voice:latest
+    container_name: voice
+    restart: unless-stopped
+    logging: *default-logging
+    labels:
+      ai-stack.role: "cloned voice - phone, web UI and CLI all use this"
+      ai-stack.order: "5"
+    ports:
+      - "127.0.0.1:8091:8091"     # localhost only
+    volumes:
+      - ./voices:/voices
+      - hf_cache:/root/.cache/huggingface
+    environment:
+      # Hand the GPU back when nobody is using it. See the
+      # note in voice/server.py.
+      - VOICE_IDLE_MINUTES=${VOICE_IDLE:-240}
+      - VOICE_ENGINE=${VOICE_ENGINE:-luxtts}
+      - VOICE_DEVICE=${VOICE_DEVICE:-cuda}
+      - VOICE_DEFAULT=${VOICE_DEFAULT:-dee}
+      - VOICES_DIR=/voices
+      - VOICE_SPEEDS=${VOICE_SPEEDS:-}
+      - VOICE_TUNE=${VOICE_TUNE:-}
+      - LUXTTS_STEPS=${LUXTTS_STEPS:-4}
+      - KOKORO_VOICE=${KOKORO_VOICE:-af_heart}
+      - PYTHONUNBUFFERED=1
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8091/health',timeout=3).status==200 else 1)\""]
+      interval: 20s
+      timeout: 10s
+      retries: 40
+      start_period: 300s
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  # ---------------------------------------------------------------------------
+  # 5b. Streaming speech-to-text - faster-whisper on the GPU.
+  #     ~1GB VRAM at small.en. Only needed for the phone line.
+  # ---------------------------------------------------------------------------
+  # ---------------------------------------------------------------------------
+  #  voice-narrate -- the SAME image, the beautiful engine.
+  #
+  #  Jason judged the tribute's narration robotic, and he was right: LuxTTS
+  #  is the fast engine (150x realtime keeps the PHONE line snappy) but flat.
+  #  Chatterbox -- already shipped in this image, selectable by env -- is the
+  #  expressive one: real prosody, natural pauses, emotion tags, cloned from
+  #  the same Randy.wav. Two containers, one image, each consumer getting
+  #  the engine its job needs: the phone keeps speed, the stories get soul.
+  #  GPU: ~1.5GB, swapping politely with everything else on the card.
+  # ---------------------------------------------------------------------------
+  voice-narrate:
+    # THE GIT BUILD, NOT THE PyPI ONE, and the reason is the emotion tags.
+    #
+    # Jason: "laugh says laugh not actual laughing". Measured objectively by
+    # rendering "[laugh]" and sending the audio back through the household's
+    # faster-whisper service to read what it actually contains:
+    #
+    #   chatterbox 0.1.7 (PyPI)   heard: "That is wonderful. Laugh!"
+    #   chatterbox git build      heard: "That is wonderful."
+    #                             and 32 KB LARGER than the untagged render
+    #
+    # Extra audio that transcribes as no extra words is laughter. PyPI 0.1.7
+    # treats [laugh] as literal text and says it; the git build honours it.
+    # ai-stack/voice-turbo:latest is that git build (see Dockerfile.turbo) --
+    # the image, not the Turbo MODEL. VOICE_ENGINE below still selects full
+    # Chatterbox, so this is the same engine Jason's ear approved, with
+    # working tags.
+    #
+    # An earlier version of this measured DURATION instead and concluded the
+    # tag worked, because speaking a word also takes time. Duration is not
+    # evidence of laughter; a transcript is.
+    image: ai-stack/voice-turbo:latest
+    container_name: voice-narrate
+    restart: unless-stopped
+    logging: *default-logging
+    labels:
+      ai-stack.role: "expressive narration voice (chatterbox) - the tribute uses this"
+    ports:
+      - "127.0.0.1:8095:8091"     # localhost only, like its sibling
+    volumes:
+      - ./voices:/voices
+      - hf_cache:/root/.cache/huggingface
+    environment:
+      # Hand the GPU back when nobody is using it. See the
+      # note in voice/server.py.
+      - VOICE_IDLE_MINUTES=${VOICE_NARRATE_IDLE:-20}
+      - VOICE_ENGINE=chatterbox
+      - VOICE_DEVICE=${VOICE_DEVICE:-cuda}
+      - VOICE_DEFAULT=Randy
+      - VOICE_SPEEDS=${VOICE_SPEEDS:-}
+      - VOICE_TUNE=${VOICE_TUNE:-}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  # ---------------------------------------------------------------------------
+  #  voice-turbo -- Chatterbox Turbo TRIAL (2026-09-01). Candidate to replace
+  #  LuxTTS in the quick slot: near-expressive quality at ~6x realtime.
+  #  Jason's ear decides; until then nothing routes here.
+  # ---------------------------------------------------------------------------
+  voice-turbo:
+    build:
+      context: ./voice
+      dockerfile: Dockerfile.turbo
+    image: ai-stack/voice-turbo:latest
+    container_name: voice-turbo
+    restart: unless-stopped
+    logging: *default-logging
+    labels:
+      ai-stack.role: "Chatterbox Turbo trial - the quick slot's challenger"
+    ports:
+      - "127.0.0.1:8096:8091"     # localhost only
+    volumes:
+      - ./voices:/voices
+      - hf_cache:/root/.cache/huggingface
+    environment:
+      # Hand the GPU back when nobody is using it. See the
+      # note in voice/server.py.
+      - VOICE_IDLE_MINUTES=${VOICE_TURBO_IDLE:-10}
+      - VOICE_ENGINE=chatterbox-turbo
+      - VOICE_DEVICE=${VOICE_DEVICE:-cuda}
+      - VOICE_DEFAULT=Jason
+      - VOICES_DIR=/voices
+      - VOICE_SPEEDS=${VOICE_SPEEDS:-}
+      - VOICE_TUNE=${VOICE_TUNE:-}
+      - PYTHONUNBUFFERED=1
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  # ---------------------------------------------------------------------------
+  #  voice-f5 -- F5-TTS TRIAL (2026-09-13). Jason asked for "the next voice
+  #  TTS model that's a step up", and this is the candidate: the flow-matching
+  #  model documented as the English quality leader, and specifically stronger
+  #  than Chatterbox on LONG-FORM prosody -- the original complaint.
+  #
+  #  ~3GB VRAM, less than Chatterbox's 4GB. Nothing routes here until Jason's
+  #  ear says so, same rule as voice-turbo.
+  #
+  #  IT NEEDS A TRANSCRIPT PER VOICE. F5-TTS's infer() takes ref_text with no
+  #  default and does not transcribe for you. voice/transcribe-references.py
+  #  writes those .txt files using the faster-whisper service already here.
+  # ---------------------------------------------------------------------------
+  voice-f5:
+    build:
+      context: ./voice
+      dockerfile: Dockerfile.f5
+    image: ai-stack/voice-f5:latest
+    container_name: voice-f5
+    restart: unless-stopped
+    logging: *default-logging
+    labels:
+      ai-stack.role: "F5-TTS trial - the quality challenger for narration"
+    ports:
+      # 8097 belongs to audiobookshelf; 8099 was the next free one in
+      # this range. Checked rather than assumed -- the siblings run on
+      # 8091/8095/8096 and the obvious next number was taken.
+      - "127.0.0.1:8099:8091"     # localhost only, like its siblings
+    volumes:
+      - ./voices:/voices
+      - hf_cache:/root/.cache/huggingface
+    environment:
+      # Hand the GPU back when nobody is using it. See the
+      # note in voice/server.py.
+      - VOICE_IDLE_MINUTES=${VOICE_F5_IDLE:-10}
+      - VOICE_ENGINE=f5
+      - VOICE_DEVICE=${VOICE_DEVICE:-cuda}
+      - VOICE_DEFAULT=Randy
+      - VOICES_DIR=/voices
+      - VOICE_SPEEDS=${VOICE_SPEEDS:-}
+      - VOICE_TUNE=${VOICE_TUNE:-}
+      # The two quality dials. Jason has said speed is not an issue on this
+      # box, so these are what to raise if a voice still is not close enough.
+      - F5_NFE_STEP=${F5_NFE_STEP:-32}
+      - F5_CFG_STRENGTH=${F5_CFG_STRENGTH:-2.0}
+      - PYTHONUNBUFFERED=1
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  # ---------------------------------------------------------------------------
+  #  colibri -- DeepSeek V4.1 Flash (552B) streamed from NVMe.
+  #
+  #  A different bet from ollama: instead of a model that FITS in 12 GB of
+  #  VRAM, an engine that treats disk, RAM and VRAM as one tier and streams
+  #  experts as routing demands them. 552B parameters, 16B active.
+  #
+  #  WHY THIS MODEL. Measured on this box, unbuffered 8 MB random reads:
+  #  C: does 4.07 GB/s. On a streaming engine tokens/sec is bytes-per-token
+  #  over disk speed, so ACTIVE parameters set the pace, not total ones:
+  #      GLM-5.3-Flash  321B   4.8 GB/tok   0.85 tok/s
+  #      DeepSeek V4.1  552B   4.5 GB/tok   0.90 tok/s   <- this
+  #      GLM-5.2        744B  12.7 GB/tok   0.32 tok/s
+  #  V4.1 Flash is lighter per token than a model 35% smaller than it.
+  #
+  #  PROFILE-GATED ON PURPOSE. The model is 510 GB and still downloading;
+  #  a service pointed at a half-present model would restart-loop and add
+  #  noise to every `docker ps` until it finished. Start it deliberately:
+  #      docker compose --profile colibri up -d colibri
+  #
+  #  THE MODEL PATH IS A BIND MOUNT, NOT A VOLUME, and must be NVMe.
+  #  Upstream: "keep it on NVMe/ext4, never a network mount -- expert
+  #  streaming is latency-bound". G: and M: have more free space but are
+  #  spinning SATA disks and would be hours per token.
+  # ---------------------------------------------------------------------------
+  colibri:
+    profiles: ["colibri"]
+    build:
+      context: ./colibri
+      dockerfile: docker/Dockerfile.cuda
+    image: colibri:cuda
+    container_name: colibri
+    restart: unless-stopped
+    logging: *default-logging
+    labels:
+      ai-stack.role: "DeepSeek V4.1 Flash 552B, streamed from NVMe"
+    ports:
+      - "127.0.0.1:5000:5000"
+    volumes:
+      - "${COLIBRI_MODEL_DIR:-C:/Models/DeepSeek-V4.1-Flash}:/model:ro"
+      # The second drive's copy, when it exists. Read-only like the primary.
+      # Harmless while D:\Models is empty or absent.
+      - "${COLIBRI_MIRROR_DIR:-D:/Models/DeepSeek-V4.1-Flash}:/model-mirror:ro"
+    environment:
+      # Expert cache budget. Raising this is the single biggest speed lever
+      # short of a faster disk -- a cached expert is served at RAM speed
+      # instead of 4 GB/s.
+      #
+      # 10, NOT 24. The earlier 24 reasoned from the HOST's 61.6 GB, but
+      # this container does not live on the host: it lives inside the WSL2
+      # VM that Docker Desktop runs in, and ~/.wslconfig caps that VM at
+      # 16 GB on purpose (see the reasoning in that file -- Ollama's weights
+      # sit in VRAM, so the VM only ever ran light services). `docker info`
+      # confirms 15.6 GB. Asking for a 24 GB expert cache inside a 15.6 GB
+      # VM cannot work; it would thrash or be OOM-killed.
+      #
+      # THIS IS THE REAL CEILING ON COLIBRI HERE, and it is worth naming:
+      # the whole point of the engine is caching experts in RAM, and inside
+      # this VM it gets ~10 GB of cache for a 475 GB model. Two ways out,
+      # both deliberate choices rather than defaults:
+      #   * raise `memory` in ~/.wslconfig (needs wsl --shutdown, which
+      #     restarts every container on this machine), or
+      #   * run colibri natively on Windows instead of in Docker, where it
+      #     sees all 61.6 GB.
+      - COLI_RAM=${COLIBRI_RAM:-10}
+      # TWO DRIVES AT ONCE. Expert reads are read-only, so a byte-identical
+      # copy of the model on a second drive lets the engine stripe reads
+      # across both. Measured here, unbuffered 8 MB random reads:
+      #     C:  Samsung 990 EVO Plus   4.07 GB/s
+      #     D:  MSI M450               2.34 GB/s
+      #     together                   6.41 GB/s
+      # At DeepSeek V4.1's 4.5 GB/token that is 0.90 -> 1.42 tok/s, a 58%
+      # gain for a LOCAL COPY -- not a second download.
+      #
+      # A PARTIAL MIRROR IS FINE and this is the part that makes it safe to
+      # try: only the shards actually present are used, divergent files
+      # silently stay on the primary, and a read error on the mirror falls
+      # back to the primary with one warning rather than crashing. So an
+      # incomplete or half-copied D: cannot break the server.
+      #
+      # Empty until the copy exists -- an unset mirror is simply not used.
+      - COLI_MODEL_MIRROR=${COLIBRI_MIRROR:-}
+    command:
+      - serve
+      - --host
+      - "0.0.0.0"
+      - --model-id
+      - deepseek-v4.1-flash-colibri
+      - --ram
+      # Must match COLI_RAM above; see the note there about the 16 GB WSL2
+      # ceiling this container actually lives under.
+      - "${COLIBRI_RAM:-10}"
+      - --gpu
+      - auto
+    # Streaming a 552B model touches a lot of page cache.
+    shm_size: "2gb"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  stt:
+    build:
+      context: .
+      dockerfile: stt/Dockerfile
+    image: ai-stack/stt:latest
+    container_name: stt
+    restart: unless-stopped
+    logging: *default-logging
+    labels:
+      ai-stack.role: "streaming speech-to-text for the phone line"
+      ai-stack.order: "5b"
+    ports:
+      - "127.0.0.1:8092:8092"     # localhost only
+    volumes:
+      - hf_cache:/root/.cache/huggingface
+    environment:
+      # Hand the GPU back when nobody is using it. See the
+      # note in stt/server.py.
+      - STT_IDLE_MINUTES=${STT_IDLE:-240}
+      - STT_MODEL_SIZE=${STT_MODEL_SIZE:-small.en}
+      - STT_DEVICE=${STT_DEVICE:-cuda}
+      - STT_COMPUTE_TYPE=${STT_COMPUTE_TYPE:-int8_float16}
+      - STT_SILENCE_MS=${STT_SILENCE_MS:-700}
+      - PYTHONUNBUFFERED=1
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8092/health',timeout=3).status==200 else 1)\""]
+      interval: 20s
+      timeout: 10s
+      retries: 30
+      start_period: 180s
+    profiles: ["phone", "all"]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  # ---------------------------------------------------------------------------
+  # 5c. Voicebox - the voice studio, and the CLI's voice.
+  #
+  #     This is where you RECORD and AUDITION voices, with a real UI. It also
+  #     exposes an MCP server that Hermes speaks through.
+  #
+  #     Note: there is no published image yet, so Compose builds it from the
+  #     GitHub repo the first time. That build is slow (several minutes) and
+  #     needs internet.
+  # ---------------------------------------------------------------------------
+  voicebox:
+    build:
+      context: https://github.com/jamiepine/voicebox.git
+    image: ai-stack/voicebox:latest
+    container_name: voicebox
+    restart: unless-stopped
+    logging: *default-logging
+    labels:
+      ai-stack.role: "voice studio + MCP voice for the CLI - open the port link"
+      ai-stack.order: "5c"
+    ports:
+      - "127.0.0.1:17493:17493"   # localhost only
+    volumes:
+      - ./voices:/app/data/generations
+      - voicebox_data:/app/data
+      - hf_cache:/home/voicebox/.cache/huggingface
+    environment:
+      - LOG_LEVEL=info
+      - NUMBA_CACHE_DIR=/tmp/numba_cache
+    profiles: ["studio", "all"]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  # ---------------------------------------------------------------------------
+  # 6. Hermes - the CLI agent.
+  #    In Docker Desktop: click this container -> Exec tab -> type: hermes
+  # ---------------------------------------------------------------------------
+  hermes:
+    build:
+      context: .
+      dockerfile: hermes/Dockerfile
+    image: ai-stack/hermes:latest
+    container_name: hermes
+    restart: unless-stopped
+    logging: *default-logging
+    labels:
+      ai-stack.role: "CLI agent - open the Exec tab and type: hermes"
+      ai-stack.order: "6"
+    depends_on:
+      litellm:
+        condition: service_healthy
+    volumes:
+      - ./workspace:/workspace
+      # Read the tribute, append to the list. The map data lives on the NUC
+      # and is not mountable from here; map_places says so honestly until a
+      # LAN read for it exists (on PENDING).
+      - ./web/public/peewee:/house/peewee:ro
+      # Audio-Files (2026-11-12): see the caddy volumes in docker-compose.web.yml.
+      - ./web/public/Audio-Files/peewee/music:/house/peewee/music:ro
+      - ./web/public/Audio-Files/peewee/static-sounds:/house/peewee/static-sounds:ro
+      - ./web/public/Audio-Files/peewee/audio:/house/peewee/audio:ro
+      - ./web/public/Audio-Files/peewee/data/patter:/house/peewee/data/patter:ro
+      - ./web/public/Audio-Files/peewee/data/intros:/house/peewee/data/intros:ro
+      - ./PENDING.md:/house/PENDING.md
+      # The n8n workflow files, read-only, mounted INSIDE /workspace so the
+      # agent's existing file tools can read them with no code change --
+      # tools.py confines everything to /workspace, and that confinement is
+      # doing real work here, so this slips under it rather than widening it.
+      #
+      # Narrow on purpose. The parent folder (ai-stack) holds .env: the Twilio
+      # auth token, the LiteLLM master key, the n8n encryption key. Mounting
+      # that would put every secret one "read this file for me" away from
+      # anyone who got hold of the bot token or an allowlisted Telegram
+      # account. Workflow JSON has nothing sensitive in it; .env has all of it.
+      #
+      # :ro means neither the agent nor a bug in it can edit these -- the
+      # files on disk stay the single source of truth.
+      - ./n8n/workflows:/workspace/n8n-workflows:ro
+      - ./transcripts:/transcripts
+      - ./scripts:/scripts:ro      # so export.cmd can run without Python on Windows
+      # WRITABLE, unlike everywhere else, because places.cmd runs the importer
+      # in here. It only ever writes config/places.local.yaml; the curated
+      # config/places.yaml is never opened for writing by anything.
+      - ./config:/config
+      - hermes_state:/state
+      # PER-PERSON MEMORY. One directory per SSO identity, markdown inside.
+      # The path is all that decides where memory lives, which is why it is
+      # a named volume rather than a bind: switching it to the NAS is one
+      # definition at the bottom of this file, not a change here.
+      - hermes_memory:/memory
+      # WHO EXISTS. The same people.json the Rust auth service reads and the
+      # admin panel writes -- read-only here, because Hermes must never be
+      # able to grant anybody an account or change a password hash. It reads
+      # it for one thing: the email of the person talking, and their name.
+      - ./site-data/auth:/identity:ro
+      # Proton Pass CLI: binary + session data, read-only. Keys are fetched
+      # at runtime via pass-cli -- nothing lives in .env. (2026-10-28)
+      # Mounting the Windows .exe here could never have worked (Linux cannot
+      # execute a PE binary) -- fixed 2026-10-28 night to mount a real Linux
+      # ELF build instead, copied from the NUC's working ~/.local/bin/pass-cli.
+      - D:\secrets-tools\pass-cli-linux-amd64:/usr/local/bin/pass-cli:ro
+      # Hermes's OWN session, not the PC's -- the PC's Windows-created session
+      # is not readable by this Linux pass-cli binary (confirmed 2026-10-28
+      # night: same files, "there is no session" from the Linux build). A
+      # dedicated PAT, scoped to just the API keys vault (Viewer only -- the
+      # plant tools never write), self-heals its own login in _pass_key().
+      - D:\secrets-tools\hermes-worker.token:/secrets/hermes-worker.token:ro
+    working_dir: /workspace
+    environment:
+      - ROUTER_BASE_URL=http://litellm:4000/v1
+      - ROUTER_API_KEY=${LITELLM_MASTER_KEY}
+      # CASEY'S CAREER NOTES, READ-ONLY (2026-09-03). Her recordings are
+      # transcribed and her spoken exchanges kept; zee_notes/zee_growth
+      # search them so "what has Casey been working on" is answerable from
+      # what she actually said.
+      #
+      # A DELIBERATE PRIVILEGE. The portal has no login of its own -- it
+      # trusts the gate's header -- so Hermes must present an identity to
+      # read anything. It is named here rather than inherited, so who
+      # Hermes reads AS is a visible decision and can be narrowed to a
+      # dedicated account later. The tools are read-only: there is no
+      # write path into her portal from here.
+      - ZEE_URL=${ZEE_URL:-http://casey:8000}
+      - ZEE_AS_EMAIL=${ZEE_AS_EMAIL:-${ADMIN_OWNERS:-}}
+      # LuxTTS at 16 steps: expressive-adjacent finish, instant
+      - TTS_BASE_URL=http://voice:8091/v1
+      # Where /history reads from. Over HTTP rather than by mounting the
+      # SQLite file: one writer, no file locking to get wrong, and the
+      # recorder can be restarted without touching this container.
+      - METRICS_URL=http://metrics:8000
+      # --- the house tools (2026-08-31): Hermes' eyes on the stack ----------
+      - HOUSE_KUMA_URL=http://192.168.1.86:3001
+      - HOUSE_IMMICH_URL=http://192.168.1.86:2283
+      - 'HOUSE_IMMICH_KEY=${IMMICH_TAGGER_KEY:-}'
+      - HOUSE_PEEWEE_SITE=/house/peewee
+      - HOUSE_PENDING=/house/PENDING.md
+      # .205 was this PC before its DHCP reservation moved it to .100, so
+      # logs_search has been pointing at a dead address. Corrected 2026-09-13
+      # while wiring memory in; same stale address as the ollama LAN binding.
+      - HOUSE_LOKI_URL=http://192.168.1.100:3100
+      - HOUSE_GITEA_URL=http://192.168.1.86:3000
+      - 'HOUSE_GITEA_TOKEN=${HOUSE_GITEA_TOKEN:-}'
+      - DEFAULT_JOB=${HERMES_DEFAULT_JOB:-chat}
+      - HERMES_MEMORY_ROOT=${HERMES_MEMORY_ROOT:-/memory}
+      - PEOPLE_FILE=/identity/people.json
+      - HERMES_LINKS_FILE=/state/telegram-links.json
+      # Pick the model per message automatically. On by default -- choosing
+      # a route by hand was busywork. Set AUTO_JOB=false to go manual.
+      - AUTO_JOB=${AUTO_JOB:-true}
+      - TRANSCRIPT_DIR=/transcripts
+      - HERMES_SPEAK=${HERMES_SPEAK:-false}
+      - TTS_DEFAULT_VOICE=${HERMES_VOICE:-${VOICE_DEFAULT:-dee}}
+      - GOOGLE_PLACES_API_KEY=${GOOGLE_PLACES_API_KEY:-}
+      # --- plant lookup tools (2026-10-28): keys pulled from Proton Pass -----
+      # No key in .env -- pass-cli reads the vault at runtime.
+      - PROTON_PASS_KEY_PROVIDER=fs
+      - PROTON_PASS_CLI_DATA_DIR=/state/proton-pass-cli
+      - HERMES_PAT_FILE=/secrets/hermes-worker.token
+      # The actual plant keys live in the "API keys" vault, not "Keys" --
+      # fixed 2026-10-28 night after the tools were found to be broken
+      # (pass-cli not yet mounted into the running image, plus this vault
+      # mismatch). See also the PlantNet item-title fix in plant_tools.py.
+      - PLANT_API_VAULT=API keys
+      - PYTHONUNBUFFERED=1
+    tty: true
+    stdin_open: true
+    command: ["sleep", "infinity"]
+
+  # ---------------------------------------------------------------------------
+  # 6.5 Hermes over HTTP - the same agent, same per-person memory, same tools,
+  #     reachable by the phone apps through the auth service.
+  #
+  #     NO PORTS PUBLISHED, AND THAT IS THE SECURITY MODEL. It trusts
+  #     X-Auth-Email, exactly like Gitea, Paperless and Casey's portal do here.
+  #     That is only safe while the sole caller is the auth service, which
+  #     fills that header from a validated OIDC token. Publish a port and
+  #     anyone on the LAN could claim to be anyone -- and since memory is per
+  #     person, that would expose everything anybody has ever told Hermes.
+  # ---------------------------------------------------------------------------
+  hermes-http:
+    build:
+      context: .
+      dockerfile: hermes/Dockerfile
+    image: ai-stack/hermes:latest
+    container_name: hermes-http
+    restart: unless-stopped
+    logging: *default-logging
+    labels:
+      ai-stack.role: "Hermes over HTTP - for the phone apps. No ports published."
+      ai-stack.order: "6.5"
+    depends_on:
+      litellm:
+        condition: service_healthy
+    volumes:
+      - ./workspace:/workspace
+      # Read the tribute, append to the list. The map data lives on the NUC
+      # and is not mountable from here; map_places says so honestly until a
+      # LAN read for it exists (on PENDING).
+      - ./web/public/peewee:/house/peewee:ro
+      # Audio-Files (2026-11-12): see the caddy volumes in docker-compose.web.yml.
+      - ./web/public/Audio-Files/peewee/music:/house/peewee/music:ro
+      - ./web/public/Audio-Files/peewee/static-sounds:/house/peewee/static-sounds:ro
+      - ./web/public/Audio-Files/peewee/audio:/house/peewee/audio:ro
+      - ./web/public/Audio-Files/peewee/data/patter:/house/peewee/data/patter:ro
+      - ./web/public/Audio-Files/peewee/data/intros:/house/peewee/data/intros:ro
+      - ./PENDING.md:/house/PENDING.md
+      # The n8n workflow files, read-only, mounted INSIDE /workspace so the
+      # agent's existing file tools can read them with no code change --
+      # tools.py confines everything to /workspace, and that confinement is
+      # doing real work here, so this slips under it rather than widening it.
+      #
+      # Narrow on purpose. The parent folder (ai-stack) holds .env: the Twilio
+      # auth token, the LiteLLM master key, the n8n encryption key. Mounting
+      # that would put every secret one "read this file for me" away from
+      # anyone who got hold of the bot token or an allowlisted Telegram
+      # account. Workflow JSON has nothing sensitive in it; .env has all of it.
+      #
+      # :ro means neither the agent nor a bug in it can edit these -- the
+      # files on disk stay the single source of truth.
+      - ./n8n/workflows:/workspace/n8n-workflows:ro
+      - ./transcripts:/transcripts
+      - ./scripts:/scripts:ro      # so export.cmd can run without Python on Windows
+      # WRITABLE, unlike everywhere else, because places.cmd runs the importer
+      # in here. It only ever writes config/places.local.yaml; the curated
+      # config/places.yaml is never opened for writing by anything.
+      - ./config:/config
+      - hermes_state:/state
+      # PER-PERSON MEMORY. One directory per SSO identity, markdown inside.
+      # The path is all that decides where memory lives, which is why it is
+      # a named volume rather than a bind: switching it to the NAS is one
+      # definition at the bottom of this file, not a change here.
+      - hermes_memory:/memory
+      # WHO EXISTS. The same people.json the Rust auth service reads and the
+      # admin panel writes -- read-only here, because Hermes must never be
+      # able to grant anybody an account or change a password hash. It reads
+      # it for one thing: the email of the person talking, and their name.
+      - ./site-data/auth:/identity:ro
+      # Proton Pass CLI: binary + session data, read-only. Keys are fetched
+      # at runtime via pass-cli -- nothing lives in .env. (2026-10-28)
+      # Mounting the Windows .exe here could never have worked (Linux cannot
+      # execute a PE binary) -- fixed 2026-10-28 night to mount a real Linux
+      # ELF build instead, copied from the NUC's working ~/.local/bin/pass-cli.
+      - D:\secrets-tools\pass-cli-linux-amd64:/usr/local/bin/pass-cli:ro
+      # Hermes's OWN session, not the PC's -- see the identical note on the
+      # hermes service above (same fix, same reason).
+      - D:\secrets-tools\hermes-worker.token:/secrets/hermes-worker.token:ro
+    working_dir: /workspace
+    environment:
+      - ROUTER_BASE_URL=http://litellm:4000/v1
+      - ROUTER_API_KEY=${LITELLM_MASTER_KEY}
+      # CASEY'S CAREER NOTES, READ-ONLY (2026-09-03). Her recordings are
+      # transcribed and her spoken exchanges kept; zee_notes/zee_growth
+      # search them so "what has Casey been working on" is answerable from
+      # what she actually said.
+      #
+      # A DELIBERATE PRIVILEGE. The portal has no login of its own -- it
+      # trusts the gate's header -- so Hermes must present an identity to
+      # read anything. It is named here rather than inherited, so who
+      # Hermes reads AS is a visible decision and can be narrowed to a
+      # dedicated account later. The tools are read-only: there is no
+      # write path into her portal from here.
+      - ZEE_URL=${ZEE_URL:-http://casey:8000}
+      - ZEE_AS_EMAIL=${ZEE_AS_EMAIL:-${ADMIN_OWNERS:-}}
+      # LuxTTS at 16 steps: expressive-adjacent finish, instant
+      - TTS_BASE_URL=http://voice:8091/v1
+      # Where /history reads from. Over HTTP rather than by mounting the
+      # SQLite file: one writer, no file locking to get wrong, and the
+      # recorder can be restarted without touching this container.
+      - METRICS_URL=http://metrics:8000
+      # --- the house tools (2026-08-31): Hermes' eyes on the stack ----------
+      - HOUSE_KUMA_URL=http://192.168.1.86:3001
+      - HOUSE_IMMICH_URL=http://192.168.1.86:2283
+      - 'HOUSE_IMMICH_KEY=${IMMICH_TAGGER_KEY:-}'
+      - HOUSE_PEEWEE_SITE=/house/peewee
+      - HOUSE_PENDING=/house/PENDING.md
+      # .205 was this PC before its DHCP reservation moved it to .100, so
+      # logs_search has been pointing at a dead address. Corrected 2026-09-13
+      # while wiring memory in; same stale address as the ollama LAN binding.
+      - HOUSE_LOKI_URL=http://192.168.1.100:3100
+      - HOUSE_GITEA_URL=http://192.168.1.86:3000
+      - 'HOUSE_GITEA_TOKEN=${HOUSE_GITEA_TOKEN:-}'
+      - DEFAULT_JOB=${HERMES_DEFAULT_JOB:-chat}
+      - HERMES_MEMORY_ROOT=${HERMES_MEMORY_ROOT:-/memory}
+      - PEOPLE_FILE=/identity/people.json
+      - HERMES_LINKS_FILE=/state/telegram-links.json
+      # Pick the model per message automatically. On by default -- choosing
+      # a route by hand was busywork. Set AUTO_JOB=false to go manual.
+      - AUTO_JOB=${AUTO_JOB:-true}
+      - TRANSCRIPT_DIR=/transcripts
+      - HERMES_SPEAK=${HERMES_SPEAK:-false}
+      - TTS_DEFAULT_VOICE=${HERMES_VOICE:-${VOICE_DEFAULT:-dee}}
+      - GOOGLE_PLACES_API_KEY=${GOOGLE_PLACES_API_KEY:-}
+      # --- plant lookup tools (2026-10-28): keys pulled from Proton Pass -----
+      - PROTON_PASS_KEY_PROVIDER=fs
+      - PROTON_PASS_CLI_DATA_DIR=/state/proton-pass-cli
+      - HERMES_PAT_FILE=/secrets/hermes-worker.token
+      - PLANT_API_VAULT=API keys
+      - PYTHONUNBUFFERED=1
+      - HERMES_HTTP_PORT=8014
+    command: ["python", "-m", "app.server"]
+
+
+  # ---------------------------------------------------------------------------
+  # 7. Telegram bridge - long polling, outbound only. No ports published.
+  #    Won't start until you put a token and your user id in .env; that's fine,
+  #    the rest of the stack doesn't care.
+  # ---------------------------------------------------------------------------
+  telegram:
+    build:
+      context: .
+      dockerfile: telegram/Dockerfile
+    image: ai-stack/telegram:latest
+    container_name: telegram_bridge
+    restart: unless-stopped
+    logging: *default-logging
+    labels:
+      ai-stack.role: "phone bridge - needs TELEGRAM_* values in .env"
+      ai-stack.order: "7"
+    depends_on:
+      litellm:
+        condition: service_healthy
+    volumes:
+      - ./transcripts:/transcripts
+      # Writable now, not :ro -- this is the SAME agent Hermes runs, with the
+      # same tools, so it has to be able to edit the same folder. Mutating
+      # tools are locked per chat by default; send /unlock to allow them.
+      - ./workspace:/workspace
+      # The n8n workflow files, read-only, mounted INSIDE /workspace so the
+      # agent's existing file tools can read them with no code change --
+      # tools.py confines everything to /workspace, and that confinement is
+      # doing real work here, so this slips under it rather than widening it.
+      #
+      # Narrow on purpose. The parent folder (ai-stack) holds .env: the Twilio
+      # auth token, the LiteLLM master key, the n8n encryption key. Mounting
+      # that would put every secret one "read this file for me" away from
+      # anyone who got hold of the bot token or an allowlisted Telegram
+      # account. Workflow JSON has nothing sensitive in it; .env has all of it.
+      #
+      # :ro means neither the agent nor a bug in it can edit these -- the
+      # files on disk stay the single source of truth.
+      - ./n8n/workflows:/workspace/n8n-workflows:ro
+    environment:
+      # CAREER MODE (2026-09-06). /career routes this chat to Casey's
+      # portal instead of the house agent, so a career question is
+      # answered by the thing that has read her awards catalog -- and is
+      # KEPT there, reaching the portfolio, the exports and Hermes with
+      # no second copy. Map a Telegram id to the address her portal
+      # knows her by, or her words have nowhere to be filed:
+      #   ZEE_TELEGRAM_USERS=123456789=casey@example.com
+      - ZEE_URL=${ZEE_URL:-http://casey:8000}
+      - ZEE_TELEGRAM_USERS=${ZEE_TELEGRAM_USERS:-}
+      # Validated inside bot.py with a readable error rather than with `:?`
+      # here -- otherwise every compose command would fail for people who
+      # never set up Telegram.
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - WORKSPACE_ROOT=/workspace
+      # Start with shell and file writes locked. See bot.py for why.
+      - TELEGRAM_TOOLS=${TELEGRAM_TOOLS:-true}
+      - TELEGRAM_UNLOCKED=${TELEGRAM_UNLOCKED:-false}
+      - TELEGRAM_ALLOWED_USER_IDS=${TELEGRAM_ALLOWED_USER_IDS:-}
+      - ROUTER_BASE_URL=http://litellm:4000/v1
+      - ROUTER_API_KEY=${LITELLM_MASTER_KEY}
+      - TTS_BASE_URL=http://voice:8091/v1
+      # /history fetches a PNG from here. See the note in the hermes block.
+      - METRICS_URL=http://metrics:8000
+      - TTS_DEFAULT_VOICE=${TELEGRAM_VOICE:-${VOICE_DEFAULT:-dee}}
+      - DEFAULT_JOB=${TELEGRAM_DEFAULT_JOB:-chat}
+      # Pick the model per message automatically. On by default -- choosing
+      # a route by hand was busywork. Set AUTO_JOB=false to go manual.
+      - AUTO_JOB=${AUTO_JOB:-true}
+      - TELEGRAM_VOICE_REPLIES=${TELEGRAM_VOICE_REPLIES:-false}
+      - TRANSCRIPT_DIR=/transcripts
+      - STT_API_BASE=${STT_API_BASE:-https://api.openai.com/v1}
+      - STT_API_KEY=${STT_API_KEY:-}
+      - STT_MODEL=${STT_MODEL:-whisper-1}
+      - PYTHONUNBUFFERED=1
+      # /tickets: lists Mama's open tickets and resolves/closes them by
+      # button. Mom lives in docker-compose.web.yml, not here -- reachable
+      # by container name regardless, since both files share one network
+      # when started together (see docker-compose.web.yml's own top note).
+      - MOM_URL=${MOM_URL:-http://mom:8001}
+      - MOM_TICKET_API_SECRET_KEY=${MOM_TICKET_API_SECRET_KEY:-}
+
+  # ---------------------------------------------------------------------------
+  # 8. Booking: REMOVED 2026-11-12 at Jason's direction ("remove the booking
+  #    container and folder"). It had been put down behind a profile since
+  #    2026-09-07 and only ever ran in dry-run. Code and this block are archived
+  #    in D:\ai-stack-archive\outdated\booking\ . The Koalendar webhook in
+  #    web/Caddyfile goes to n8n and is unrelated. Telephony still has
+  #    BOOKING_BASE_URL set; with nothing answering, its booking tool reports
+  #    that booking is unavailable, exactly as it did while booking was down.
+  #    The booking_state volume is kept (not deleted).
+
+  # ---------------------------------------------------------------------------
+  # 9. Telephony - the whole phone line, on this machine.
+  #
+  #    Twilio provides the number and the audio pipe. Everything else is local:
+  #    Whisper transcribes, qwen2.5:7b thinks, Kokoro speaks. Audio goes
+  #    Twilio -> your house -> Twilio, with no third party in the middle.
+  #
+  #    This is the ONLY service the tunnel exposes.
+  # ---------------------------------------------------------------------------
+  telephony:
+    build:
+      context: .
+      dockerfile: telephony/Dockerfile
+    image: ai-stack/telephony:latest
+    container_name: telephony
+    restart: unless-stopped
+    logging: *default-logging
+    labels:
+      ai-stack.role: "the phone line - watch these logs during a call"
+      ai-stack.order: "9"
+    depends_on:
+      litellm:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8093:8093"     # localhost only; the tunnel reaches it over
+                                  # the internal Docker network
+    volumes:
+      - ./transcripts:/transcripts
+      # READ-ONLY. The phone line reads the places directory and the service
+      # rules; it has no business writing either.
+      - ./config:/config:ro
+      # Places added from the browser at /admin/site/places. READ-ONLY: the
+      # phone line answers from this, it never writes it - the admin is the only
+      # writer, the same split as every other data file in the stack.
+      - ./site-data/data:/data/site:ro
+      - telephony_state:/state    # callers.db - who has called before
+    environment:
+      - PUBLIC_HOST=${PUBLIC_HOST:-}
+      # STT MOVED TO THE NUC 2026-08-28. It was never running here: the image
+      # ai-stack/stt:latest had never been built, while telephony, voice and
+      # booking were built 5-10 days earlier -- so the phone line could speak
+      # and take bookings but could not HEAR, for at least ten days.
+      #
+      # It runs on the NUC now because it does not need a GPU: faster-whisper
+      # uses CTranslate2, not torch, and that box has 12 idle cores.
+      - STT_BASE_URL=http://192.168.1.86:8092
+      - VOICE_BASE_URL=http://voice:8091
+      - ROUTER_BASE_URL=http://litellm:4000/v1
+      - ROUTER_API_KEY=${LITELLM_MASTER_KEY}
+      - PHONE_JOB=${PHONE_JOB:-phone}
+      - PHONE_VOICE=${PHONE_VOICE:-dee}
+      - BOOKING_BASE_URL=http://booking:8080
+      - BOOKING_API_KEY=${BOOKING_API_KEY:-}
+      - BUSINESS_NAME=${BUSINESS_NAME:-Tea Miss Dee}
+      - TWILIO_AUTH_TOKEN=${TWILIO_AUTH_TOKEN:-}
+      - BOOKING_LINK=${BOOKING_LINK:-}
+      - REVIEW_LINK=${REVIEW_LINK:-}
+      - TIP_LINK=${TIP_LINK:-}
+      - SMS_ENABLED=${SMS_ENABLED:-false}
+      - TWILIO_ACCOUNT_SID=${TWILIO_ACCOUNT_SID:-}
+      - TWILIO_FROM_NUMBER=${TWILIO_FROM_NUMBER:-}
+      - BUSINESS_TZ=${BUSINESS_TZ:-America/Los_Angeles}
+      - PHONE_SILENCE_MS=${PHONE_SILENCE_MS:-800}
+      - PHONE_BARGE_MS=${PHONE_BARGE_MS:-320}
+      - TELEPHONY_STATE_DIR=/state
+      - TRANSCRIPT_DIR=/transcripts
+      - PYTHONUNBUFFERED=1
+    healthcheck:
+      # 12s, not 3s. This endpoint fans out to stt, voice and booking before it
+      # answers -- it took 3.90s with one of them unreachable, which is 0.9s
+      # too slow for a 3s probe. The result was 1833 consecutive "unhealthy"
+      # reports over 17 hours that said nothing about the actual fault, while
+      # the endpoint itself was returning a perfectly clear
+      # {"status":"degraded","stt":"unreachable"} to anyone who waited.
+      #
+      # A probe faster than the thing it probes reports its own impatience.
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8093/health',timeout=12).status==200 else 1)\""]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    profiles: ["phone", "all"]
+
+  # ---------------------------------------------------------------------------
+  # 10. Cloudflare Tunnel - how Twilio reaches the telephony service.
+  #
+  #     This dials OUT to Cloudflare and holds the connection open. Your router
+  #     stays closed: no port forwarding, no firewall rule, no static IP, no
+  #     certificate to renew. Twilio talks to a Cloudflare hostname; Cloudflare
+  #     hands the request down the tunnel to the telephony container.
+  #
+  #     Only starts when you set CLOUDFLARE_TUNNEL_TOKEN in .env, so the stack
+  #     stays fully private until you deliberately open this one door.
+  # ---------------------------------------------------------------------------
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    container_name: tunnel
+    restart: unless-stopped
+    logging: *default-logging
+    labels:
+      ai-stack.role: "outbound tunnel so Twilio can reach the phone service"
+      ai-stack.order: "10"
+    depends_on:
+      - telephony
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    profiles: ["phone", "all"]
+  n8n:
+    build:
+      context: ./n8n
+      dockerfile: Dockerfile
+    image: ai-stack/n8n:latest
+    container_name: n8n
+    restart: unless-stopped
+    logging: *default-logging
+    labels:
+      ai-stack.role: "heartbeat + usage graphs - opens at localhost:5678"
+      ai-stack.order: "12"
+    user: "0:0"    # see n8n/Dockerfile - docker.sock already makes this moot
+    depends_on:
+      # service_started, NOT service_healthy. n8n does not need litellm to
+      # boot -- it only queries it for the models/latency/tokens charts, and
+      # those degrade to "no data" by themselves. Requiring health here meant
+      # an unhealthy litellm silently took the whole monitoring stack with
+      # it, including the tools you'd use to diagnose litellm.
+      litellm:
+        condition: service_started
+    ports:
+      - "127.0.0.1:5678:5678"    # loopback only - no public route, ever
+    volumes:
+      # n8n's own SQLite database (workflows, credentials, execution history)
+      # plus its encryption key file. Nothing else needed -- SQLite is a file,
+      # not a server, and it's what n8n uses by default. No postgres, matching
+      # how the rest of this stack (litellm, the phone line) already avoids
+      # standing up a database server it would have to babysit.
+      - n8n_data:/home/node/.n8n
+      # Read-only, and only so `stats` can read host-metrics.json -- the
+      # C: free space, CPU temperature, Windows uptime and internet latency
+      # that hostmetrics.ps1 writes from the Windows side. None of those are
+      # visible from inside a container. A plain file drop, not a new port.
+      - ./transcripts:/transcripts:ro
+      # What the user chose over the read-only sidecar: n8n sees the Docker
+      # API directly. This is root-equivalent on this PC -- anyone who can
+      # edit a workflow here, or any bug in a community node, can ask the
+      # Docker daemon to start a container with any mount it wants. That is
+      # the deliberate tradeoff for a Docker node that works like Docker
+      # actually works, instead of a narrower read-only JSON endpoint.
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - GENERIC_TIMEZONE=${BUSINESS_TZ:-America/Los_Angeles}
+      - TZ=${BUSINESS_TZ:-America/Los_Angeles}
+      # Loopback-only and no TLS in front of it, so n8n's session cookie has to
+      # be told not to require https. If this ever moves behind Caddy, this
+      # flips back to the default (true) or the login redirect loops forever.
+      - N8N_SECURE_COOKIE=false
+      # Keeps the actual bot token and allowlist OUT of the workflow JSON files
+      # this build hands you -- workflows read $env.TELEGRAM_BOT_TOKEN instead
+      # of having the value pasted into them. Off by default in recent n8n for
+      # good reason (a compromised workflow could read anything in the
+      # process's environment); on here because that's exactly what these
+      # workflows are meant to do, deliberately and narrowly.
+      - N8N_BLOCK_ENV_ACCESS_IN_NODE=false
+      # n8n 2.0 DISABLED the Execute Command node by default. Without this
+      # line every workflow here fails with "Unrecognized node type:
+      # n8n-nodes-base.executeCommand" -- not on import, but at RUN time,
+      # which is why it looked like it imported fine and then broke.
+      #
+      # An empty list means "exclude nothing", i.e. put Execute Command back.
+      # n8n's own docs give exactly this value for exactly this purpose:
+      # https://docs.n8n.io/changelog/v20-breaking-changes
+      #
+      # Their reason for disabling it is that it runs arbitrary commands in
+      # the container. That is precisely what the stats/graph workflows do --
+      # they shell out to `docker`. On this box that horse left the barn the
+      # moment docker.sock was mounted above: the container is already
+      # root-equivalent on this PC by design and by your explicit choice.
+      # This line doesn't widen that; it just stops n8n hiding the node that
+      # makes the tradeoff useful.
+      - 'NODES_EXCLUDE=[]'
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - TELEGRAM_ALLOWED_USER_IDS=${TELEGRAM_ALLOWED_USER_IDS:-}
+      # Encryption key for n8n's stored credentials. Generated once by
+      # env-sync.cmd and kept STABLE, same reasoning as ZEE_SECRET_KEY and the
+      # rest: if this ever changed, every saved credential in n8n would become
+      # unreadable garbage on the next restart.
+      - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY:?run env-sync.cmd - it generates one}
+      # ===== THE BUG THAT LOST YOUR WORKFLOWS =====================
+      # n8n puts its database in  $HOME/.n8n , not in a fixed path. This
+      # container runs as root (user: "0:0", needed for the Docker socket),
+      # and root's HOME is /root -- so n8n was writing everything to
+      # /root/.n8n while the volume was mounted at /home/node/.n8n.
+      #
+      # The volume was therefore empty and ignored, and the real database
+      # lived in the container's own filesystem, which is destroyed every
+      # time the container is recreated. `update.cmd` recreates n8n. That is
+      # why the login, the workflows and the encryption key "never took".
+      #
+      # This line pins the folder explicitly, so it no longer depends on
+      # which user the container runs as.
+      - N8N_USER_FOLDER=/home/node
+      # Exposes /metrics for Netdata to scrape: workflow executions, failures,
+      # queue depth. Cheap, local-only, and it turns "did the heartbeat run?"
+      # into a chart instead of a scroll through the Executions tab.
+      - N8N_METRICS=true
+      # Requested explicitly: don't keep a row for every successful run
+      # forever. Errors are still kept (worth seeing why a heartbeat failed);
+      # only the routine noise of "ran fine, every 5 minutes" is skipped.
+      # 'none' keeps the database small, which is why it was set -- but it
+      # also means a successful run leaves NO trace, so the Overview page
+      # reads 0 executions forever and you cannot tell "working" from "never
+      # ran". Set N8N_SAVE_SUCCESS=all in .env while you are getting things
+      # working, then put it back to none once you trust it.
+      - EXECUTIONS_DATA_SAVE_ON_SUCCESS=${N8N_SAVE_SUCCESS:-none}
+      - EXECUTIONS_DATA_SAVE_ON_ERROR=all
+      - EXECUTIONS_DATA_PRUNE=true
+      - EXECUTIONS_DATA_MAX_AGE=168
+      # info, not warn. n8n reports things like "settings file permissions
+      # are too wide" and "could not write to the database" at INFO -- at warn
+      # they are invisible, which is exactly the situation where the container
+      # looks fine and silently loses your data. Turn this back to warn once
+      # persistence is confirmed working, if the noise bothers you.
+      - N8N_LOG_LEVEL=${N8N_LOG_LEVEL:-info}
+      # n8n 2.0 requires its settings file to be 0600 and REFUSES it otherwise.
+      # This container runs as root (needed for the Docker socket), and root
+      # creates that file 0644 by default -- too wide. Setting this makes n8n
+      # fix the permissions itself instead of rejecting the file, which is a
+      # prime suspect for "everything resets on refresh".
+      - N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=true
+
+
+  # --- netdata: REMOVED 2026-08-31 at Jason's word. The one wall
+  # (Homepage) + Kuma + Grafana cover what it showed; its config/lib/
+  # cache volumes were deleted with it. ---
+
+  metrics:
+    build:
+      context: .
+      dockerfile: metrics/Dockerfile
+    image: ai-stack/metrics:latest
+    container_name: metrics
+    # LAN-published for the NUC's one POST (shared secret). The router
+    # forwards only 80/443, so this port never faces the internet.
+    ports:
+      - "8033:8000"
+    restart: unless-stopped
+    logging: *default-logging
+    labels:
+      ai-stack.role: "records history every 2 min - /history in Hermes and Telegram"
+      ai-stack.order: "14"
+    volumes:
+      - metrics_data:/data
+      # READ-ONLY, and only ever GET /containers/json. Netdata reports how
+      # MANY containers are stopped but never WHICH, and "telephony was down
+      # from 2am to 6am" is the single most useful thing in the history --
+      # that name has to come from somewhere.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # The Windows numbers Docker genuinely cannot see: C: free space, real
+      # NIC throughput, internet latency, and the CPU/RAM of the PC rather
+      # than of the Linux VM Docker runs inside it.
+      - ./transcripts:/host-metrics:ro
+    environment:
+      # netdata retired 2026-08-31; empty disables that collector cleanly
+      - NETDATA_URL=
+      - METRICS_DB=/data/history.db
+      - METRICS_INTERVAL_SECONDS=${METRICS_INTERVAL_SECONDS:-120}
+      # One month. Raise it if you want a longer memory; the cost is linear
+      # and small (roughly 3 MB per month).
+      - METRICS_RETAIN_DAYS=${METRICS_RETAIN_DAYS:-30}
+      - COMPOSE_PROJECT=ai-stack
+      # The 8pm report asks LiteLLM for model usage directly.
+      - LITELLM_BASE=http://litellm:4000
+      - ROUTER_API_KEY=${LITELLM_MASTER_KEY}
+      # Written by printserver.ps1 into transcripts\, which is mounted here
+      # read-only as /host-metrics.
+      - PRINTER_STATUS=/host-metrics/printer-status.json
+      - ENGINE_INGEST_KEY=${ENGINE_INGEST_KEY:-}
+      - NUC_METRICS=/data/nuc-metrics.json
+      # Same timezone as n8n, so "today" in the report means the same day the
+      # 8pm trigger thinks it is. Two services disagreeing about midnight is
+      # the kind of bug you only notice at 11pm on the 1st of a month.
+      - TZ=${BUSINESS_TZ:-America/Los_Angeles}
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/healthz',timeout=5).status==200 else 1)\""]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+
+  # ---------------------------------------------------------------------------
+  # 15. cups + printq - printing, without Windows in the way
+  #
+  #  WHY THIS REPLACED THE POWERSHELL PRINT SERVER
+  #  The Windows path accepted a job, moved the file to printed\, reported
+  #  success, and produced no paper. Windows had marked the printer Offline
+  #  because its WSD port stopped answering, and WSD does not recover when the
+  #  printer wakes up. Nothing in that chain would say so.
+  #
+  #  This path never touches Windows: printq -> CUPS -> IPP -> printer. No
+  #  spooler, no WSD, no "Use Printer Offline" checkbox, no scheduled task and
+  #  no console window popping up every minute. When it fails, CUPS says why.
+  #
+  #  YOU MUST SET PRINTER_IP in .env. CUPS normally finds printers with
+  #  mDNS/Bonjour, and multicast does NOT cross Docker Desktop's NAT -- a
+  #  container will never discover a printer on your LAN however long it
+  #  looks. Naming the address is the only thing that works, and it is more
+  #  stable anyway. Reserve it in your router so it cannot move.
+  #    Find it on the printer: Menu > Network > WLAN > TCP/IP > IP Address
+  # ---------------------------------------------------------------------------
+  cups:
+    image: olbat/cupsd:latest
+    container_name: cups
+    restart: unless-stopped
+    logging: *default-logging
+    labels:
+      ai-stack.role: "print server - http://localhost:631 (no login needed)"
+      ai-stack.order: "15"
+    ports:
+      # Localhost only, like everything else. The web UI is genuinely useful
+      # for adding a second printer or reading a failed job's real error.
+      - "127.0.0.1:631:631"
+    volumes:
+      - cups_config:/etc/cups
+      # WHY THIS FILE IS MOUNTED
+      # The image ships a cupsd.conf that demands a username and password
+      # before it will accept a print job from another machine. The CUPS
+      # command-line tools read that password from a CONSOLE -- and a
+      # container has none, so `lp` sat there printing "Password for root on
+      # cups?" forever and the job never left printq. Every print we tried
+      # died there. Read cups/cupsd.conf itself; the header explains exactly
+      # what is traded away and why it is safe here.
+      #
+      # Mounted :ro deliberately. cupsd rewrites this file if you press
+      # "Change Settings" in the web UI, which would silently throw away the
+      # comments and the fix. Read-only means that button fails loudly
+      # instead. cupsd only READS the file at startup, so :ro cannot stop the
+      # container booting.
+      - ./cups/cupsd.conf:/etc/cups/cupsd.conf:ro
+    environment:
+      - TZ=${BUSINESS_TZ:-America/Los_Angeles}
+    healthcheck:
+      test: ["CMD-SHELL", "lpstat -r >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  printq:
+    build:
+      context: .
+      dockerfile: printq/Dockerfile
+    image: ai-stack/printq:latest
+    container_name: printq
+    restart: unless-stopped
+    logging: *default-logging
+    labels:
+      ai-stack.role: "prints what you approve in Telegram; watches the page counter"
+      ai-stack.order: "15b"
+    depends_on:
+      cups:
+        condition: service_started
+    volumes:
+      # Writable: this is the half that moves files out of approved/ into
+      # printed/ or failed/, and writes printer-status.json.
+      - ./transcripts:/transcripts
+    environment:
+      - CUPS_HOST=cups:631
+      - PRINTER_NAME=${PRINTER_NAME:-brother}
+      # REQUIRED. Without it printq can start but cannot add the printer, and
+      # says so in /print rather than failing silently.
+      - PRINTER_IP=${PRINTER_IP:-}
+      - PRINT_QUEUE=/transcripts/print-queue
+      - PRINTER_STATUS=/transcripts/printer-status.json
+      - PRINT_POLL_SECONDS=${PRINT_POLL_SECONDS:-15}
+      # Read-only SNMP, for the lifetime page counter. Brother ships
+      # with v2c enabled and community "public"; change only if you
+      # locked yours down.
+      - SNMP_COMMUNITY=${SNMP_COMMUNITY:-public}
+      - TZ=${BUSINESS_TZ:-America/Los_Angeles}
+
+
+# --- imagine service: REMOVED 2026-08-31 at Jason's direction (container,
+# image and model volume deleted). ---
+
+volumes:
+  # WHERE HERMES REMEMBERS PEOPLE.
+  #
+  # Local by default so the feature works today. Jason wants it on the NAS,
+  # in each person's own home directory, so the NAS enforces the boundary as
+  # well as Hermes does and a person can open their own memory in File
+  # Station. That needs ONE change in DSM which nothing here can do:
+  #
+  #   Control Panel -> Shared Folder -> homes -> Edit -> Permissions
+  #   -> give `homelab` Read/Write
+  #
+  # Measured 2026-09-13: `homelab` has full read/write on photo, Pictures,
+  # private, Paperless and videos, and is DENIED on homes, home and Music.
+  # There is no NFS route either -- homes is not in the export list.
+  #
+  # `private` was considered as an interim and REJECTED: it is an encrypted
+  # share, so after any NAS reboot it stays locked, the mount fails, and
+  # memory would silently vanish until somebody unlocked it by hand.
+  #
+  # Once the grant exists, comment out the local line and uncomment the cifs
+  # block. Nothing else changes -- the code takes the root as a path.
+  hermes_memory:
+  # hermes_memory:
+  #   driver: local
+  #   driver_opts:
+  #     type: cifs
+  #     device: "//192.168.1.68/homes"
+  #     o: "username=homelab,password=${NAS_HOMELAB_PASSWORD},vers=3.0,uid=1000,gid=1000,file_mode=0660,dir_mode=0770,noserverino"
+  tagger_data:
+  cups_config:
+  litellm_db:
+  metrics_data:
+  ollama_data:
+  open_webui_data:
+  hermes_state:
+  hf_cache:
+  n8n_data:
+  booking_state:
+  telephony_state:
+  voicebox_data:

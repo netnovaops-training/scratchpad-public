@@ -1,0 +1,48 @@
+# CPU-only override.
+#
+# Use this if `docker run --rm --gpus all ollama/ollama nvidia-smi` fails -- no
+# NVIDIA card, no driver, or GPU passthrough not working in Docker Desktop yet.
+# Everything still runs; it's just slower, and you should drop to smaller models
+# in litellm/config.yaml (llama3.2:3b for most routes).
+#
+#   docker compose -f docker-compose.yml -f docker-compose.cpu.yml up -d
+#
+# setup.cmd applies this automatically if it can't find a working GPU.
+#
+# Note on the phone line specifically: on CPU, speech-to-text and voice
+# synthesis are both slow enough that a live call will feel broken. The stack
+# will run, but don't put a real client-facing number on a CPU-only machine.
+
+services:
+  ollama:
+    deploy:
+      resources:
+        reservations:
+          devices: !reset []
+
+  voice:
+    environment:
+      - VOICE_DEVICE=cpu
+    deploy:
+      resources:
+        reservations:
+          devices: !reset []
+
+  stt:
+    environment:
+      - STT_DEVICE=cpu
+      - STT_COMPUTE_TYPE=int8
+      # tiny.en on CPU is the only size that keeps up with a phone call at all.
+      - STT_MODEL_SIZE=tiny.en
+    deploy:
+      resources:
+        reservations:
+          devices: !reset []
+
+  voicebox:
+    environment:
+      - VOICEBOX_FORCE_CPU=1
+    deploy:
+      resources:
+        reservations:
+          devices: !reset []

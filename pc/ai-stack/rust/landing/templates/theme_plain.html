@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#050a12">
+<meta name="robots" content="noindex">
+<title>{{ who }}&rsquo;s page</title>
+<!-- Shared palette and card mechanics, the same file every other page on this
+     domain uses. Only this page's own layout stays local below. -->
+<link rel="stylesheet" href="/theme.css">
+<style>
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;background:var(--bg);color:var(--ink);
+  font:16px/1.6 ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:980px;margin:0 auto;padding:clamp(1.5rem,5vw,4rem) 1.25rem}
+header{text-align:center;margin-bottom:clamp(2rem,6vw,3rem)}
+h1{margin:0 0 .8rem;font-size:clamp(1.9rem,6vw,2.8rem);font-weight:750;letter-spacing:-.02em}
+h1 em{font-style:normal;background:linear-gradient(100deg,#4fc79b,#5aa2e8);
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+  /* Names are user data. Capitalising in CSS rather than in Rust keeps the
+     stored address untouched -- "davetta1" should read as Davetta1 on screen
+     without the account quietly being renamed. */
+  text-transform:capitalize}
+header p{margin:0;color:var(--muted);max-width:34rem;margin-inline:auto}
+
+/* Text inside a card -- .grid/a.card/.ico come from theme.css. */
+.card .sub{margin:0;font-size:.78rem;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--accent);opacity:.9}
+.card h2{margin:0;font-size:1.15rem;font-weight:700;letter-spacing:-.01em}
+.card p{margin:.2rem 0 0;color:var(--muted);font-size:.9rem;line-height:1.5}
+.card .go{margin-top:.7rem;font-size:.84rem;font-weight:600;color:var(--accent);
+  display:inline-flex;align-items:center;gap:.4rem}
+.card .go svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2;
+  transition:transform .28s cubic-bezier(.2,.8,.3,1)}
+a.card:hover .go svg{transform:translateX(4px)}
+
+/* The empty state. Reached when an account exists but has been granted
+   nothing -- which is a real state, not an error, and reads better as a
+   sentence than as a blank page somebody assumes is broken. */
+.nothing{text-align:center;color:var(--muted);border:1px dashed var(--rule,#22303f);
+  border-radius:14px;padding:2.5rem 1.5rem;max-width:32rem;margin:0 auto}
+.nothing strong{display:block;color:var(--ink);font-size:1.05rem;margin-bottom:.4rem}
+
+footer{text-align:center;margin-top:clamp(2.5rem,7vw,4rem);color:var(--muted);font-size:.85rem}
+footer a{color:var(--accent);text-decoration:none;font-weight:600}
+footer a:hover{text-decoration:underline}
+.shelfhead{
+  font-size:.78rem;letter-spacing:.22em;text-transform:uppercase;
+  color:var(--muted,#8a8f98);margin:34px 0 2px;padding-bottom:8px;
+  border-bottom:1px solid rgba(128,128,128,.25);
+}
+.shelfhead:first-of-type{margin-top:10px}
+.shelfbox{margin:26px 0;border:0}
+.shelfbox summary{
+  list-style:none;cursor:pointer;display:flex;align-items:center;gap:12px;
+  font-size:.86rem;letter-spacing:.24em;text-transform:uppercase;
+  padding:14px 18px;border-radius:12px;user-select:none;
+  border:1px solid rgba(160,160,160,.35);transition:border-color .25s;
+}
+.shelfbox summary::-webkit-details-marker{display:none}
+.shelfbox summary::before{content:"\25B8";transition:transform .25s;font-size:.9em}
+.shelfbox[open] summary::before{transform:rotate(90deg)}
+.shelfbox summary:hover{border-color:rgba(200,200,200,.7)}
+.shelfcount{margin-left:auto;font-size:.72rem;letter-spacing:.06em;
+  border:1px solid currentColor;border-radius:99px;padding:2px 10px;opacity:.75}
+.shelfbox>nav{animation:shelfdown .3s ease}
+@keyframes shelfdown{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion: reduce){.shelfbox>nav{animation:none}}
+{% include "_effects.html" %}
+
+/* --- applying the effects (2026-09-07) -------------------------------------
+   The classes existed and nothing wore them, so the page looked unchanged.
+   These three lines are what make the difference visible. */
+
+/* The entrance, staggered by --i. Capped in the template at 10: past that a
+   stagger stops reading as choreography and starts reading as a slow page. */
+.card.enter { animation-delay: calc(var(--i, 0) * 45ms); }
+
+/* The glow needs somewhere to sit above the card's own background. */
+.card.lit { isolation: isolate; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Hello, <em>{{ who }}</em></h1>
+    <p>Everything here is yours to open. If something you expect is missing,
+       ask Jason rather than hunting for it &mdash; this page only shows what
+       your account can actually reach.</p>
+  </header>
+
+  {% if sections.is_empty() %}
+  <div class="nothing">
+    <strong>Nothing has been shared with you yet.</strong>
+    Your sign-in works, so the account is real &mdash; it just has not been
+    given anything to open. Ask Jason to add something to it.
+  </div>
+  {% else %}
+  {% include "_search.html" %}
+  {% for shelf in shelves %}
+  {% if !shelf.name.is_empty() %}
+  <details class="shelfbox">
+    <summary><span>{{ shelf.name }}</span>
+      <span class="shelfcount"><span class="tally" style="--n:{{ shelf.sections.len() }}">{{ shelf.sections.len() }}</span> cards</span></summary>
+  {% endif %}
+  <nav class="grid">
+    {% for s in shelf.sections %}
+    <a class="card enter{% if s.href == "/ability/" %} lit{% endif %}" href="{{ s.href }}" style="--accent:{{ s.accent }};--i:{{ loop.index0 }}">
+      <span class="ico" aria-hidden="true">
+        <svg viewBox="0 0 24 24">{{ s.icon|safe }}</svg>
+      </span>
+      <p class="sub">{{ s.sub }}</p>
+      <h2>{{ s.name }}</h2>
+      <p>{{ s.desc }}</p>
+      <span class="go">Open
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg>
+      </span>
+    </a>
+    {% endfor %}
+  </nav>
+  {% if !shelf.name.is_empty() %}
+  </details>
+  {% endif %}
+  {% endfor %}
+  {% endif %}
+
+  <footer>
+    <a href="/looks">Change look</a> &middot; <a href="/auth/logout">Sign out</a> &middot; &copy; {{ year }}
+  </footer>
+</div>
+<script>
+/* Entrance animations run once per device, then stop.
+   Jason, 2026-09-07: "turn off animations after the person logs in."
+
+   localStorage, not a session flag: he means the daily user, and a session
+   flag replays the whole entrance every morning -- the thing being removed.
+
+   Set BEFORE first paint and wrapped in try/catch: a private window throws on
+   storage access, and an exception here would leave the class unset and the
+   animation running forever for that person -- invisible in testing,
+   permanent for them. Animating is the safe default when storage is gone. */
+(function () {
+  try {
+    if (localStorage.getItem('seen-entrance')) {
+      document.documentElement.classList.add('pre-seen');
+    } else { localStorage.setItem('seen-entrance', '1'); }
+  } catch (e) {}
+  document.addEventListener('DOMContentLoaded', function () {
+    var t = document.querySelectorAll('.tally[style*="--n"]');
+    if (!t.length || !window.IntersectionObserver) return;
+    /* Count-ups start only once visible, so a number below the fold has not
+       already finished counting by the time it is scrolled to. */
+    var io = new IntersectionObserver(function (es) {
+      es.forEach(function (e) {
+        if (e.isIntersecting) { e.target.classList.add('run'); io.unobserve(e.target); }
+      });
+    }, { threshold: 0.4 });
+    t.forEach(function (el) { io.observe(el); });
+  });
+})();
+</script>
+</body>
+</html>

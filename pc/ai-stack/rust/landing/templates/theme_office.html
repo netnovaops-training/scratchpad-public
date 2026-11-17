@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f7f5f0">
+<meta name="robots" content="noindex">
+<title>{{ who }}&rsquo;s page</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Serif:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* ---------------------------------------------------------------------------
+   OFFICE -- ruled paper under a desk lamp.
+
+   The sober one. Where every other theme has scenery, this has restraint:
+   the only decoration is the pool of warm light falling from the top-left,
+   and the ruled lines it falls across. That is the whole idea -- somebody
+   picking "Office" is asking for a page that does not perform.
+
+   The ruling is a repeating gradient, so it stays crisp at any zoom and costs
+   nothing. The margin rule sits at a fixed 62px like a real ruled pad, and is
+   hidden on narrow screens where there is no room for a margin.
+
+   Single look by choice, and a light one. Paper is light; a dark "paper"
+   theme would be a different idea wearing this one's name.
+--------------------------------------------------------------------------- */
+:root{
+  --paper:#f7f5f0; --rule:#dfe5ee; --margin:#e6b9b0;
+  --ink:#1e2530; --muted:#5f6b7a; --navy:#1f3a5f; --brass:#b08d3f;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  min-height:100vh;
+  background:
+    /* the lamp */
+    radial-gradient(70% 46% at 14% -6%,rgba(255,224,164,.55) 0%,rgba(255,224,164,.16) 42%,transparent 72%),
+    /* the ruling */
+    repeating-linear-gradient(180deg,transparent 0 31px,var(--rule) 31px 32px),
+    var(--paper);
+  color:var(--ink);
+  font:400 17px/2 IBM Plex Sans,system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased;
+  position:relative;
+}
+/* the red margin rule of a legal pad */
+body::before{
+  content:"";position:fixed;top:0;bottom:0;left:62px;width:1px;
+  background:var(--margin);opacity:.75;pointer-events:none;z-index:0;
+}
+@media (max-width:760px){body::before{display:none}}
+
+.wrap{position:relative;z-index:1;max-width:1020px;margin:0 auto;padding:clamp(28px,5vw,68px) 22px 40px}
+
+header{margin-bottom:clamp(26px,5vw,50px)}
+.memo{
+  display:inline-block;
+  font:500 10.5px/1 IBM Plex Sans,sans-serif;letter-spacing:.2em;text-transform:uppercase;
+  color:var(--brass);border-bottom:1px solid rgba(176,141,63,.4);
+  padding-bottom:5px;margin-bottom:16px;
+}
+h1{
+  font:600 clamp(30px,6vw,52px)/1.12 IBM Plex Serif,Georgia,serif;
+  letter-spacing:-.014em;margin:0 0 8px;text-wrap:balance;
+}
+.lede{margin:0;max-width:56ch;color:var(--muted);font-size:clamp(15px,2vw,17.5px);line-height:1.7}
+
+/* --- cards as filed index cards ------------------------------------------- */
+nav{display:grid;grid-template-columns:repeat(auto-fit,minmax(252px,1fr));gap:15px;margin-top:clamp(24px,4vw,42px)}
+.card{
+  --accent:#1f3a5f;
+  display:block;text-decoration:none;color:inherit;
+  background:#fffefb;
+  border:1px solid #dcd8ce;
+  border-top:2px solid var(--accent);
+  border-radius:2px;                       /* paper does not have soft corners */
+  padding:19px 19px 16px;
+  box-shadow:0 1px 2px rgba(30,37,48,.05),0 8px 18px rgba(30,37,48,.06);
+  transition:transform .15s ease,box-shadow .15s ease;
+}
+.card:hover,.card:focus-visible{transform:translateY(-2px);
+  box-shadow:0 2px 3px rgba(30,37,48,.06),0 14px 26px rgba(30,37,48,.11);outline:none}
+.card:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.ico{display:inline-flex;width:34px;height:34px;align-items:center;justify-content:center;
+  border-radius:2px;background:rgba(31,58,95,.06);border:1px solid rgba(31,58,95,.14);margin-bottom:11px}
+.ico svg{width:19px;height:19px;fill:none;stroke:var(--accent);stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.sub{margin:0 0 3px;font:500 10px/1 IBM Plex Sans,sans-serif;letter-spacing:.18em;text-transform:uppercase;color:var(--brass)}
+.card h2{margin:0 0 6px;font:600 20px/1.2 IBM Plex Serif,Georgia,serif;letter-spacing:-.008em}
+.card p{margin:0;color:var(--muted);font-size:14.5px;line-height:1.6}
+.go{display:inline-flex;align-items:center;gap:6px;margin-top:12px;
+  font:500 11px/1 IBM Plex Sans,sans-serif;letter-spacing:.14em;text-transform:uppercase;color:var(--accent)}
+.go svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;
+  transition:transform .15s ease}
+.card:hover .go svg{transform:translateX(3px)}
+
+footer{margin-top:clamp(34px,6vw,60px);font-size:13px;color:var(--muted);
+  border-top:1px solid #dcd8ce;padding-top:18px}
+footer a{color:var(--navy);text-decoration:none;border-bottom:1px solid rgba(31,58,95,.3)}
+footer a:hover{color:#000}
+
+@media (prefers-reduced-motion:reduce){.card,.go svg{transition:none}}
+
+/* Somebody whose account has been created but not yet given anything. A blank
+   page would read as broken; this says the sign-in worked and what to do next.
+   Neutral greys with alpha, so the one rule sits correctly on the light themes
+   and the dark ones alike. */
+.nothing{max-width:56ch;margin:0 auto;padding:20px 22px;border-radius:4px;
+  border:1px solid rgba(128,128,128,.35);background:rgba(128,128,128,.10);
+  font-size:15px;line-height:1.65}
+.nothing strong{display:block;margin-bottom:6px}
+{% include "_effects.html" %}
+
+/* --- applying the effects (2026-09-07) -------------------------------------
+   The classes existed and nothing wore them, so the page looked unchanged.
+   These three lines are what make the difference visible. */
+
+/* The entrance, staggered by --i. Capped in the template at 10: past that a
+   stagger stops reading as choreography and starts reading as a slow page. */
+.card.enter { animation-delay: calc(var(--i, 0) * 45ms); }
+
+/* The glow needs somewhere to sit above the card's own background. */
+.card.lit { isolation: isolate; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <span class="memo">Desk of {{ who }} &middot; {{ year }}</span>
+    <h1>{{ who }}&rsquo;s desk</h1>
+    <p class="lede">Everything filed where you left it.</p>
+  </header>
+
+  {% if sections.is_empty() %}
+  <div class="nothing">
+    <strong>Nothing has been shared with you yet.</strong>
+    Your sign-in works, so the account is real &mdash; it just has not been
+    given anything to open. Ask Jason to add something to it.
+  </div>
+  {% else %}
+  <nav>
+    {% include "_search.html" %}
+    {% for s in sections %}
+    <a class="card enter{% if s.href == "/ability/" %} lit{% endif %}" href="{{ s.href }}" style="--accent:{{ s.accent }};--i:{{ loop.index0 }}">
+      <span class="ico" aria-hidden="true">
+        <svg viewBox="0 0 24 24">{{ s.icon|safe }}</svg>
+      </span>
+      <p class="sub">{{ s.sub }}</p>
+      <h2>{{ s.name }}</h2>
+      <p>{{ s.desc }}</p>
+      <span class="go">Open
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6"/></svg>
+      </span>
+    </a>
+    {% endfor %}
+  </nav>
+  {% endif %}
+
+  <footer>
+    <a href="/looks">Change look</a> &middot; <a href="/auth/logout">Sign out</a> &middot; &copy; {{ year }}
+  </footer>
+</div>
+<script>
+/* Entrance animations run once per device, then stop.
+   Jason, 2026-09-07: "turn off animations after the person logs in."
+
+   localStorage, not a session flag: he means the daily user, and a session
+   flag replays the whole entrance every morning -- the thing being removed.
+
+   Set BEFORE first paint and wrapped in try/catch: a private window throws on
+   storage access, and an exception here would leave the class unset and the
+   animation running forever for that person -- invisible in testing,
+   permanent for them. Animating is the safe default when storage is gone. */
+(function () {
+  try {
+    if (localStorage.getItem('seen-entrance')) {
+      document.documentElement.classList.add('pre-seen');
+    } else { localStorage.setItem('seen-entrance', '1'); }
+  } catch (e) {}
+  document.addEventListener('DOMContentLoaded', function () {
+    var t = document.querySelectorAll('.tally[style*="--n"]');
+    if (!t.length || !window.IntersectionObserver) return;
+    /* Count-ups start only once visible, so a number below the fold has not
+       already finished counting by the time it is scrolled to. */
+    var io = new IntersectionObserver(function (es) {
+      es.forEach(function (e) {
+        if (e.isIntersecting) { e.target.classList.add('run'); io.unobserve(e.target); }
+      });
+    }, { threshold: 0.4 });
+    t.forEach(function (el) { io.observe(el); });
+  });
+})();
+</script>
+</body>
+</html>

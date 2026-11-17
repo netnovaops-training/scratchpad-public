@@ -1,0 +1,52 @@
+# Local voice cloning — CPU build, for the NUC.
+#
+# WHY A SECOND DOCKERFILE
+# The GPU one starts FROM pytorch/pytorch:2.6.0-cuda12.4-cudnn9-runtime. The
+# NUC has no NVIDIA card, so that would be several gigabytes of CUDA
+# downloaded, stored, and never executed.
+#
+# UNLIKE stt, THIS ONE REALLY DOES NEED TORCH. LuxTTS and Chatterbox are both
+# torch models — so rather than drop it, this pulls the CPU wheels from
+# PyTorch's own CPU index. Same library, none of the CUDA.
+#
+# BOTH BUILDS SHARE requirements.txt AND server.py, so the two machines cannot
+# drift apart. Only the base image and the device differ.
+#
+# HONEST ABOUT SPEED: the GPU build does roughly 150x realtime. This will not.
+# On twelve CPU cores expect a few seconds of compute per sentence — fine for
+# generating clips you will play back later, noticeably slow for answering a
+# live phone call. That is why the GPU copy on SuperNova stays where it is.
+FROM python:3.14-slim-trixie@sha256:35caba83af2fe6da9a5d922f9b0156f21d1246a48278c58a08bd253303ba42e8
+
+ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 \
+    HF_HOME=/root/.cache/huggingface PORT=8091 \
+    VOICE_DEVICE=cpu \
+    # Leave headroom: this box runs 24 other containers.
+    OMP_NUM_THREADS=6
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ffmpeg libsndfile1 git build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# CPU torch FIRST, from PyTorch's CPU index. If the requirements below pull
+# torch in on their own they would fetch the default CUDA build and undo the
+# whole point of this file.
+RUN pip install --no-cache-dir \
+        --index-url https://download.pytorch.org/whl/cpu \
+        torch torchaudio
+
+COPY voice/requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir -r /app/requirements.txt
+
+# LuxTTS has no PyPI package -- it installs from source. Same note as the GPU
+# Dockerfile: if this fails the server falls back to Chatterbox automatically
+# and still answers.
+RUN git clone --depth 1 https://github.com/ysharma3501/LuxTTS.git /opt/luxtts \
+    && pip install --no-cache-dir -r /opt/luxtts/requirements.txt || true
+ENV PYTHONPATH=/opt/luxtts:/app
+
+COPY voice/server.py /app/server.py
+EXPOSE 8091
+CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8091", "--workers", "1"]

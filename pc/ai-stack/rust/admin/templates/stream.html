@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#050a12">
+<meta name="robots" content="noindex, nofollow">
+<title>{{ label }} &middot; admin</title>
+<link rel="stylesheet" href="/theme.css">
+<style>
+  body{--accent:{{ accent }}}
+  ul.hist{list-style:none;margin:0;padding:0}
+  ul.hist li{font-size:.78rem;color:var(--muted);padding:.35rem 0;border-bottom:1px solid var(--line)}
+  ul.hist li:last-child{border-bottom:0}
+
+  /* The entry list. One row per entry, with its own remove button, because the
+     alternative — a checkbox column and a single Apply — is one misclick away
+     from deleting six things you meant to keep. */
+  ul.entries{list-style:none;margin:0;padding:0}
+  ul.entries li{display:flex;align-items:center;gap:.7rem;padding:.5rem 0;
+                border-bottom:1px solid var(--line)}
+  ul.entries li:last-child{border-bottom:0}
+  ul.entries .who{flex:1;min-width:0}
+  ul.entries .nm{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  ul.entries .id{display:block;font-size:.7rem;color:var(--muted);
+                 font-family:ui-monospace,Menlo,Consolas,monospace;
+                 overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  ul.entries .sub2{font-size:.74rem;color:var(--muted)}
+  ul.entries form{margin:0}
+
+  pre.ex{margin:.6rem 0 0;padding:.7rem .8rem;overflow-x:auto;font-size:.72rem;
+         line-height:1.45;background:rgba(0,0,0,.25);border:1px solid var(--line);
+         border-radius:8px}
+  textarea.json{width:100%;min-height:9rem;font-family:ui-monospace,Menlo,Consolas,monospace;
+                font-size:.78rem;line-height:1.45;resize:vertical}
+  .sep{display:flex;align-items:center;gap:.7rem;margin:.9rem 0;
+       font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+  .sep::before,.sep::after{content:"";flex:1;height:1px;background:var(--line)}
+</style>
+</head>
+<body>
+<div class="wrap narrow">
+  <a class="back" href="../">&larr; all sites</a>
+
+  <div class="row" style="align-items:flex-start;gap:.9rem;margin-bottom:1.3rem">
+    <span class="ico lg" aria-hidden="true"><svg viewBox="0 0 24 24">{{ icon|safe }}</svg></span>
+    <div style="flex:1;min-width:0">
+      <p class="kicker">{{ sub }}</p>
+      <h1>{{ label }}</h1>
+      <p class="sub" style="margin:.2rem 0 0">{{ hint }}</p>
+    </div>
+  </div>
+
+  {% if !flash.is_empty() %}
+    <p class="note {% if flash_ok %}ok{% else %}bad{% endif %}">{{ flash }}</p>
+  {% endif %}
+  {% if !error.is_empty() %}
+    <p class="note bad">{{ error }}</p>
+  {% endif %}
+
+  <div class="panel">
+    <h2>Add or remove</h2>
+    <p class="sub" style="margin:.35rem 0 .9rem">
+      <code>{{ file }}</code> &middot; {{ count }} entries
+      {% if has_file %}&middot; <a href="download/{{ key }}">download the whole file</a>{% endif %}
+    </p>
+
+    <form method="post" action="upload" enctype="multipart/form-data">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <input type="hidden" name="target" value="{{ key }}">
+
+      <label for="paste">Paste JSON</label>
+      <textarea class="json" id="paste" name="paste" spellcheck="false"
+                placeholder="{&#10;  &quot;add&quot;: [ { ... } ],&#10;  &quot;remove&quot;: [ &quot;an-id&quot; ]&#10;}"></textarea>
+
+      <div class="sep">or attach a file</div>
+
+      <div class="row">
+        <input type="file" name="file" accept="application/json,.json" style="flex:1;min-width:190px">
+        <button type="submit">Apply</button>
+      </div>
+    </form>
+
+    <p class="sub" style="margin:.9rem 0 0;font-size:.76rem">
+      Entries already here are <strong>updated</strong>, not duplicated &mdash; matched on
+      <code>id</code>, which is worked out from <code>{{ title_field }}</code> when you
+      don&rsquo;t give one. Nothing you don&rsquo;t name is touched.
+    </p>
+  </div>
+
+  <div class="panel">
+    <h2>What an entry looks like</h2>
+    <p class="sub" style="margin:.35rem 0 0">
+      Fields the site actually reads: <code>{{ shape }}</code>.
+      Anything else you add is kept and handed through untouched.
+    </p>
+    <pre class="ex">{{ example }}</pre>
+    <p class="sub" style="margin:.7rem 0 0;font-size:.76rem">
+      A bare list of entries works too, as does a single entry on its own, as does a
+      whole <code>{{ collection }}</code> file &mdash; all three are treated as
+      &ldquo;make sure these are in there&rdquo;. Only <code>remove</code> ever
+      deletes anything.
+    </p>
+  </div>
+
+  {% if count > 0 %}
+  <div class="panel">
+    <h2>What&rsquo;s in there now</h2>
+    <p class="sub" style="margin:.35rem 0 .8rem">
+      {% if listed < count %}Showing the first {{ listed }} of {{ count }}.{% else %}{{ count }} entries.{% endif %}
+    </p>
+    <ul class="entries">
+      {% for e in items %}
+      <li>
+        <span class="who">
+          <span class="nm">{{ e.title }}{% if !e.sub.is_empty() %} <span class="sub2">&middot; {{ e.sub }}</span>{% endif %}</span>
+          <span class="id">{{ e.id }}</span>
+        </span>
+        <!-- The entry's own name is deliberately NOT interpolated into this
+             string. It would be attribute-escaped by the template and then
+             un-escaped by the HTML parser before JavaScript ever saw it, so a
+             place with an apostrophe in its name would break the button. -->
+        <form method="post" action="remove"
+              onsubmit="return confirm('Remove this entry? The previous version is kept as a backup.')">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <input type="hidden" name="target" value="{{ key }}">
+          <input type="hidden" name="id" value="{{ e.id }}">
+          <button class="ghost" type="submit">Remove</button>
+        </form>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  {% if !backups.is_empty() %}
+  <div class="panel">
+    <h2>Previous versions</h2>
+    <p class="sub" style="margin:.35rem 0 .8rem">Kept automatically before each change. Newest first.</p>
+    <ul class="hist">
+      {% for b in backups %}<li>{{ b }}</li>{% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  <footer>
+    Invalid JSON is refused and the live file is left alone.<br>
+    Every change backs up the previous version first.<br>
+    &copy; {{ year }}
+  </footer>
+</div>
+</body>
+</html>
