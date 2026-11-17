@@ -1878,7 +1878,7 @@ fn the_script_refuses_backslash_and_control_characters_in_return_to() {
 fn label_fallback_order() {
     // 1. the owner-set label, exactly as typed (no apostrophe guessing)
     assert_eq!(
-        display_label("Ultra Nova's Passkey", "Jason Gibson", EMAIL),
+        display_label("Ultra Nova's Passkey", "Site Owner", EMAIL),
         "Ultra Nova's Passkey"
     );
     assert_eq!(
@@ -1887,8 +1887,8 @@ fn label_fallback_order() {
     );
     // 2. the name in people.json
     assert_eq!(
-        display_label("", "Jason Gibson", EMAIL),
-        "Jason Gibson Passkey"
+        display_label("", "Site Owner", EMAIL),
+        "Site Owner Passkey"
     );
     assert_eq!(display_label("", "Jason", EMAIL), "Jason Passkey");
     assert_eq!(display_label("  ", "  Casey  ", EMAIL), "Casey Passkey");
@@ -1937,7 +1937,7 @@ async fn the_manager_sees_the_email_as_name_and_the_label_as_display_name() {
     let st = app_state(&d, true, false, true);
     // give the person a name in people.json (read only for us)
     let mut list = crate::people(&st);
-    list[0].name = "Jason Gibson".into();
+    list[0].name = "Site Owner".into();
     common::people::write(&st.people_file, &list).unwrap();
     let cookie = session_cookie(&st);
     let start = |st: Arc<AppState>, cookie: String, name: &'static str| async move {
@@ -1956,7 +1956,7 @@ async fn the_manager_sees_the_email_as_name_and_the_label_as_display_name() {
     );
     assert_eq!(
         v["options"]["publicKey"]["user"]["displayName"],
-        "Jason Gibson Passkey"
+        "Site Owner Passkey"
     );
 
     // an owner-set label wins, apostrophe untouched

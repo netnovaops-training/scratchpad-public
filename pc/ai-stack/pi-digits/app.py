@@ -102,7 +102,7 @@ def make_recipe() -> bytes:
         "run_record": "u64 N (little-endian) + 32-byte Merkle root of decimals 1..N",
         "id": "SHA-256(recipe bytes || run records); Ed25519 signs the same bytes",
         "public_key_ed25519": public_key_hex(),
-        "issuer": "SuperNova (Jason Gibson's home server)"})
+        "issuer": "SuperNova (Site Owner's home server)"})
 
 
 def ots_bytes(message: bytes, old: bytes = b"") -> bytes:

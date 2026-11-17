@@ -141,7 +141,7 @@ pub async fn send_text(to: &str, subject: &str, body: &str) -> anyhow::Result<bo
         tracing::warn!(%to, %subject, "no outbox configured (GMAIL_CLIENT_ID or SMTP_HOST, SMTP_USER, SMTP_PASSWORD); message not sent");
         return Ok(false);
     }
-    let from_name = common::env_or("MAIL_FROM_NAME", "Jason Gibson");
+    let from_name = common::env_or("MAIL_FROM_NAME", "Site Owner");
     let message = Message::builder()
         .from(format!("{from_name} <{from}>").parse()?)
         .to(to.parse()?)
@@ -190,7 +190,7 @@ pub async fn send_reset_code(to: &str, code: &str) -> anyhow::Result<bool> {
         return Ok(false);
     }
 
-    let from_name = common::env_or("MAIL_FROM_NAME", "Jason Gibson");
+    let from_name = common::env_or("MAIL_FROM_NAME", "Site Owner");
 
     let message = Message::builder()
         .from(format!("{from_name} <{from}>").parse()?)
@@ -251,7 +251,7 @@ pub async fn send_support(
         return Ok(false);
     }
 
-    let from_name = common::env_or("MAIL_FROM_NAME", "Jason Gibson");
+    let from_name = common::env_or("MAIL_FROM_NAME", "Site Owner");
 
     let body = format!(
         "{display} <{from_person}> sent this from the app.\n\n\

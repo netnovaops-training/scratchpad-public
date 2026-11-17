@@ -75,7 +75,7 @@ def arg(flag, default=None):
 
 
 def main():
-    name = arg("--name", "JASON GIBSON")
+    name = arg("--name", "SITE OWNER")
     sub = arg("--sub", "")
     seconds = float(arg("--seconds", "8"))
     pal_name = arg("--palette", "bakelite")

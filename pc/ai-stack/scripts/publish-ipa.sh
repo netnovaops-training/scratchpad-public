@@ -139,7 +139,7 @@ except (OSError, ValueError, KeyError, IndexError):
         "apps": [{
             "name": "Cut The Fluff",
             "bundleIdentifier": "org.example.cutthefluff",
-            "developerName": "Jason Gibson",
+            "developerName": "Site Owner",
             "subtitle": "The household assistant.",
             "localizedDescription": (
                 "Chat with the household assistant, look things up on the "

@@ -69,7 +69,7 @@ SHELLS = ((1.00, 0.0), (0.74, 62.0), (0.52, -47.0))   # radius, tilt degrees
 # Appears as the wave settles, or None for the symbol alone. Two lines:
 # the name, then what it is. The business has no name yet -- when it has
 # one, this is the single place it goes.
-WORDMARK = ("JASON GIBSON", "")
+WORDMARK = ("SITE OWNER", "")
 
 
 def _ease(t):
@@ -308,7 +308,7 @@ class Intro:
         total = sum(widths) + track * (len(name) - 1)
 
         # AND THEN MADE TO FIT WHATEVER IT IS. The short edge handles the
-        # aspect ratio; it cannot know how long the name is. "JASON GIBSON"
+        # aspect ratio; it cannot know how long the name is. "SITE OWNER"
         # is twelve characters and a longer one would overflow a square
         # frame the same way. Measured, and stepped down until it sits
         # inside the frame with a real margin -- so a name is never clipped,

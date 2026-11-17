@@ -11,7 +11,7 @@ reproduced rather than redesigned: his face in its gold ring warming from
 black-and-white into colour, over "On the air", with the three lines of
 credit arriving one every four and a half seconds. See portrait_act.py --
 the film went straight to the map before, and the first thing the site
-shows of him was missing from it entirely. Then the map act is the biography -- born in Schenectady, the door
+shows of him was missing from it entirely. Then the map act is the biography -- born in Hometown, the door
 that opened at WABY in 1955, Troy, the Ten Eyck Record Shop, Evergreen --
 told over Albany with the camera flying between the four places, exactly as
 the page's own intro does it. See mapfilm.py. Then the story: the Fridays,
@@ -496,7 +496,7 @@ def main():
 
     # THE MAP ACT COMES FIRST. Jason, 2026-09-23: "I wanted to have a the
     # map going with the project." It is the biography -- born in
-    # Schenectady, the door that opened at WABY, Troy, the record shop,
+    # Hometown, the door that opened at WABY, Troy, the record shop,
     # Evergreen -- and the story of the Fridays is the second half.
     # HIS CARD FIRST, THEN THE MARK. Jason, 2026-09-23: "Put them before."
     # So the film opens on Pee-Wee -- his face, his name, his three lines --
@@ -613,7 +613,7 @@ def main():
             "Edward “Pee-Wee” Harris: twenty-two years on WABY, the "
             "Ten Eyck Record Shop, and the records he gave away free to young "
             "people on Fridays.\n\n"
-            "Told by his family. Family photographs restored by Jason Gibson."
+            "Told by his family. Family photographs restored by Site Owner."
             "\n\nhttps://peewee.home.example.net"),
         "tags": ["Pee-Wee Harris", "WABY", "Albany", "radio history",
                  "oral history", "Capital Region", "R&B"],
