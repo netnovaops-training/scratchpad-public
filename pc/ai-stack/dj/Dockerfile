@@ -1,5 +1,5 @@
 # One small service: a list, some files, and a page.
-FROM python:3.15-slim-trixie@sha256:533b0b2f9b5d46fd097091cf826f27902f1d6c3bca714b6dc74551356aa97a51
+FROM python:3.15-slim-trixie@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928
 # pillow-heif is not optional in practice: the photographs come off an
 # iPhone, an iPhone gives you HEIC, and Pillow alone cannot open one. Without
 # it every upload from the phone this was built for fails with a message
