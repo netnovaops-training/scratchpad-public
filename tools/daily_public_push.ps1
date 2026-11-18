@@ -22,6 +22,12 @@ $log = Join-Path $repo '.git\daily-push.log'
 $gitleaks = 'C:\Users\USER\.local\share\checks\bin\gitleaks.exe'
 function Say($m) { "$(Get-Date -Format 'yyyy-MM-dd HH:mm') $m" | Add-Content -Path $log -Encoding utf8 }
 
+# 0. Bring back what the nightly cloud routine merged on GitHub (Dependabot, fixes), so the refresh below does
+#    not undo it. Exit 2 = a file needs a hand port: stop, push nothing (added 11-17 with the routine).
+$bp = & py -3.14 -I D:\scratchpad\tools\public_backport.py 2>&1
+if ($LASTEXITCODE -ne 0) { Say "backport: STOPPED, nothing pushed: $($bp | Select-Object -Last 1)"; exit 1 }
+Say "$($bp | Select-Object -Last 1)"
+
 $out = & py -3.14 -I D:\scratchpad\tools\public_copy.py --write 2>&1
 if ($LASTEXITCODE -ne 0) { Say "copy: STOPPED, nothing pushed: $($out | Select-Object -Last 1)"; exit 1 }
 
