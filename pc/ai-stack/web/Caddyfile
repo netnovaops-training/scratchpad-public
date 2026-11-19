@@ -410,101 +410,10 @@ example.org {
 	redir /mom /mama/ 308
 	redir /mom/ /mama/ 308
 
-	# =========================================================================
-	#  THE PHONE LINE. Twilio calls these three paths.
-	#
-	#  THEY MOVED HOSTNAME. They used to live on teewithmsdee.example.org, which
-	#  no longer exists. The paths are unchanged, so the ONLY thing that had to
-	#  change in the Twilio console is the hostname:
-	#
-	#      old  https://teewithmsdee.example.org/twiml/incoming
-	#      new  https://example.org/twiml/incoming
-	#
-	#  Until that is updated in Twilio, INBOUND CALLS FAIL. Twilio has no way
-	#  to know the number moved; it keeps POSTing to a hostname that stopped
-	#  resolving and the caller hears an error.
-	#
-	#  They sit at the ROOT of this host rather than under /dee, deliberately:
-	#  keeping the paths identical means the Twilio change is one field, not
-	#  three, and there is no chance of a half-migrated phone line.
-	#
-	#  ONLY these three paths reach the telephony container. It also serves
-	#  /admin/callers, /admin/clients, /admin/notes, /admin/messages and
-	#  /admin/ratings -- every client's name, number and visit history, with no
-	#  login on any of them. Those are for localhost:8093 and must never appear
-	#  here. Listing the allowed paths explicitly, rather than proxying the
-	#  service and trying to block /admin, means a new admin endpoint added
-	#  later is private by default instead of public by accident.
-	#
-	#  Both POST endpoints verify Twilio's signature; /media checks a secret
-	#  carried in the TwiML. See telephony/app/twilio_auth.py.
-	# =========================================================================
-	handle /twiml/incoming {
-		reverse_proxy telephony:8093 {
-			import appproxy
-		}
-	}
-	handle /twiml/sms {
-		reverse_proxy telephony:8093 {
-			import appproxy
-		}
-	}
-	# The audio stream. Caddy proxies WebSockets natively -- no special config.
-	# The long timeouts in `appproxy` are what keep a 20-minute call alive.
-	handle /media {
-		reverse_proxy telephony:8093 {
-			import appproxy
-		}
-	}
-
-	# --- Koalendar booking webhook -------------------------------------------
-	# Also moved hostname. Update the URL in Koalendar's booking page settings
-	# ("After Booking" -> webhook URL) to this host, or bookings stop arriving
-	# in Telegram. The path is unchanged.
-	#
-	# Koalendar has no signature verification on its webhooks (checked their
-	# docs), so this random 24-character path is the only thing standing
-	# between "anyone on the internet" and this one n8n workflow -- not a
-	# password, just an unguessable URL. That's a real but narrow risk: the
-	# worst a forged POST here can do is trigger one bogus Telegram message.
-	#
-	# If this URL ever leaks, replace the path below AND the Webhook node's
-	# "path" in n8n/workflows/koalendar.json to match, then update it in
-	# Koalendar too.
-	handle /koalendar-e963c080ff98c4c4fae3e231 {
-		rewrite * /webhook{uri}
-		reverse_proxy n8n:5678 {
-			import appproxy
-		}
-	}
-
-	# --- Tea with Ms Dee -- RETIRED 2026-09-06 -------------------------------
-	#
-	# Jason: "we are not going to use tea with Ms dee I have other plans for
-	# that so just stop all that."
-	#
-	# The container is profiled off and this route is withdrawn, because a
-	# /dee that answers with a service nobody is maintaining is worse than a
-	# /dee that is not there. NOTHING IS DELETED -- the app source, its
-	# database and its volumes are untouched, and "other plans" is not the
-	# same as finished.
-	#
-	# Commented rather than cut, because these two lines are the expensive
-	# part and whatever the other plans are, they will need them again:
-	# BOOK_ROOT_PATH makes FastAPI build its links with the prefix, and
-	# BOOK_COOKIE_PATH scopes the session cookie so it is not also sent to
-	# /mama, /casey and the admin. Both live in docker-compose.web.yml.
-	#
-	#	redir /dee /dee/ 308
-	#	handle_path /dee/* {
-	#		request_body {
-	#			max_size 64MB
-	#		}
-	#		reverse_proxy teabook:8002 {
-	#			import appproxy
-	#			header_up X-Forwarded-Prefix /dee
-	#		}
-	#	}
+	# --- REMOVED 2026-11-19 (Jason: "Both tea book and Dee can go. Leave mom") -----
+	# The phone-line routes (/twiml/incoming, /twiml/sms, /media -> telephony), the
+	# Koalendar booking webhook (-> n8n) and the commented /dee block (-> teabook)
+	# are gone with the services. Archived in D:\ai-stack-archive\outdated\teabook\.
 
 	# --- the recipe importer, under /kitchen ---------------------------------
 	# Paste a link, get a step-by-step guide with the portions scaled. The
