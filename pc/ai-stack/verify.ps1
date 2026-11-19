@@ -66,10 +66,11 @@ $expected = @{
 foreach ($k in $expected.Keys | Sort-Object) {
     if ($running -contains $k) { Ok "$k" } else { Bad "$k is not running" $expected[$k] }
 }
-foreach ($k in @("telephony","stt","tunnel")) {
-    if ($running -contains $k) { Ok "$k" } else { Warn "$k not running" "only needed for the phone line" }
+# telephony and tunnel removed 2026-11-19 (archived in D:\ai-stack-archive\outdated\telephony\).
+foreach ($k in @("stt")) {
+    if ($running -contains $k) { Ok "$k" } else { Warn "$k not running" "speech-to-text (runs on the NUC)" }
 }
-foreach ($k in @("caddy","landing","casey","mom","teabook","watchtower")) {
+foreach ($k in @("caddy","landing","casey","mom","watchtower")) {  # teabook removed 2026-11-19
     if ($running -contains $k) { Ok "$k" } else { Warn "$k not running" "only needed for the websites" }
 }
 if ($running -contains "php") {
@@ -198,8 +199,7 @@ if ($running -notcontains "caddy") {
     foreach ($pair in @(
         @{ n="landing"; p=8010 },
         @{ n="casey";     p=8000 },
-        @{ n="mom";     p=8001 },
-        @{ n="teabook"; p=8002 })) {
+        @{ n="mom";     p=8001 })) {
         $c = & docker @compose exec -T caddy sh -c "wget -q -O /dev/null -T 5 http://$($pair.n):$($pair.p)/healthz 2>&1; echo `$?" 2>$null
         if ($c -match "^0") { Ok "Caddy can reach $($pair.n)" } else { Warn "Caddy can't reach $($pair.n) yet" "check: logs.cmd $($pair.n)" }
     }

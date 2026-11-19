@@ -1144,111 +1144,13 @@ services:
   #    The booking_state volume is kept (not deleted).
 
   # ---------------------------------------------------------------------------
-  # 9. Telephony - the whole phone line, on this machine.
-  #
-  #    Twilio provides the number and the audio pipe. Everything else is local:
-  #    Whisper transcribes, qwen2.5:7b thinks, Kokoro speaks. Audio goes
-  #    Twilio -> your house -> Twilio, with no third party in the middle.
-  #
-  #    This is the ONLY service the tunnel exposes.
-  # ---------------------------------------------------------------------------
-  telephony:
-    build:
-      context: .
-      dockerfile: telephony/Dockerfile
-    image: ai-stack/telephony:latest
-    container_name: telephony
-    restart: unless-stopped
-    logging: *default-logging
-    labels:
-      ai-stack.role: "the phone line - watch these logs during a call"
-      ai-stack.order: "9"
-    depends_on:
-      litellm:
-        condition: service_healthy
-    ports:
-      - "127.0.0.1:8093:8093"     # localhost only; the tunnel reaches it over
-                                  # the internal Docker network
-    volumes:
-      - ./transcripts:/transcripts
-      # READ-ONLY. The phone line reads the places directory and the service
-      # rules; it has no business writing either.
-      - ./config:/config:ro
-      # Places added from the browser at /admin/site/places. READ-ONLY: the
-      # phone line answers from this, it never writes it - the admin is the only
-      # writer, the same split as every other data file in the stack.
-      - ./site-data/data:/data/site:ro
-      - telephony_state:/state    # callers.db - who has called before
-    environment:
-      - PUBLIC_HOST=${PUBLIC_HOST:-}
-      # STT MOVED TO THE NUC 2026-08-28. It was never running here: the image
-      # ai-stack/stt:latest had never been built, while telephony, voice and
-      # booking were built 5-10 days earlier -- so the phone line could speak
-      # and take bookings but could not HEAR, for at least ten days.
-      #
-      # It runs on the NUC now because it does not need a GPU: faster-whisper
-      # uses CTranslate2, not torch, and that box has 12 idle cores.
-      - STT_BASE_URL=http://192.168.1.86:8092
-      - VOICE_BASE_URL=http://voice:8091
-      - ROUTER_BASE_URL=http://litellm:4000/v1
-      - ROUTER_API_KEY=${LITELLM_MASTER_KEY}
-      - PHONE_JOB=${PHONE_JOB:-phone}
-      - PHONE_VOICE=${PHONE_VOICE:-dee}
-      - BOOKING_BASE_URL=http://booking:8080
-      - BOOKING_API_KEY=${BOOKING_API_KEY:-}
-      - BUSINESS_NAME=${BUSINESS_NAME:-Tea Miss Dee}
-      - TWILIO_AUTH_TOKEN=${TWILIO_AUTH_TOKEN:-}
-      - BOOKING_LINK=${BOOKING_LINK:-}
-      - REVIEW_LINK=${REVIEW_LINK:-}
-      - TIP_LINK=${TIP_LINK:-}
-      - SMS_ENABLED=${SMS_ENABLED:-false}
-      - TWILIO_ACCOUNT_SID=${TWILIO_ACCOUNT_SID:-}
-      - TWILIO_FROM_NUMBER=${TWILIO_FROM_NUMBER:-}
-      - BUSINESS_TZ=${BUSINESS_TZ:-America/Los_Angeles}
-      - PHONE_SILENCE_MS=${PHONE_SILENCE_MS:-800}
-      - PHONE_BARGE_MS=${PHONE_BARGE_MS:-320}
-      - TELEPHONY_STATE_DIR=/state
-      - TRANSCRIPT_DIR=/transcripts
-      - PYTHONUNBUFFERED=1
-    healthcheck:
-      # 12s, not 3s. This endpoint fans out to stt, voice and booking before it
-      # answers -- it took 3.90s with one of them unreachable, which is 0.9s
-      # too slow for a 3s probe. The result was 1833 consecutive "unhealthy"
-      # reports over 17 hours that said nothing about the actual fault, while
-      # the endpoint itself was returning a perfectly clear
-      # {"status":"degraded","stt":"unreachable"} to anyone who waited.
-      #
-      # A probe faster than the thing it probes reports its own impatience.
-      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8093/health',timeout=12).status==200 else 1)\""]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 20s
-    profiles: ["phone", "all"]
+  # 9. Telephony and 10. Cloudflare Tunnel: REMOVED 2026-11-19 at Jason's direction
+  #    ("Remove telephony and booking I no longer need them"). The container was
+  #    stopped and removed; the tunnel had no container (it only ever existed for
+  #    Twilio to reach telephony). Code, both compose blocks and the compose file
+  #    from before are archived in D:\ai-stack-archive\outdated\telephony\ .
+  #    The telephony_state volume (callers.db) is kept, not deleted.
 
-  # ---------------------------------------------------------------------------
-  # 10. Cloudflare Tunnel - how Twilio reaches the telephony service.
-  #
-  #     This dials OUT to Cloudflare and holds the connection open. Your router
-  #     stays closed: no port forwarding, no firewall rule, no static IP, no
-  #     certificate to renew. Twilio talks to a Cloudflare hostname; Cloudflare
-  #     hands the request down the tunnel to the telephony container.
-  #
-  #     Only starts when you set CLOUDFLARE_TUNNEL_TOKEN in .env, so the stack
-  #     stays fully private until you deliberately open this one door.
-  # ---------------------------------------------------------------------------
-  tunnel:
-    image: cloudflare/cloudflared:latest
-    container_name: tunnel
-    restart: unless-stopped
-    logging: *default-logging
-    labels:
-      ai-stack.role: "outbound tunnel so Twilio can reach the phone service"
-      ai-stack.order: "10"
-    depends_on:
-      - telephony
-    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN:-}
-    profiles: ["phone", "all"]
   n8n:
     build:
       context: ./n8n
