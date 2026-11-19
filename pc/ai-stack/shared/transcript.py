@@ -54,13 +54,19 @@ class Transcript:
     ) -> None:
         self.surface = _plain(surface, "surface")
         self.session_id = _plain(session_id or uuid.uuid4().hex[:12], "session id")
-        self.root = Path(root or os.environ.get("TRANSCRIPT_DIR", "/transcripts")).resolve()
+        # realpath + startswith on the final strings: the containment check CodeQL recognises. OUTCOME
+        # 2026-11-19: the first version (Path.resolve + is_relative_to after _plain()) still showed 4
+        # py/path-injection alerts, because CodeQL does not treat those as sanitizers.
+        root_s = os.path.realpath(root or os.environ.get("TRANSCRIPT_DIR", "/transcripts"))
         day = datetime.now(UTC).strftime("%Y-%m-%d")
-        self.dir = (self.root / self.surface / day).resolve()
-        if not self.dir.is_relative_to(self.root):  # belt and braces after _plain()
+        dir_s = os.path.realpath(os.path.join(root_s, self.surface, day))
+        if not dir_s.startswith(root_s + os.sep):
             raise ValueError("transcript folder is outside TRANSCRIPT_DIR")
+        path_s = os.path.realpath(os.path.join(dir_s, self.session_id + ".jsonl"))
+        if not path_s.startswith(dir_s + os.sep):
+            raise ValueError("transcript file is outside its folder")
+        self.root, self.dir, self.path = Path(root_s), Path(dir_s), Path(path_s)
         self.dir.mkdir(parents=True, exist_ok=True)
-        self.path = self.dir / f"{self.session_id}.jsonl"
         self.title = title
         if not self.path.exists():
             self._write(

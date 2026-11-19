@@ -172,8 +172,9 @@ def fetch_images(url, want=14, min_side=220):
                 blob = r.read(8_000_000)
         except Exception:  # noqa: BLE001, S112  scraped image: any fetch failure skips that image
             continue
-        # nosemgrep: python.lang.security.insecure-hash-algorithms.insecure-hash-algorithm-sha1
-        h = _hashlib.sha1(blob, usedforsecurity=False).hexdigest()  # a duplicate check, not security
+        # sha256, not sha1 (2026-11-19): the hash only lives in this loop's seen-set, so changing it costs
+        # nothing, and Semgrep's sha1 rule ignores nosemgrep in the SARIF upload.
+        h = _hashlib.sha256(blob).hexdigest()  # a duplicate check, not security
         if h in seen_bytes:
             continue
         try:
