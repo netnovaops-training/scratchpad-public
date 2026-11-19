@@ -76,7 +76,7 @@ base64 = "0.23"
 # `=` because this is security code: it moves only when somebody chooses to.
 # `conditional-ui` is the feature that unlocks usernameless (discoverable)
 # sign-in. The crate uses OpenSSL, so the runtime image needs libssl3.
-webauthn-rs = { version = "=0.5.5", features = ["conditional-ui"] }
+webauthn-rs = { version = "=0.6.2", features = ["conditional-ui"] }
 
 # --- legacy only -------------------------------------------------------------
 # Thumbnails. The originals are ~9.5MB each; a grid of twenty would be a 190MB
