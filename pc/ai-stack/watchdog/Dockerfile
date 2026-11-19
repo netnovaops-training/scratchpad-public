@@ -4,7 +4,7 @@
 # that can be broken by a dependency update is a monitor that will be broken
 # on the day it was needed, and this one exists precisely because the last
 # outage went unnoticed.
-FROM python:3.15-alpine@sha256:d44b1254cb92329418d164b22b20d86bbd3869d48e80e09e476531a409a728bb
+FROM python:3.15-alpine@sha256:0f9552bb28711333da16915ec146f5e6bb44a7fdac9ced15dc17c2e0206346dd
 
 ENV PYTHONUNBUFFERED=1
 
