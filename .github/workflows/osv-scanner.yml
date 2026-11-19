@@ -26,6 +26,8 @@ permissions:
   security-events: write
   # Read commit contents
   contents: read
+  # v2 reusable workflows ask for actions: read (SARIF upload status); a caller must grant it.
+  actions: read
 
 jobs:
   scan-scheduled:
