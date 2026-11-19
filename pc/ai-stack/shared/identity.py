@@ -37,7 +37,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-
 PEOPLE_FILE = os.environ.get("PEOPLE_FILE", "/data/people.json")
 LINKS_FILE = os.environ.get("HERMES_LINKS_FILE", "/state/telegram-links.json")
 

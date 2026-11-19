@@ -14,8 +14,24 @@
 #  the web and on the phone. Re-runs only render what changed (txt newer
 #  than mp3).
 # =============================================================================
+import json
 import os
-import re, json, urllib.request
+import re
+import urllib.request
+from pathlib import Path
+
+
+def _http_only(target):
+    """Return target (a URL string or urllib Request) if its scheme is http or https, else raise ValueError.
+
+    urlopen also follows file:// and custom schemes (Bandit B310). Every caller here talks to an
+    http(s) service, so anything else is a mistake or a planted URL. Added 2026-11-19.
+    """
+    url = str(getattr(target, "full_url", target))
+    if not url.lower().startswith(("http://", "https://")):
+        raise ValueError(f"refusing a non-http(s) URL: {url[:80]}")
+    return target
+
 
 # localhost when run on the desktop; voice:8091 when run beside it in compose.
 # Expressive by default (Jason's 2026-09-01 routing rule): the
@@ -46,7 +62,7 @@ def load_defaults():
         with open(os.path.join("data", "voice-defaults.json"),
                   encoding="utf-8") as f:
             return json.load(f)
-    except Exception:
+    except (OSError, ValueError):
         return {}
 
 
@@ -59,7 +75,7 @@ def load_settings(d):
     try:
         with open(os.path.join(d, "voice-settings.json"), encoding="utf-8") as f:
             return json.load(f)
-    except Exception:
+    except (OSError, ValueError):
         return {}
 
 
@@ -81,10 +97,10 @@ def say(text, out, settings=None):
                                  headers={"Content-Type": "application/json"})
     # First render loads the model; on a busy GPU that alone can take a
     # couple of minutes. Every render after is seconds.
-    with urllib.request.urlopen(req, timeout=600) as r:
+    with urllib.request.urlopen(_http_only(req), timeout=600) as r:  # nosec B310
         data = r.read()
     if len(data) < 2000:
-        raise RuntimeError("suspiciously small audio (%d bytes)" % len(data))
+        raise RuntimeError(f"suspiciously small audio ({len(data)} bytes)")
     with open(out, "wb") as f:
         f.write(data)
 
@@ -101,7 +117,7 @@ def render_parts(d, fn, src, settings, watched):
 
     Returns (rendered, skipped). A single-paragraph telling gets no parts:
     the whole-file render already IS that one part."""
-    body = open(src, encoding="utf-8").read()
+    body = Path(src).read_text(encoding="utf-8")
     blocks = paragraphs(body)
     if len(blocks) < 2:
         return 0, 0
@@ -109,15 +125,15 @@ def render_parts(d, fn, src, settings, watched):
     stem = fn[:-4]                      # story-3
     made = kept = 0
     for i, block in enumerate(blocks, 1):
-        out = os.path.join(d, "%s-p%d%s.mp3" % (stem, i, VOICE_TAG))
+        out = os.path.join(d, f"{stem}-p{i}{VOICE_TAG}.mp3")
         if os.path.exists(out) and os.path.getmtime(out) > newest:
             kept += 1
             continue
-        print("  part %d/%d -> %s" % (i, len(blocks), out), flush=True)
+        print(f"  part {i}/{len(blocks)} -> {out}", flush=True)
         try:
             say(block, out, settings)
             made += 1
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  one failed TTS part must not stop the batch
             print("    failed:", e, flush=True)
     return made, kept
 
@@ -159,9 +175,9 @@ def main():
             print("rendering", out,
                   "(spoken override)" if src != txt else "", flush=True)
             try:
-                say(open(src, encoding="utf-8").read(), out, settings)
+                say(Path(src).read_text(encoding="utf-8"), out, settings)
                 done += 1
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001  one failed TTS file must not stop the batch
                 print("  failed:", e, flush=True)
     # the same walk again, for parts -- separate pass so a failure to cut
     # one telling never costs the whole-file render of the next
@@ -184,8 +200,8 @@ def main():
             a, b = render_parts(d, fn, src, settings, watched)
             pmade += a
             pkept += b
-    print("rendered %d, kept %d, of %d" % (done, skipped, total))
-    print("parts: rendered %d, kept %d" % (pmade, pkept))
+    print(f"rendered {done}, kept {skipped}, of {total}")
+    print(f"parts: rendered {pmade}, kept {pkept}")
 
 
 if __name__ == "__main__":

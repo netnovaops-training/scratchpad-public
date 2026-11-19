@@ -1,0 +1,53 @@
+# detekt settings for the phone apps in pc/apps (CleanMyPhone, CutTheFluff, GardenApp).
+# Used on top of detekt's defaults: `detekt-cli --build-upon-default-config --config pc/apps/detekt.yml`
+# (.github/workflows/mobile.yml). Added 2026-11-19 for the 357 MagicNumber findings.
+# OUTCOME 2026-11-19: detekt 1.23.8 on pc/apps went from 357 MagicNumber findings to 0 (checked in a
+# temurin:17 container on the NUC); the 22 numbers this config does not cover became named constants.
+style:
+  MagicNumber:
+    active: true
+    # detekt's default excludes (tests, *.kts build files), plus the colour themes: a theme file is a
+    # palette, and naming every 0xFF... colour twice would only add noise.
+    excludes:
+      - "**/test/**"
+      - "**/androidTest/**"
+      - "**/commonTest/**"
+      - "**/jvmTest/**"
+      - "**/androidUnitTest/**"
+      - "**/androidInstrumentedTest/**"
+      - "**/jsTest/**"
+      - "**/iosTest/**"
+      - "**/*.kts"
+      - "**/ui/Theme.kt"
+      - "**/ui/*Themes.kt"
+    # -1..2 are detekt's defaults. HTTP status codes (200..299, 401-404), EXIF rotations (90/180/270),
+    # percent (99, 100) and the HttpURLConnection timeouts in ms only ever sit on lines that name them.
+    ignoreNumbers:
+      - "-1"
+      - "0"
+      - "1"
+      - "2"
+      - "90"
+      - "99"
+      - "100"
+      - "180"
+      - "200"
+      - "270"
+      - "299"
+      - "401"
+      - "402"
+      - "403"
+      - "404"
+      - "10000"
+      - "15000"
+      - "20000"
+      - "45000"
+      - "60000"
+      - "120000"
+      - "300000"
+      - "600000"
+    # A `val NAME = ...` already names its number.
+    ignorePropertyDeclaration: true
+    # Compose UI code: sizes, fractions, colours and animation timings are layout values, not logic.
+    ignoreAnnotated:
+      - "Composable"

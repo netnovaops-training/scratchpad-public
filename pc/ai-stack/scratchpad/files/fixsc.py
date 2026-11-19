@@ -1,6 +1,7 @@
-import io
+from pathlib import Path
+
 p = "garden.sh"
-s = io.open(p, encoding="utf-8", newline="").read()
+s = Path(p).read_bytes().decode("utf-8")
 def rep(a, b):
     global s
     assert s.count(a) == 1, a[:60]
@@ -23,5 +24,5 @@ rep('''    [ "$before" = "$after" ] && note "All $after files and folders arrive
 '''    if [ "$before" = "$after" ]; then note "All $after files and folders arrived."
     else warn "$before files and folders before, $after after. Look before deleting anything."; fi''')
 rep('''    local since= caddy=0 days plants''', '''    local since='' caddy=0 days plants''')
-io.open(p, "w", encoding="utf-8", newline="").write(s)
+Path(p).write_text(s, encoding="utf-8", newline="")
 print("ok")

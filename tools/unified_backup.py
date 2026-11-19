@@ -180,8 +180,8 @@ def local_files(root: str):
 
 def remote_files(ssh: list[str], folder: str, u: Unified):
     excl = " ".join(f"--exclude='{d}'" for d in SKIP_DIRS if "$" not in d and " " not in d)
-    cmd = ssh + [f"cd ~ && tar -cf - --ignore-failed-read {excl} {folder} 2>/tmp/unified-tar-errors.txt; "
-                 f"echo unreadable: $(grep -c 'Cannot open' /tmp/unified-tar-errors.txt) >&2"]
+    cmd = ssh + [(f"cd ~ && tar -cf - --ignore-failed-read {excl} {folder} 2>/tmp/unified-tar-errors.txt; "
+                 f"echo unreadable: $(grep -c 'Cannot open' /tmp/unified-tar-errors.txt) >&2")]
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     with tarfile.open(fileobj=proc.stdout, mode="r|") as tf:
         for m in tf:

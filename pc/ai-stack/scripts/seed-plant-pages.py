@@ -21,7 +21,6 @@ does not, so the safe response to any failure is to run it again.
 """
 from __future__ import annotations
 
-import io
 import os
 import re
 import sys
@@ -35,19 +34,24 @@ def load_env():
                  "/app/wiki.env"):
         if not os.path.exists(name):
             continue
-        for line in io.open(name, encoding="utf-8"):
-            line = line.strip()
-            if line.startswith("WIKIJS_") and "=" in line:
-                k, _, v = line.partition("=")
-                os.environ.setdefault(k, v.strip().strip('"').strip("'"))
+        with open(name, encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if line.startswith("WIKIJS_") and "=" in line:
+                    k, _, v = line.partition("=")
+                    os.environ.setdefault(k, v.strip().strip('"').strip("'"))
 
 
 load_env()
-import wikijs  # noqa: E402
+import wikijs
 
 SITE = "https://garden.example.org"
 IMAGES = SITE + "/images/Database"
 TABLE = os.environ.get("GARDEN_TABLE", "data_source")
+# TABLE goes into SQL as a name (names cannot be ? parameters), so it must be a plain identifier.
+# Added 2026-11-19 for Bandit B608; the default "data_source" passes.
+if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", TABLE):
+    sys.exit(f"GARDEN_TABLE must be a plain table name, got {TABLE!r}")
 
 # What goes in the facts table, in the order a person would want it. Columns
 # not listed here are left out on purpose: the catalogue has 98 of them and
@@ -355,11 +359,11 @@ def zone_note(raw):
         return ""
 
     lines = [
-        f"**Hardy in USDA zones {lo} to {hi}.** Zone {lo} means it survives "
+        (f"**Hardy in USDA zones {lo} to {hi}.** Zone {lo} means it survives "
         f"an average winter low of about {_zone_low_f(lo)}°F "
         f"({round((_zone_low_f(lo) - 32) * 5 / 9)}°C); zone {hi} is the "
         f"warm end, around {_zone_low_f(hi)}°F "
-        f"({round((_zone_low_f(hi) - 32) * 5 / 9)}°C) and above.",
+        f"({round((_zone_low_f(hi) - 32) * 5 / 9)}°C) and above."),
         "",
     ]
 
@@ -392,10 +396,10 @@ def zone_note(raw):
 
     lines += [
         "",
-        "*A hardiness zone is about winter cold and nothing else. It says "
+        ("*A hardiness zone is about winter cold and nothing else. It says "
         "nothing about summer heat, humidity, drought, soil or season "
         "length, and a plant can be well within its zone and still fail for "
-        "one of those.*",
+        "one of those.*"),
     ]
     return chr(10).join(lines)
 
@@ -479,8 +483,8 @@ def month_page(kind, month, plants):
     plants = sorted(plants, key=lambda r: (val(r.get("plant_name")) or "").lower())
     verb = "in flower" if kind == "blooming" else "in active growth"
     out = [f"# {month}: {label.lower()}", "",
-           f"{len(plants)} plant{'' if len(plants) == 1 else 's'} are {verb} "
-           f"in {month} in this garden (zone {HOME_ZONE_LABEL}).", ""]
+           (f"{len(plants)} plant{'' if len(plants) == 1 else 's'} are {verb} "
+           f"in {month} in this garden (zone {HOME_ZONE_LABEL})."), ""]
     for r in plants:
         name = val(r.get("plant_name")) or f"Plant {r['id']}"
         bed = val(r.get("flower_bed"))
@@ -490,17 +494,17 @@ def month_page(kind, month, plants):
                    + (" — " + " · ".join(bits) if bits else ""))
     other = "growing" if kind == "blooming" else "blooming"
     out += ["", "---", "",
-            f"[Every month](/by/{kind}) · "
+            (f"[Every month](/by/{kind}) · "
             f"[What is {other} in {month}](/by/{other}/{month.lower()}) · "
-            "[Browse everything](/browse)"]
+            "[Browse everything](/browse)")]
     return chr(10).join(out)
 
 
 def month_index(kind, buckets):
     label = MONTH_FACETS[kind][1]
     out = [f"# {label}, month by month", "",
-           f"Which plants are {'in flower' if kind == 'blooming' else 'growing'} "
-           f"when, in this garden (zone {HOME_ZONE_LABEL}).", ""]
+           (f"Which plants are {'in flower' if kind == 'blooming' else 'growing'} "
+           f"when, in this garden (zone {HOME_ZONE_LABEL})."), ""]
     for m in MONTHS:
         plants = buckets.get(m) or []
         if not plants:
@@ -545,8 +549,8 @@ def facet_page(col, value, plants):
     label = FACET_COLS[col][0]
     plants = sorted(plants, key=lambda r: (val(r.get("plant_name")) or "").lower())
     out = [f"# {label}: {value}", "",
-           f"{len(plants)} plant{'' if len(plants) == 1 else 's'} in Robin's "
-           f"garden.", ""]
+           (f"{len(plants)} plant{'' if len(plants) == 1 else 's'} in Robin's "
+           f"garden."), ""]
     for r in plants:
         name = val(r.get("plant_name")) or f"Plant {r['id']}"
         bot = val(r.get("botanical_name"))
@@ -563,19 +567,19 @@ def facet_page(col, value, plants):
 def facet_index(col, buckets):
     label = FACET_COLS[col][0]
     out = [f"# {label}", "",
-           f"Every value recorded for {label.lower()}, and how many plants "
-           "carry it.", ""]
+           (f"Every value recorded for {label.lower()}, and how many plants "
+           "carry it."), ""]
     for v, plants in sorted(buckets.items(), key=lambda kv: -len(kv[1])):
         out.append(f"- [{v}](/{fslug(col, v)}) — {len(plants)}")
-    out += ["", "---", "", "[Browse everything](/browse) · "
-            "[Every plant](/plants)"]
+    out += ["", "---", "", ("[Browse everything](/browse) · "
+            "[Every plant](/plants)")]
     return chr(10).join(out)
 
 
 def browse_page(all_buckets, month_all=None):
     out = ["# Browse the garden", "",
-           "Every plant page links to pages like these, so any fact on a "
-           "plant leads to every other plant that shares it.", ""]
+           ("Every plant page links to pages like these, so any fact on a "
+           "plant leads to every other plant that shares it."), ""]
 
     # The season pages go FIRST because they are the ones with a use today:
     # "what is in flower this month" is a question somebody actually walks
@@ -663,7 +667,7 @@ def _clause(text):
         part = part.strip()
         lowered = part.lower()
         for m in MONTHS:
-            lowered = re.sub(r"" + m.lower() + r"", m, lowered)
+            lowered = re.sub("\x08" + m.lower() + "\x08", m, lowered)  # 0x08 as before (PLE2510); r"\b" was likely meant
         return lowered
 
     return ", ".join(_one(x) for x in t.split(",") if x.strip())
@@ -811,7 +815,7 @@ def page_for(row):
                 v = ""
             if col == "average_cost" and v:
                 try:
-                    v = "${:.2f}".format(float(v))
+                    v = f"${float(v):.2f}"
                 except (TypeError, ValueError):
                     pass
             if v:
@@ -845,8 +849,8 @@ def page_for(row):
             up +
             f"[This plant in the catalogue]({SITE}/plant_listing.php?id={row['id']})"
             f" · [All plants](/plants) · [The beds]({SITE}/beds)", "",
-            "*Built from Robin's own catalogue. Anything added beyond this "
-            "carries the source it came from.*"]
+            ("*Built from Robin's own catalogue. Anything added beyond this "
+            "carries the source it came from.*")]
     return "\n".join(out)
 
 
@@ -937,8 +941,8 @@ def genus_page(genus, plants, summary=("", "")):
 
 def genus_index(by_genus):
     out = ["# Every genus", "",
-           f"{len(by_genus)} genera in the garden. Each one gathers the "
-           "cultivars and species grown here.", ""]
+           (f"{len(by_genus)} genera in the garden. Each one gathers the "
+           "cultivars and species grown here."), ""]
     for g in sorted(by_genus, key=str.lower):
         n = len(by_genus[g])
         out.append(f"- [{g}](/{gslug(g)}) — {n} "
@@ -953,10 +957,10 @@ def index_page(rows):
                           []).append(r)
 
     out = ["# Every plant", "",
-           f"{len(rows)} plants, grouped by the bed they are in. "
-           "Each page is built from the catalogue.", "",
-           "To browse by kind instead, start at **[Every genus](/genus)** "
-           "— all the hydrangeas on one page, all the hostas on another.",
+           (f"{len(rows)} plants, grouped by the bed they are in. "
+           "Each page is built from the catalogue."), "",
+           ("To browse by kind instead, start at **[Every genus](/genus)** "
+           "— all the hydrangeas on one page, all the hostas on another."),
            ""]
     for bed in sorted(by_bed, key=lambda b: (b == "Not yet sorted", b.lower())):
         plants = sorted(by_bed[bed],
@@ -985,7 +989,8 @@ def main(genus_only=False):
         password=os.environ["DB_PASS"], database=os.environ["DB_NAME"],
         charset="utf8mb4", cursorclass=pymysql.cursors.DictCursor)
     cur = cx.cursor()
-    cur.execute(f"SELECT * FROM {TABLE} ORDER BY plant_name")
+    # TABLE is checked against a plain-identifier pattern at start-up (see TABLE above).
+    cur.execute(f"SELECT * FROM {TABLE} ORDER BY plant_name")  # nosec B608
     rows = cur.fetchall()
     print(f"{len(rows)} plants in the catalogue")
 

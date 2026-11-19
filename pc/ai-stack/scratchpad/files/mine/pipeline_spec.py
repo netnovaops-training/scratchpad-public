@@ -1,5 +1,8 @@
-import sys; sys.path.insert(0,".")
+import sys
+
+sys.path.insert(0, ".")
 from cins import apply
+
 S = [
 (17, """//!
 //! Rust ideas used often in this file (explained once here):

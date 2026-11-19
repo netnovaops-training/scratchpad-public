@@ -67,7 +67,7 @@ SILENCE_MIN = 0.35
 
 
 def run(*args: str) -> str:
-    p = subprocess.run(args, capture_output=True, text=True)
+    p = subprocess.run(args, capture_output=True, text=True, check=False)
     return p.stdout + p.stderr
 
 

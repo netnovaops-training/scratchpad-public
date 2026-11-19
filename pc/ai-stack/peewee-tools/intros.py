@@ -17,9 +17,22 @@
 #  NARRATE_VOICE / VOICE_TAG work here exactly as in the other tools.
 # =============================================================================
 import json
-import io
 import os
 import urllib.request
+from pathlib import Path
+
+
+def _http_only(target):
+    """Return target (a URL string or urllib Request) if its scheme is http or https, else raise ValueError.
+
+    urlopen also follows file:// and custom schemes (Bandit B310). Every caller here talks to an
+    http(s) service, so anything else is a mistake or a planted URL. Added 2026-11-19.
+    """
+    url = str(getattr(target, "full_url", target))
+    if not url.lower().startswith(("http://", "https://")):
+        raise ValueError(f"refusing a non-http(s) URL: {url[:80]}")
+    return target
+
 
 VOICE_URL = (os.environ.get("VOICE_NARRATE_URL")
              or os.environ.get("VOICE_URL",
@@ -120,7 +133,7 @@ def say(text, out):
                        "exaggeration": 0.55, "cfg_weight": 0.5}).encode()
     req = urllib.request.Request(VOICE_URL, data=body,
                                  headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=600) as r:
+    with urllib.request.urlopen(_http_only(req), timeout=600) as r:  # nosec B310
         data = r.read()
     if len(data) < 2000:
         raise RuntimeError("suspiciously small audio")
@@ -155,7 +168,7 @@ def main():
         pj = os.path.join(d, "person.json")
         if not os.path.isfile(pj) or slug == "peewee-harris":
             continue
-        person = json.load(open(pj, encoding="utf-8"))
+        person = json.loads(Path(pj).read_text(encoding="utf-8"))
         name = person.get("name") or slug.replace("-", " ").title()
         out = os.path.join(d, f"name{VOICE_TAG}.mp3")
         if os.path.exists(out):
@@ -170,7 +183,7 @@ def main():
                 continue
         names[slug] = f"people/{slug}/name.mp3"
 
-    with io.open(os.path.join("data", "intros.json"), "w",
+    with open(os.path.join("data", "intros.json"), "w",
                  encoding="utf-8", newline="\n") as f:
         json.dump({"_note": "openers are generic and rendered once; each "
                             "person owns one clip of their name. The site "

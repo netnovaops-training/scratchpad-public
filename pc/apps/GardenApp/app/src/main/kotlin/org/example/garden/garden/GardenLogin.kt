@@ -10,6 +10,9 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
 
+/** Length of the session token the garden server sends; anything else is a broken reply. */
+private const val TOKEN_HEX_CHARS = 64
+
 /**
  * Logging in to the garden itself: Robin or Jason, with a password.
  *
@@ -81,7 +84,7 @@ class GardenLogin(context: Context) {
                 }
                 val name = json.optString("username")
                 val token = json.optString("token")
-                if (token.length != 64) throw GardenException("The garden sent back something unexpected.")
+                if (token.length != TOKEN_HEX_CHARS) throw GardenException("The garden sent back something unexpected.")
                 prefs.edit().putString(TOKEN, token).putString(NAME, name).apply()
                 name
             } finally {

@@ -31,9 +31,8 @@ from __future__ import annotations
 import json
 import os
 
-import streamlit as st
-
 import store
+import streamlit as st
 from targets import TARGETS
 
 st.set_page_config(page_title="Console · admin", page_icon="🎛️", layout="wide")
@@ -48,9 +47,9 @@ ADMIN_HOME = os.getenv("ADMIN_PATH", "/admin").rstrip("/")
 # when one of these exists is the console failing at its only purpose.
 TOOLS = {
     "mom-kb": ("Import a page into the knowledge base", "/mama/kb/manage",
-               "Paste a link. One of your models reads it and writes a guide "
+               ("Paste a link. One of your models reads it and writes a guide "
                "in plain words, with pictures you pick. It lands as a draft "
-               "only you can see."),
+               "only you can see.")),
     "mom": ("Mama's guides", "/mama/kb",
             "The published guides, as she sees them."),
     "booking": ("The booking site", "/dee/",

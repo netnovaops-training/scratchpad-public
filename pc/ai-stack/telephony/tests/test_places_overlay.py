@@ -24,7 +24,7 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from app.places import DEFAULT_OVERLAY_SECTION, Places  # noqa: E402
+from app.places import DEFAULT_OVERLAY_SECTION, Places
 
 CONFIG = Path(__file__).resolve().parents[2] / "config" / "places.yaml"
 

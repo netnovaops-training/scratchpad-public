@@ -6,15 +6,22 @@ actually talk on the phone -- unprompted, mid-sentence, while arranging a lift
 to the shops. Those are the sentences that have to not end up in a database.
 """
 from __future__ import annotations
+
 import sys
 from pathlib import Path
-import pytest
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from app.phi import (  # noqa: E402
-    CallRecord, from_extraction, clean_record, scrub, mentions_health,
-    generalise_destination, REDACTED,
-)
 
+import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from app.phi import (
+    REDACTED,
+    CallRecord,
+    clean_record,
+    from_extraction,
+    generalise_destination,
+    mentions_health,
+    scrub,
+)
 
 # --- the allowlist is the real protection ------------------------------------
 

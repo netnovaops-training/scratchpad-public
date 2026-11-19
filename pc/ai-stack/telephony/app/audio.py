@@ -34,8 +34,7 @@ def _build_encode_table() -> np.ndarray:
         sign = 0x80 if sample < 0 else 0x00
         if sample < 0:
             sample = -sample
-        if sample > _CLIP:
-            sample = _CLIP
+        sample = min(sample, _CLIP)
         sample += _BIAS
         exponent = 7
         mask = 0x4000

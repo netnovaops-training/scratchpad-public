@@ -27,24 +27,30 @@ import json
 import logging
 import os
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import httpx
 import numpy as np
-from fastapi import FastAPI, Form, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi import (
+    FastAPI,
+    HTTPException,
+    Request,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from fastapi.responses import JSONResponse, PlainTextResponse
 
+from . import sms as sms_mod
 from .callers import CallerStore, greeting_for, normalise, summary_for
-from .clients import ClientStore, client_summary, spoken_code
+from .clients import ClientStore, client_summary
+from .conversation import Conversation, Tuning
+from .outbound import OutboundStore, due_messages
+from .phi import PROMPT_RULES as HEALTH_RULES
 from .places import Places
 from .ratings import RatingStore
-from .outbound import OutboundStore, due_messages
-from . import sms as sms_mod
-from .conversation import Conversation, Tuning
 from .twilio_auth import signature_ok, stream_secret
-from .phi import PROMPT_RULES as HEALTH_RULES
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 log = logging.getLogger("telephony")
@@ -628,13 +634,15 @@ async def sms_scheduler() -> None:
     while True:
         try:
             if SMS_ENABLED:
-                r = httpx.get(f"{BOOKING_URL}/bookings", params={"limit": 200},
-                              headers={"X-API-Key": BOOKING_KEY}, timeout=15.0)
+                # In a thread: a slow booking API must not freeze live calls (ASYNC210).
+                r = await asyncio.to_thread(
+                    httpx.get, f"{BOOKING_URL}/bookings", params={"limit": 200},
+                    headers={"X-API-Key": BOOKING_KEY}, timeout=15.0)
                 r.raise_for_status()
                 bookings = r.json().get("bookings", [])
                 due = due_messages(
                     bookings, outbound,
-                    now_utc=datetime.now(timezone.utc), tz=tz,
+                    now_utc=datetime.now(UTC), tz=tz,
                     business=BUSINESS_NAME, booking_link=BOOKING_LINK,
                 )
                 for msg in due:
@@ -645,7 +653,7 @@ async def sms_scheduler() -> None:
                             if client:
                                 ratings.request(client["code"], msg.phone)
                         log.info("sent %s for %s", msg.kind, msg.reference)
-        except Exception:  # noqa: BLE001
+        except Exception:
             log.exception("sms scheduler pass failed")
         await asyncio.sleep(600)
 
@@ -703,11 +711,11 @@ async def admin_create_client(request: Request):
 def _save_transcript(conv: Conversation) -> None:
     s = conv.state
     try:
-        day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        day = datetime.now(UTC).strftime("%Y-%m-%d")
         d = Path(TRANSCRIPT_DIR) / "phone" / day
         d.mkdir(parents=True, exist_ok=True)
         rec = {
-            "ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "ts": datetime.now(UTC).isoformat(timespec="seconds"),
             "surface": "phone",
             "call_sid": s.call_sid,
             "caller": s.caller,
@@ -719,7 +727,7 @@ def _save_transcript(conv: Conversation) -> None:
         (d / f"{s.call_sid or 'unknown'}.json").write_text(
             json.dumps(rec, indent=2, ensure_ascii=False), encoding="utf-8"
         )
-    except Exception:  # noqa: BLE001
+    except Exception:
         log.exception("could not save transcript")
 
 
@@ -758,7 +766,7 @@ def _remember(conv: Conversation) -> None:
         )
         if (data.get("destination") or "").strip():
             callers.add_destination(s.caller, data["destination"].strip())
-        log.info("remembered %s for %s", list(k for k, v in data.items() if v), s.caller)
+        log.info("remembered %s for %s", [k for k, v in data.items() if v], s.caller)
     except Exception as exc:  # noqa: BLE001
         log.warning("could not extract caller details: %s", exc)
 
@@ -863,7 +871,7 @@ async def media(ws: WebSocket):
 
     except WebSocketDisconnect:
         log.info("stream disconnected")
-    except Exception:  # noqa: BLE001
+    except Exception:
         log.exception("media stream error")
     finally:
         # DECREMENTED IN `finally`, not after a clean disconnect. A call that
@@ -883,7 +891,7 @@ async def media(ws: WebSocket):
                      conv.state.booked)
         try:
             await ws.close()
-        except Exception:  # noqa: BLE001
+        except Exception:  # noqa: BLE001, S110  closing an already-dropped socket
             pass
 
 
@@ -918,4 +926,5 @@ def unhandled(_request: Request, exc: Exception):
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", "8093")))
+    # Listens on every interface inside its own container; only the docker network and Caddy reach it (no published port).
+    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", "8093")))  # nosec B104

@@ -1,12 +1,14 @@
-import io
+from pathlib import Path
+
+
 def edit(p, pairs):
-    s = io.open(p, encoding="utf-8", newline="").read()
+    s = Path(p).read_bytes().decode("utf-8")
     nl = "\r\n" if "\r\n" in s else "\n"
     for a, b in pairs:
         a2, b2 = a.replace("\n", nl), b.replace("\n", nl)
         assert s.count(a2) == 1, (p, a[:80], s.count(a2))
         s = s.replace(a2, b2)
-    io.open(p, "w", encoding="utf-8", newline="").write(s)
+    Path(p).write_text(s, encoding="utf-8", newline="")
 
 edit("CHANGES.md", [
 ("""| **The garden computer is found again when its address changes**""", """| **More 14 is the on / off switch** (Jason's request) | "Turn the front door off" (More 14) and the new switch did nearly the same | More 14 now opens the switch; taking the garden off the internet only is its choice 3 (`bash garden.sh offline` still does it directly). No other menu number moved. On Windows, More 15 is the switch and "find the garden computer again" is More 21 |

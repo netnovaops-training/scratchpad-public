@@ -16,6 +16,12 @@ import java.io.ByteArrayOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 
+/** Earlier turns sent with a photo question (photos are big, so fewer than plain chat). */
+private const val HISTORY_TURNS = 10
+
+/** Longest server error text shown to the user. */
+private const val MAX_ERROR_CHARS = 240
+
 /**
  * Ask the assistant about a photo.
  *
@@ -64,7 +70,7 @@ class VisionClient(private val accessTokenProvider: suspend () -> Result<String>
             put("image", "data:image/jpeg;base64,$jpeg")
             put("session", "android-photo")
             put("history", JSONArray().apply {
-                history.takeLast(10).forEach {
+                history.takeLast(HISTORY_TURNS).forEach {
                     put(JSONObject().apply {
                         put("role", it.role)
                         put("content", it.text)
@@ -94,7 +100,7 @@ class VisionClient(private val accessTokenProvider: suspend () -> Result<String>
                 else -> {
                     val err = conn.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
                     throw IllegalStateException(
-                        err.ifBlank { "The assistant returned $code." }.take(240)
+                        err.ifBlank { "The assistant returned $code." }.take(MAX_ERROR_CHARS)
                     )
                 }
             }

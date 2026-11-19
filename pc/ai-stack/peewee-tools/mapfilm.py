@@ -46,6 +46,7 @@ like the same map because it is the same map.
 """
 from __future__ import annotations
 
+import itertools
 import json
 import math
 import re
@@ -82,10 +83,10 @@ def _read_svg(path):
     """
     text = path.read_text(encoding="utf-8")
     out = []
-    for g in re.finditer(r'<g ([^>]*)>(.*?)</g>', text, re.S):
+    for g in re.finditer(r'<g ([^>]*)>(.*?)</g>', text, re.DOTALL):
         attrs, body = g.group(1), g.group(2)
 
-        def attr(name, default=""):
+        def attr(name, default="", attrs=attrs):  # bound now (B023); called only in this pass anyway
             m = re.search(name + r'="([^"]*)"', attrs)
             return m.group(1) if m else default
 
@@ -177,7 +178,7 @@ class MapFilm:
         """cam is (centre x, centre y, visible height) in map units."""
         cx, cy, vh = cam
         vw = vh * self.aspect
-        w, h = self.w * SS, self.h * SS
+        _w, h = self.w * SS, self.h * SS
         k = h / vh                                  # pixels per map unit
         x0, y0 = cx - vw / 2, cy - vh / 2
 
@@ -189,7 +190,7 @@ class MapFilm:
 
         vx1, vy1 = x0 + vw, y0 + vh
         for items, colour, width, close, opacity in self.layers:
-            lw = max(1, int(round(width * k / 6)))
+            lw = max(1, round(width * k / 6))
             # The group's own opacity, applied as alpha rather than by
             # mixing with the background, so the glow still shows through.
             alpha = int(255 * opacity)
@@ -205,9 +206,9 @@ class MapFilm:
 
         # --- the route between the four places, dashed like the page's -----
         route = [self.places[k2] for k2 in self.order if k2 in self.places]
-        for a, b in zip(route, route[1:]):
+        for a, b in itertools.pairwise(route):
             self._dashed(d, T((a["x"], a["y"])), T((b["x"], b["y"])),
-                         AMBER + (110,), max(1, int(round(1.4 * k / 6))))
+                         AMBER + (110,), max(1, round(1.4 * k / 6)))
 
         # --- pins ----------------------------------------------------------
         for key, pl in self.places.items():

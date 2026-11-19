@@ -13,6 +13,9 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.security.MessageDigest
 
+/** Download chunk size: 64 KiB. */
+private const val DOWNLOAD_CHUNK_BYTES = 64 * 1024
+
 /**
  * Updates the app from the household site, without a trip to the browser.
  *
@@ -110,7 +113,7 @@ class Updater {
 
             conn.inputStream.use { input ->
                 target.outputStream().use { out ->
-                    val buf = ByteArray(64 * 1024)
+                    val buf = ByteArray(DOWNLOAD_CHUNK_BYTES)
                     var read: Int
                     var done = 0L
                     while (input.read(buf).also { read = it } >= 0) {

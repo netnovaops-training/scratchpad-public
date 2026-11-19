@@ -10,7 +10,8 @@
 #  site-packages ships test images and icons by the hundred, and none of
 #  them are family photographs.
 # =============================================================================
-import os, sys
+import os
+
 from PIL import Image, ImageOps
 
 SRC = "Legacy"
@@ -40,8 +41,8 @@ for root, dirs, files in os.walk(SRC):
             done += 1
             if done % 200 == 0:
                 print(done, "copied...", flush=True)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  one bad image is counted and the batch goes on
             failed += 1
             print("FAILED", rel, e, flush=True)
 
-print("copied %d, kept %d, failed %d" % (done, skipped, failed))
+print(f"copied {done}, kept {skipped}, failed {failed}")

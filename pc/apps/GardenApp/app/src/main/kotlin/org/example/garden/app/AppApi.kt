@@ -11,6 +11,12 @@ import java.io.DataOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 
+/** Upload and download chunk size: 64 KiB. */
+private const val STREAM_CHUNK_BYTES = 64 * 1024
+
+/** Longest server error text shown to the user. */
+private const val MAX_ERROR_CHARS = 240
+
 /**
  * The non-chat parts of the household API: shelves, uploads, career options,
  * and support mail.
@@ -76,7 +82,7 @@ class AppApi(private val accessTokenProvider: suspend () -> Result<String>) {
                 setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
                 // Without this the whole body is buffered before sending, which
                 // defeats the streaming above.
-                setChunkedStreamingMode(64 * 1024)
+                setChunkedStreamingMode(STREAM_CHUNK_BYTES)
                 connectTimeout = 20_000
                 readTimeout = 600_000
             }
@@ -94,7 +100,7 @@ class AppApi(private val accessTokenProvider: suspend () -> Result<String>) {
                     out.writeBytes("Content-Type: application/octet-stream\r\n\r\n")
 
                     context.contentResolver.openInputStream(file)?.use { input ->
-                        input.copyTo(out, 64 * 1024)
+                        input.copyTo(out, STREAM_CHUNK_BYTES)
                     } ?: throw IllegalStateException("Could not read that file.")
 
                     out.writeBytes("\r\n--$boundary--\r\n")
@@ -106,7 +112,7 @@ class AppApi(private val accessTokenProvider: suspend () -> Result<String>) {
                     else -> {
                         val err = conn.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
                         throw IllegalStateException(
-                            err.ifBlank { "Upload failed ($code)." }.take(240)
+                            err.ifBlank { "Upload failed ($code)." }.take(MAX_ERROR_CHARS)
                         )
                     }
                 }
@@ -226,7 +232,7 @@ class AppApi(private val accessTokenProvider: suspend () -> Result<String>) {
                 in 200..299 -> Unit
                 else -> {
                     val err = conn.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
-                    throw IllegalStateException(err.ifBlank { "Could not send ($code)." }.take(240))
+                    throw IllegalStateException(err.ifBlank { "Could not send ($code)." }.take(MAX_ERROR_CHARS))
                 }
             }
             JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
@@ -254,7 +260,7 @@ class AppApi(private val accessTokenProvider: suspend () -> Result<String>) {
                 in 200..299 -> Unit
                 else -> {
                     val err = conn.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
-                    throw IllegalStateException(err.ifBlank { "Request failed ($code)." }.take(240))
+                    throw IllegalStateException(err.ifBlank { "Request failed ($code)." }.take(MAX_ERROR_CHARS))
                 }
             }
             return JSONObject(conn.inputStream.bufferedReader().use { it.readText() })

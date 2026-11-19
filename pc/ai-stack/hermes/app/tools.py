@@ -11,8 +11,9 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 ROOT = Path(os.environ.get("WORKSPACE_ROOT", "/workspace")).resolve()
 MAX_READ = 200_000
@@ -93,7 +94,7 @@ def edit_file(path: str, find: str, replace: str) -> str:
 def search(pattern: str, path: str = ".", glob: str = "*") -> str:
     p = _safe(path)
     cmd = ["grep", "-rIn", "--color=never", "--include", glob, "-e", pattern, str(p)]
-    r = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=60, check=False)
     out = r.stdout.strip()
     if not out:
         return "no matches"
@@ -109,6 +110,7 @@ def run_shell(command: str, timeout: int = 120) -> str:
         capture_output=True,
         text=True,
         timeout=timeout,
+        check=False,
     )
     parts = []
     if r.stdout.strip():
@@ -187,16 +189,20 @@ REGISTRY: dict[str, Callable[..., str]] = {
 
 # The house tools -- see house.py's header. Registered here so the agent
 # loop needs no changes to grow eyes.
-from . import house as _house  # noqa: E402
+from . import house as _house
+
 REGISTRY.update(_house.REGISTRY)
 
-from . import plant_tools as _plant  # noqa: E402
+from . import plant_tools as _plant
+
 REGISTRY.update(_plant.REGISTRY)
 
-from . import api_tools as _apis  # noqa: E402
+from . import api_tools as _apis
+
 REGISTRY.update(_apis.REGISTRY)
 
-from . import doc_tools as _docs  # noqa: E402
+from . import doc_tools as _docs
+
 REGISTRY.update(_docs.REGISTRY)
 
 

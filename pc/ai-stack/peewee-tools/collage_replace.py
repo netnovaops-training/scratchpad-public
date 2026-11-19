@@ -52,27 +52,26 @@ def main():
     incoming = []
     for f in folders:
         if not f.is_dir():
-            sys.exit("%s is not a folder" % f)
+            sys.exit(f"{f} is not a folder")
         incoming += sorted(p for p in f.iterdir()
                            if p.is_file() and p.suffix.lower() in EXTS
                            and not p.name.startswith("."))
     if not incoming:
         sys.exit("no photographs found")
-    print("  %d photograph(s) for the mosaic" % len(incoming))
+    print(f"  {len(incoming)} photograph(s) for the mosaic")
 
     if not add and COLLAGE.exists() and any(COLLAGE.iterdir()):
-        keep = SITE / ("collage-replaced-%s" % date.today().isoformat())
+        keep = SITE / (f"collage-replaced-{date.today().isoformat()}")
         if keep.exists():
             shutil.rmtree(keep)
         shutil.move(str(COLLAGE), str(keep))
-        print("  kept the old %d-tile board as %s"
-              % (len(list(keep.iterdir())), keep.name))
+        print(f"  kept the old {len(list(keep.iterdir()))}-tile board as {keep.name}")
     COLLAGE.mkdir(exist_ok=True)
 
     existing = sorted(p.name for p in COLLAGE.iterdir()) if add else []
     made = []
     for i, p in enumerate(incoming, 1):
-        name = "n%04d.jpg" % i          # n for new, so it never collides
+        name = f"n{i:04d}.jpg"          # n for new, so it never collides
         try:                            # with the old c0001 naming
             with Image.open(p) as im:
                 im = ImageOps.exif_transpose(im).convert("RGB")
@@ -80,16 +79,15 @@ def main():
                 im.save(COLLAGE / name, "JPEG", quality=78, optimize=True)
             made.append(name)
         except Exception as e:  # noqa: BLE001
-            print("  SKIP %-30s %s" % (p.name[:30], e))
+            print(f"  SKIP {p.name[:30]!s:<30} {e}")
 
     tiles = sorted(set(existing + made))
     MANIFEST.write_text(json.dumps(tiles) + "\n", encoding="utf-8", newline="\n")
 
     total = sum((COLLAGE / t).stat().st_size for t in tiles)
-    print("  %d tiles written, %.1f MB total, manifest updated" % (len(tiles), total / 1048576))
+    print(f"  {len(tiles)} tiles written, {total / 1048576:.1f} MB total, manifest updated")
     if len(tiles) < 300:
-        print("  NOTE: the old board had 888. At %d the mosaic is sparser and"
-              % len(tiles))
+        print(f"  NOTE: the old board had 888. At {len(tiles)} the mosaic is sparser and")
         print("        the drift repeats sooner -- worth looking at before keeping.")
 
 

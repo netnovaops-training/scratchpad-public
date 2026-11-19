@@ -65,9 +65,9 @@ import sys
 import threading
 from contextlib import contextmanager
 from datetime import datetime
-from zoneinfo import ZoneInfo
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 PORT = 8788
 ADMIN = "user@example.com"
@@ -193,7 +193,7 @@ def toggle(item_id, done):
         if not at:
             return False
         i, j = at
-        lines[i] = "- [%s]%s" % ("x" if done else " ", lines[i][5:])
+        lines[i] = "- [{}]{}".format("x" if done else " ", lines[i][5:])
         body = [l for l in lines[i + 1:j] if not l.startswith("  Done: ")]
         if done:
             body.append("  Done: " + datetime.now(TZ).strftime("%Y-%m-%d"))
@@ -238,6 +238,7 @@ def next_prompt(item_id):
     take the list page down; any error answers 500 with the reason, not a traceback."""
     try:
         import importlib
+
         import todo_next
         importlib.reload(todo_next)
         found = [i for i in todo_next.sp.items() if i["id"] == item_id]
@@ -245,20 +246,21 @@ def next_prompt(item_id):
             return 404, '{"error":"no such item"}'
         return 200, todo_next.prompt(todo_next.plan_for(found[0])), "text/plain"
     except Exception as e:  # noqa: BLE001 - shown to the one signed-in admin only
-        return 500, json.dumps({"error": "todo_next failed: %s" % type(e).__name__})
+        return 500, json.dumps({"error": f"todo_next failed: {type(e).__name__}"})
 
 
 def questions_json():
     """(status, body) for /api/questions: [{id, title, asks}] for [first] items with unanswered Ask lines."""
     try:
         import importlib
+
         import todo_next
         importlib.reload(todo_next)
         rows = [{"id": i["id"], "title": i["head"][:120], "asks": todo_next.open_asks(i)}
                 for i in todo_next.first_items() if "[first]" in i["head"]]
         return 200, json.dumps([r for r in rows if r["asks"]])
     except Exception as e:  # noqa: BLE001
-        return 500, json.dumps({"error": "todo_next failed: %s" % type(e).__name__})
+        return 500, json.dumps({"error": f"todo_next failed: {type(e).__name__}"})
 
 
 def add(title):
@@ -270,9 +272,9 @@ def add(title):
         text = TODO.read_text(encoding="utf-8") if TODO.exists() else "# To do\n"
         # numbers of live items AND of items folded into others ("Also covers: T0456 ..."): never reuse either
         nums = [int(a or b) for a, b in re.findall(r"\*\*T(\d{4,})\*\*|Also covers: T(\d{4,})", text)]
-        new_id = "T%04d" % (max(nums) + 1 if nums else 1)
-        block = ["- [ ] **%s** [P2][30m][unfinished][necessary][medium] %s" % (new_id, title),
-                 "  Found: added from the page on %s" % datetime.now(TZ).strftime("%Y-%m-%d")]
+        new_id = f"T{max(nums) + 1 if nums else 1:04d}"
+        block = [f"- [ ] **{new_id}** [P2][30m][unfinished][necessary][medium] {title}",
+                 "  Found: added from the page on {}".format(datetime.now(TZ).strftime("%Y-%m-%d"))]
         lines = text.rstrip("\n").split("\n")
         head = "#### Added from the page"
         if head in lines:
@@ -645,7 +647,7 @@ class H(BaseHTTPRequestHandler):
     server_version = "todo"
 
     def log_message(self, fmt, *args):
-        sys.stderr.write("[%s] %s\n" % (datetime.now(TZ).strftime("%F %T"), fmt % args))
+        sys.stderr.write("[{}] {}\n".format(datetime.now(TZ).strftime("%F %T"), fmt % args))
 
     def send(self, code, body, ctype="application/json"):
         raw = body if isinstance(body, bytes) else body.encode("utf-8")
@@ -701,7 +703,7 @@ class H(BaseHTTPRequestHandler):
                 return self.send(413, '{"error":"too big"}')
             body = json.loads(self.rfile.read(n).decode("utf-8"))
             if not isinstance(body, dict):
-                raise ValueError
+                raise ValueError  # noqa: TRY004  caught just below and answered as a 400
         except (ValueError, UnicodeDecodeError):
             return self.send(400, '{"error":"bad request"}')
         path = self.path.split("?")[0]

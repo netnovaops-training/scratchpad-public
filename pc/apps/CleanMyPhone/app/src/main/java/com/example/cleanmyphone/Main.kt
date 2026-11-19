@@ -27,7 +27,7 @@ class Main : AppCompatActivity() {
     @SuppressLint("InlinedApi")
     private val hidePart2Runnable = Runnable {
         // Delayed removal of status and navigation bar
-        if (Build.VERSION.SDK_INT >= 30) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             fullscreenContent.windowInsetsController?.hide(WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars())
         } else {
             // Note that some of these constants are new as of API 16 (Jelly Bean)
@@ -122,7 +122,7 @@ class Main : AppCompatActivity() {
 
     private fun show() {
         // Show the system bar
-        if (Build.VERSION.SDK_INT >= 30) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             fullscreenContent.windowInsetsController?.show(WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars())
         } else {
             fullscreenContent.systemUiVisibility =

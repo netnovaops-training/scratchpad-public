@@ -1,5 +1,8 @@
-import sys; sys.path.insert(0,".")
+import sys
+
+sys.path.insert(0, ".")
 from cins import apply
+
 S = [
 (18, """//! Tab numbers: 2 = Manual Review, 3 = Fill Missing Data, 10 = AI Missing Only.
 //! The job file for tab N is data/orchestrator-ai/tab<N>.json. A job holds:

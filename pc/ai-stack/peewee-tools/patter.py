@@ -15,10 +15,23 @@
 #  Idempotent: existing clips kept. data/patter.json is the manifest.
 # =============================================================================
 import json
-import io
 import os
 import random
 import urllib.request
+from pathlib import Path
+
+
+def _http_only(target):
+    """Return target (a URL string or urllib Request) if its scheme is http or https, else raise ValueError.
+
+    urlopen also follows file:// and custom schemes (Bandit B310). Every caller here talks to an
+    http(s) service, so anything else is a mistake or a planted URL. Added 2026-11-19.
+    """
+    url = str(getattr(target, "full_url", target))
+    if not url.lower().startswith(("http://", "https://")):
+        raise ValueError(f"refusing a non-http(s) URL: {url[:80]}")
+    return target
+
 
 VOICE_URL = (os.environ.get("VOICE_NARRATE_URL")
              or os.environ.get("VOICE_URL",
@@ -126,19 +139,19 @@ RESUMES = [
 CHART_WORDS = ("number one", "chart", "hot 100", "top ", "weeks",
                "billboard", "gold", "million")
 ERA_FRAMES = [
-    "there was no streaming then. Every one of those weeks was somebody"
-    " walking into a shop and paying for it.",
+    ("there was no streaming then. Every one of those weeks was somebody"
+    " walking into a shop and paying for it."),
     "and not one algorithm helped it along. That was people, choosing.",
-    "a record held its place back then because listeners kept asking for"
-    " it, week after week, by name.",
-    "you could not skip a song in nineteen sixty-five. You bought it, and"
-    " you lived with it.",
+    ("a record held its place back then because listeners kept asking for"
+    " it, week after week, by name."),
+    ("you could not skip a song in nineteen sixty-five. You bought it, and"
+    " you lived with it."),
     "no playlist put it there. It got there the long way.",
     "that was a whole season of somebody's life on the radio.",
-    "a run like that today would be measured in a weekend. Back then it"
-    " was measured in months.",
-    "every one of those weeks meant a shop clerk reordering it because"
-    " the box was empty again.",
+    ("a run like that today would be measured in a weekend. Back then it"
+    " was measured in months."),
+    ("every one of those weeks meant a shop clerk reordering it because"
+    " the box was empty again."),
 ]
 ERA_LINES = [
     "{fact}. Think about that for a second -- {frame}",
@@ -165,7 +178,7 @@ def say(text, out):
                        "exaggeration": 0.55, "cfg_weight": 0.5}).encode()
     req = urllib.request.Request(VOICE_URL, data=body,
                                  headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=600) as r:
+    with urllib.request.urlopen(_http_only(req), timeout=600) as r:  # nosec B310
         data = r.read()
     if len(data) < 2000:
         raise RuntimeError("suspiciously small audio")
@@ -176,8 +189,7 @@ def say(text, out):
 def main():
     os.chdir(SITE)
     os.makedirs(os.path.join("data", "patter"), exist_ok=True)
-    facts = json.load(io.open(os.path.join("data", "songfacts.json"),
-                              encoding="utf-8"))
+    facts = json.loads(Path(os.path.join("data", "songfacts.json")).read_text(encoding="utf-8"))
     manifest = {"songs": {}, "interrupts": [], "resumes": []}
     done = kept = 0
 
@@ -245,7 +257,7 @@ def main():
                     continue
             manifest[kind + "s"].append("data/patter/" + os.path.basename(out))
 
-    with io.open(os.path.join("data", f"patter{VOICE_TAG}.json"), "w",
+    with open(os.path.join("data", f"patter{VOICE_TAG}.json"), "w",
                  encoding="utf-8", newline="\n") as f:
         json.dump(manifest, f, indent=1)
     print(f"rendered {done}, kept {kept}; manifest written")

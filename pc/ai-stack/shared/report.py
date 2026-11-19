@@ -19,8 +19,6 @@ them -- and so this can be tested without a schedule, a printer, or a GPU.
 
 from __future__ import annotations
 
-from typing import Any
-
 from .history import METRICS, bucket, outages, sparkline, stats, trend
 
 
@@ -60,8 +58,7 @@ def headline(rows: list[dict], llm: dict, printer: dict | None) -> str:
     if s.get("n") and s["max"] >= 80:
         problems.append(f"GPU hit {s['max']:.0f}C")
 
-    for p in (printer or {}).get("problems") or []:
-        problems.append(p)
+    problems.extend((printer or {}).get("problems") or [])
 
     if problems:
         return "Today: " + ", ".join(problems) + "."

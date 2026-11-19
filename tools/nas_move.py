@@ -58,14 +58,16 @@ def main(argv):
     minutes = float(argv[argv.index("--minutes") + 1]) if "--minutes" in argv else 1e9
     done = set()
     if os.path.exists(journal):
-        for l in open(journal, encoding="utf-8"):
-            try:
-                d = json.loads(l)
-            except ValueError:
-                continue
-            if d.get("ok"):
-                done.add(d["n"])
-    ops = [json.loads(l) for l in open(ops_path, encoding="utf-8") if l.strip()]
+        with open(journal, encoding="utf-8") as fh:
+            for l in fh:
+                try:
+                    d = json.loads(l)
+                except ValueError:
+                    continue
+                if d.get("ok"):
+                    done.add(d["n"])
+    with open(ops_path, encoding="utf-8") as fh_:
+        ops = [json.loads(l) for l in fh_ if l.strip()]
     todo = [o for o in ops if o["n"] not in done]
     print(time.strftime("%F %T"), os.path.basename(ops_path), "to do:", len(todo), "done before:", len(done),
           flush=True)

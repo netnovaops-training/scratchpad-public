@@ -15,9 +15,12 @@ from __future__ import annotations
 import asyncio
 import html
 import io
+import json
 import logging
 import os
-from datetime import datetime, timezone
+import re
+import secrets
+from datetime import UTC, datetime
 from pathlib import Path
 
 # Used by /usage, /health, /models and /history. It was missing for a while and
@@ -27,10 +30,37 @@ from pathlib import Path
 # were both fine. The Hermes CLI had it; this file didn't.
 import httpx
 
-import json
-import re
-import secrets
-
+# The same agent Hermes runs in the terminal, with the same tool belt. Not a
+# reimplementation -- literally the same module, copied into this image by the
+# Dockerfile, so a fix to a tool lands on both surfaces at once.
+from hermes_agent.agent import SYSTEM_PROMPT as HERMES_SYSTEM
+from hermes_agent.agent import Agent
+from shared.health import format_health
+from shared.history import METRICS as HISTORY_METRICS
+from shared.history import resolve as resolve_metric
+from shared.models_health import (
+    format_inventory_text,
+    parse_health,
+    parse_installed,
+    parse_routes,
+    reconcile,
+)
+from shared.printing import (
+    describe_job,
+    format_printer_status,
+    reject_reason,
+    safe_name,
+)
+from shared.router import Router, pick_job
+from shared.transcript import Transcript
+from shared.usage import (
+    diagnose_metrics,
+    format_text,
+    gpu_from_ollama,
+    gpu_from_stats,
+    summarise_llm,
+)
+from shared.voice import Transcriber, Voice
 from telegram import (
     BotCommand,
     InlineKeyboardButton,
@@ -46,39 +76,6 @@ from telegram.ext import (
     MessageHandler,
     filters,
 )
-
-from shared.router import Router, pick_job
-from shared.transcript import Transcript
-from shared.health import format_health
-from shared.history import METRICS as HISTORY_METRICS, resolve as resolve_metric
-from shared.printing import (
-    describe_job,
-    format_printer_status,
-    reject_reason,
-    safe_name,
-)
-from shared.models_health import (
-    format_inventory_text,
-    parse_health,
-    parse_installed,
-    parse_routes,
-    reconcile,
-)
-from shared.usage import (
-    diagnose_metrics,
-    format_text,
-    gpu_from_ollama,
-    gpu_from_stats,
-    summarise_llm,
-)
-from shared.voice import Transcriber, Voice
-
-# The same agent Hermes runs in the terminal, with the same tool belt. Not a
-# reimplementation -- literally the same module, copied into this image by the
-# Dockerfile, so a fix to a tool lands on both surfaces at once.
-from hermes_agent import tools
-from hermes_agent.agent import SYSTEM_PROMPT as HERMES_SYSTEM
-from hermes_agent.agent import Agent
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s"
@@ -534,8 +531,10 @@ async def cmd_sample(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     """/sample <text> -- hear it in Randy's EXPRESSIVE voice (the tribute's
     narration engine). /sample fast <text> renders the same words through
     the quick phone-line engine instead, for A/B against the good one."""
-    if not allowed(update):
-        return
+    # Was `allowed(update)`, a name that does not exist (Ruff F821): /sample raised NameError for
+    # every caller. Now the same gate as every other command. OUTCOME 2026-11-19: Ruff F821 clean.
+    if not authorised(update):
+        return await deny(update)
     args = (update.effective_message.text or "").split(maxsplit=1)
     text = args[1].strip() if len(args) > 1 else ""
     engine = voice_narrate
@@ -636,7 +635,7 @@ async def cmd_export(update: Update, _ctx: ContextTypes.DEFAULT_TYPE) -> None:
         return await deny(update)
     st = state_for(update.effective_chat.id)
     md = st.transcript.as_markdown()
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
     out = Path("/transcripts/exports")
     out.mkdir(parents=True, exist_ok=True)
     path = out / f"telegram-{st.transcript.session_id}-{stamp}.md"
@@ -959,7 +958,7 @@ async def on_print_button(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> Non
     if verb == "no":
         try:
             src.unlink()
-        except Exception:  # noqa: BLE001
+        except OSError:
             pass
         return await q.edit_message_text(f"Cancelled. Deleted {shown}.")
 
@@ -999,7 +998,7 @@ async def cmd_print(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     try:
         raw = PRINTER_STATUS.read_text(encoding="utf-8-sig")
         status = json.loads(raw)
-        age = (datetime.now(timezone.utc).timestamp()
+        age = (datetime.now(UTC).timestamp()
                - PRINTER_STATUS.stat().st_mtime) / 60.0
         status["age_min"] = round(age, 1)
     except FileNotFoundError:
@@ -1386,7 +1385,7 @@ async def answer(update: Update, st: ChatState, text: str) -> None:
         st.tool_log = []
         try:
             reply = await asyncio.to_thread(st.agent.send, text)
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             log.exception("agent failed")
             return await update.effective_message.reply_text(f"agent error: {e}")
 
@@ -1407,7 +1406,7 @@ async def answer(update: Update, st: ChatState, text: str) -> None:
         try:
             resp = await asyncio.to_thread(router.chat, st.history, job=job)
             reply = (resp.choices[0].message.content or "").strip()
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             log.exception("router call failed")
             return await update.effective_message.reply_text(f"router error: {e}")
         st.history.append({"role": "assistant", "content": reply})
@@ -1422,7 +1421,7 @@ async def answer(update: Update, st: ChatState, text: str) -> None:
 
 # --- career mode -------------------------------------------------------------
 
-async def career_ask(update: Update, text: str, st: "ChatState") -> bool:
+async def career_ask(update: Update, text: str, st: ChatState) -> bool:
     """Send one question to the career portal and reply with its answer.
 
     Returns True if it handled the message. False means "not in career
@@ -1475,7 +1474,7 @@ async def career_ask(update: Update, text: str, st: "ChatState") -> bool:
     if st.voice_replies:
         try:
             await send_voice(update, answer, st)
-        except Exception:  # noqa: BLE001
+        except Exception:  # noqa: BLE001, S110  voice copy is extra; the text answer already went out
             pass          # a silent answer is still an answer
     return True
 
@@ -1546,7 +1545,7 @@ async def on_voice(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     await update.effective_chat.send_action(ChatAction.TYPING)
     try:
         text = await asyncio.to_thread(stt.transcribe, audio, "note.ogg")
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         log.exception("stt failed")
         return await msg.reply_text(f"transcription failed: {e}")
 
@@ -1625,7 +1624,7 @@ async def on_error(update: object, ctx: ContextTypes.DEFAULT_TYPE) -> None:
                   f"{err[:500]}\n\n"
                   "Full trace:  docker compose logs telegram --tail 40"),
         )
-    except Exception:  # noqa: BLE001
+    except Exception:
         log.exception("could not report the error to the chat")
 
 
@@ -1645,7 +1644,7 @@ async def post_init(app: Application) -> None:
     except Exception:  # noqa: BLE001
         stamp = "unknown"
     names = sorted(
-        h.commands and list(h.commands)[0] or "?"
+        h.commands and next(iter(h.commands)) or "?"
         for grp in app.handlers.values() for h in grp
         if isinstance(h, CommandHandler)
     )

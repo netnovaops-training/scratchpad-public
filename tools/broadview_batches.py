@@ -12,7 +12,7 @@ import re
 import sys
 from pathlib import Path
 
-PREFIX = re.compile(r"^(Point Of Sale (Withdrawal|Deposit)|External (Withdrawal|Deposit)|Withdrawal|Deposit)\s+", re.I)
+PREFIX = re.compile(r"^(Point Of Sale (Withdrawal|Deposit)|External (Withdrawal|Deposit)|Withdrawal|Deposit)\s+", re.IGNORECASE)
 
 
 def payee(desc):
@@ -39,9 +39,9 @@ def main(src, outdir, sfx, start, end, size=250):
     Path(outdir).mkdir(parents=True, exist_ok=True)
     for n in range(0, len(rows), size):
         part = rows[n:n + size]
-        f = Path(outdir) / ("%s-%d.json" % (sfx, n // size + 1))
+        f = Path(outdir) / (f"{sfx}-{n // size + 1}.json")
         f.write_text(json.dumps(part, separators=(",", ":")), encoding="utf-8")
-        print(f.name, len(part), part[0]["date"], part[-1]["date"], "sum %.2f" % sum(r["amount"] for r in part))
+        print(f.name, len(part), part[0]["date"], part[-1]["date"], "sum {:.2f}".format(sum(r["amount"] for r in part)))
 
 
 if __name__ == "__main__":

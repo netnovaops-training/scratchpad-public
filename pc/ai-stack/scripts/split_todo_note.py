@@ -16,7 +16,6 @@ Safe to re-run? NO: after the split the original text is gone from "To Do", so t
 text, never a secret, but it is still never echoed here beyond section names and sizes.
 """
 import os
-import re
 import subprocess
 import sys
 
@@ -33,7 +32,7 @@ PARTS = [
 
 
 def pass_cli(*args):
-    p = subprocess.run(["pass-cli", *args], env=ENV, capture_output=True, text=True, encoding="utf-8", errors="replace")
+    p = subprocess.run(["pass-cli", *args], env=ENV, capture_output=True, text=True, encoding="utf-8", errors="replace", check=False)
     return p.returncode, p.stdout, p.stderr
 
 
@@ -48,40 +47,38 @@ def split(text):
     for key in ("--- MEDIUM", "--- EXPERT"):
         hits = [i for i, l in enumerate(lines) if l.startswith(key)]
         if len(hits) != 1:
-            raise SystemExit("FAIL expected exactly one line starting %r, found %d. Already split?" % (key, len(hits)))
+            raise SystemExit(f"FAIL expected exactly one line starting {key!r}, found {len(hits)}. Already split?")
         idx[key] = hits[0]
     cuts = {1: (0, idx["--- MEDIUM"]), 2: (idx["--- MEDIUM"], idx["--- EXPERT"]), 3: (idx["--- EXPERT"], len(lines))}
     return {n: "\n".join(lines[a:b]).rstrip() + "\n" for n, (a, b) in cuts.items()}
 
 
 def links_block():
-    return ("Parts on the site: Part 1 (EASY) %s/todo/part-1/ | Part 2 (MEDIUM, HARD) %s/todo/part-2/ | "
-            "Part 3 (EXPERT, PARKED) %s/todo/part-3/ | everything %s/todo/ | docs %s/documents/\n"
-            "Index note: To Do. Add a new item to the part that matches its difficulty tier."
-            % (SITE, SITE, SITE, SITE, SITE))
+    return (f"Parts on the site: Part 1 (EASY) {SITE}/todo/part-1/ | Part 2 (MEDIUM, HARD) {SITE}/todo/part-2/ | "
+            f"Part 3 (EXPERT, PARKED) {SITE}/todo/part-3/ | everything {SITE}/todo/ | docs {SITE}/documents/\n"
+            "Index note: To Do. Add a new item to the part that matches its difficulty tier.")
 
 
 def part_text(n, label, body):
-    return "=== TO DO - PART %d of 3 (%s) ===\n%s\n\n%s" % (n, label, links_block(), body)
+    return f"=== TO DO - PART {n} of 3 ({label}) ===\n{links_block()}\n\n{body}"
 
 
 def index_text():
     return ("=== HOMELAB TO-DO (index) ===\n"
             "The list is split into three notes so each stays small. New items go in the part for their tier.\n"
-            "  To Do - Part 1: Saturday plan + EASY       %s/todo/part-1/\n"
-            "  To Do - Part 2: MEDIUM + HARD              %s/todo/part-2/\n"
-            "  To Do - Part 3: EXPERT + PARKED            %s/todo/part-3/\n"
-            "  Everything on one page:                    %s/todo/\n"
-            "  Saved documentation (offline copies):      %s/documents/\n"
-            "Current Project and Completed are separate notes. Start a cleared session with /resume-work.\n"
-            % (SITE, SITE, SITE, SITE, SITE))
+            f"  To Do - Part 1: Saturday plan + EASY       {SITE}/todo/part-1/\n"
+            f"  To Do - Part 2: MEDIUM + HARD              {SITE}/todo/part-2/\n"
+            f"  To Do - Part 3: EXPERT + PARKED            {SITE}/todo/part-3/\n"
+            f"  Everything on one page:                    {SITE}/todo/\n"
+            f"  Saved documentation (offline copies):      {SITE}/documents/\n"
+            "Current Project and Completed are separate notes. Start a cleared session with /resume-work.\n")
 
 
 def write_note(title, text):
     if read_note(title) is not None:
-        code, _, err = pass_cli("item", "update", "--vault-name", VAULT, "--item-title", title, "--field", "note=" + text)
+        code, _, _err = pass_cli("item", "update", "--vault-name", VAULT, "--item-title", title, "--field", "note=" + text)
     else:
-        code, _, err = pass_cli("item", "create", "note", "--vault-name", VAULT, "--title", title, "--note", text)
+        code, _, _err = pass_cli("item", "create", "note", "--vault-name", VAULT, "--title", title, "--note", text)
     return code == 0
 
 
@@ -93,17 +90,17 @@ def main():
         return 1
     parts = split(text)
     for n, label, _, _ in PARTS:
-        print("part %d (%s): %d characters, %d lines" % (n, label, len(part_text(n, label, parts[n])), parts[n].count("\n")))
+        print("part {} ({}): {} characters, {} lines".format(n, label, len(part_text(n, label, parts[n])), parts[n].count("\n")))
     if not go:
         print("DRY RUN only. Re-run with --go to write the notes.")
         return 0
     os.makedirs(os.path.dirname(BACKUP), exist_ok=True)
     with open(BACKUP, "w", encoding="utf-8") as f:
         f.write(text)
-    print("backup written: %s" % BACKUP)
+    print(f"backup written: {BACKUP}")
     for n, label, _, _ in PARTS:
-        ok = write_note("To Do - Part %d" % n, part_text(n, label, parts[n]))
-        print("%s To Do - Part %d" % ("PASS" if ok else "FAIL", n))
+        ok = write_note(f"To Do - Part {n}", part_text(n, label, parts[n]))
+        print("{} To Do - Part {}".format("PASS" if ok else "FAIL", n))
         if not ok:
             print("stopping: the original To Do note is untouched")
             return 1

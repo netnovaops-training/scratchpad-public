@@ -54,6 +54,19 @@ import sys
 import urllib.parse
 import urllib.request
 
+
+def _http_only(target):
+    """Return target (a URL string or urllib Request) if its scheme is http or https, else raise ValueError.
+
+    urlopen also follows file:// and custom schemes (Bandit B310). Every caller here talks to an
+    http(s) service, so anything else is a mistake or a planted URL. Added 2026-11-19.
+    """
+    url = str(getattr(target, "full_url", target))
+    if not url.lower().startswith(("http://", "https://")):
+        raise ValueError(f"refusing a non-http(s) URL: {url[:80]}")
+    return target
+
+
 STRONG = 0.88
 WEAK = 0.62
 # Below this many characters, difflib's ratio is not trustworthy: "Part 2"
@@ -160,14 +173,14 @@ def from_spotify(url: str):
         data=b"grant_type=client_credentials",
         headers={"Authorization": f"Basic {basic}",
                  "Content-Type": "application/x-www-form-urlencoded"})
-    token = json.load(urllib.request.urlopen(req, timeout=20))["access_token"]
+    token = json.load(urllib.request.urlopen(_http_only(req), timeout=20))["access_token"]  # nosec B310
 
     out, url_next = [], (f"https://api.spotify.com/v1/playlists/{pid}/tracks"
                          "?fields=items(track(name,artists(name))),next&limit=100")
     while url_next:
         r = urllib.request.Request(url_next,
                                    headers={"Authorization": f"Bearer {token}"})
-        d = json.load(urllib.request.urlopen(r, timeout=30))
+        d = json.load(urllib.request.urlopen(_http_only(r), timeout=30))  # nosec B310
         for it in d.get("items", []):
             t = it.get("track") or {}
             if not t.get("name"):
@@ -190,7 +203,7 @@ def from_youtube(url: str):
     p = subprocess.run(
         ["yt-dlp", "--flat-playlist", "--skip-download", "--no-warnings",
          "--dump-single-json", url],
-        capture_output=True, text=True, timeout=180)
+        capture_output=True, text=True, timeout=180, check=False)
     if p.returncode != 0:
         sys.exit(f"  yt-dlp failed: {p.stderr.strip()[:200]}")
     data = json.loads(p.stdout)
@@ -213,15 +226,16 @@ def from_youtube(url: str):
 def from_file(path: str):
     """One track per line, "Artist - Title" or just a title."""
     out = []
-    for line in open(path, encoding="utf-8"):
-        line = line.strip()
-        if not line or line.startswith("#"):
-            continue
-        if " - " in line:
-            a, _, t = line.partition(" - ")
-            out.append((a.strip(), t.strip()))
-        else:
-            out.append(("", line))
+    with open(path, encoding="utf-8") as fh_:
+        for line in fh_:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if " - " in line:
+                a, _, t = line.partition(" - ")
+                out.append((a.strip(), t.strip()))
+            else:
+                out.append(("", line))
     return out
 
 
@@ -237,11 +251,12 @@ def nd_call(endpoint: str, **params):
     if not (ND_USER and ND_PASS):
         sys.exit("  ND_USER / ND_PASS not set (Navidrome login).")
     salt = "".join(random.choices(string.ascii_lowercase + string.digits, k=12))
-    token = hashlib.md5((ND_PASS + salt).encode()).hexdigest()
+    # The Subsonic API defines the token as md5(password + salt); the hash is the protocol, not our choice.
+    token = hashlib.md5((ND_PASS + salt).encode(), usedforsecurity=False).hexdigest()
     q = {"u": ND_USER, "t": token, "s": salt, "v": "1.16.1",
          "c": "playlist-match", "f": "json", **params}
     url = f"{ND_URL}/rest/{endpoint}?{urllib.parse.urlencode(q, doseq=True)}"
-    d = json.load(urllib.request.urlopen(url, timeout=30))["subsonic-response"]
+    d = json.load(urllib.request.urlopen(_http_only(url), timeout=30))["subsonic-response"]  # nosec B310
     if d.get("status") != "ok":
         sys.exit(f"  navidrome: {d.get('error', {}).get('message', d)}")
     return d

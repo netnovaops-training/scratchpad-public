@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
@@ -17,22 +17,21 @@ from prompt_toolkit import PromptSession
 from prompt_toolkit.completion import WordCompleter
 from prompt_toolkit.history import FileHistory
 from rich.console import Console
-from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.table import Table
-
+from shared.health import format_health
+from shared.history import METRICS as HISTORY_METRICS
+from shared.history import resolve as resolve_metric
 from shared.identity import by_email
 from shared.memory import MemoryStore
-from shared.router import Router
-from shared.transcript import Transcript
-from shared.health import format_health
-from shared.history import METRICS as HISTORY_METRICS, resolve as resolve_metric
 from shared.models_health import (
     parse_health,
     parse_installed,
     parse_routes,
     reconcile,
 )
+from shared.router import Router
+from shared.transcript import Transcript
 from shared.usage import (
     diagnose_metrics,
     gpu_from_ollama,
@@ -61,7 +60,7 @@ def _identity_for_cli() -> str:
     return person.email
 
 
-def _memory_for_cli() -> "MemoryStore | None":
+def _memory_for_cli() -> MemoryStore | None:
     """The memory store for whoever is running the CLI, or None.
 
     WHO THE CLI IS. There is no login here -- it is a terminal on Jason's own
@@ -320,7 +319,7 @@ class Hermes:
             r = httpx.get(N8N_STATS_URL, timeout=10.0, follow_redirects=True)
             r.raise_for_status()
             stats_json = r.json()
-        except Exception:  # noqa: BLE001
+        except Exception:  # noqa: BLE001, S110  status panel: a down service just shows as unknown
             pass
 
         gpu = gpu_from_stats(stats_json)
@@ -329,7 +328,7 @@ class Hermes:
                 r = httpx.get(OLLAMA_PS_URL, timeout=10.0, follow_redirects=True)
                 r.raise_for_status()
                 ps_json = r.json()
-            except Exception:  # noqa: BLE001
+            except Exception:  # noqa: BLE001, S110  status panel: a down service just shows as unknown
                 pass
             gpu = gpu_from_ollama(ps_json)
 
@@ -372,7 +371,7 @@ class Hermes:
             return
 
         def n(v: object) -> str:
-            return "-" if v is None else f"{int(round(float(v))):,}"  # type: ignore[arg-type]
+            return "-" if v is None else f"{round(float(v)):,}"  # type: ignore[arg-type]
 
         t = Table("route", "requests", "tokens", "in", "out", "avg", box=None)
         for route, d in llm.items():
@@ -536,13 +535,13 @@ class Hermes:
             r = httpx.get(f"{LITELLM_BASE}/model/info", headers=METRICS_HEADERS, timeout=10.0, follow_redirects=True)
             r.raise_for_status()
             mi = r.json()
-        except Exception:  # noqa: BLE001
+        except Exception:  # noqa: BLE001, S110  status panel: a down service just shows as unknown
             pass
         try:
             r = httpx.get(OLLAMA_TAGS_URL, timeout=10.0, follow_redirects=True)
             r.raise_for_status()
             tags = r.json()
-        except Exception:  # noqa: BLE001
+        except Exception:  # noqa: BLE001, S110  status panel: a down service just shows as unknown
             pass
 
         installed = parse_installed(tags)
@@ -580,7 +579,7 @@ class Hermes:
             f"[green]{v}[/green]" if v == self.voice.voice else v for v in vs))
 
     def cmd_export(self, fmt: str = "md") -> None:
-        stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+        stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
         out = Path("/transcripts/exports")
         out.mkdir(parents=True, exist_ok=True)
         name = f"hermes-{self.transcript.session_id}-{stamp}"
@@ -609,7 +608,7 @@ class Hermes:
             console.print("[dim](tts offline - not speaking)[/dim]")
             return
         AUDIO_OUT.mkdir(parents=True, exist_ok=True)
-        stamp = datetime.now(timezone.utc).strftime("%H%M%S")
+        stamp = datetime.now(UTC).strftime("%H%M%S")
         path = AUDIO_OUT / f"hermes-{stamp}.wav"
         try:
             self.voice.speak(text[:2000], out_path=path, normalize=True)
@@ -707,7 +706,7 @@ class Hermes:
         """
         try:
             jobs = self.router.available_jobs()
-        except Exception:
+        except Exception:  # noqa: BLE001  any router failure is reported as 'not answering'
             return ("router [red]not answering[/red] - is it up?  "
                     "verify.cmd  or  logs.cmd litellm")
 

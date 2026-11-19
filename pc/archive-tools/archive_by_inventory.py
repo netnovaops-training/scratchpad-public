@@ -22,7 +22,7 @@ AI = r"C:\Jasons New Site\www\ai-stack"
 ARCH = r"D:\ai-stack-archive"
 LOG = os.path.join(ARCH, "moves-inventory.csv")
 sys.path.insert(0, os.path.join(AI, "scripts"))
-import build_code_inventory as inv  # noqa: E402
+import build_code_inventory as inv
 
 
 def size(p):
@@ -65,7 +65,7 @@ def move(src, dst):
     else:
         shutil.copy2(src, dst)
     if size(dst) != before:
-        raise IOError("copy check failed for " + src)
+        raise OSError("copy check failed for " + src)
     if os.path.isdir(src):
         shutil.rmtree(src)
     else:
@@ -74,16 +74,17 @@ def move(src, dst):
 
 def main(mode):
     if mode == "undo":
-        for src, dst in reversed(list(csv.reader(open(LOG, encoding="utf-8")))):
-            if os.path.exists(dst) and not os.path.exists(src):
-                move(dst, src)
+        with open(LOG, encoding="utf-8") as fh_:
+            for src, dst in reversed(list(csv.reader(fh_))):
+                if os.path.exists(dst) and not os.path.exists(src):
+                    move(dst, src)
         print("UNDO done")
         return 0
     ps = pairs()
     if mode == "plan":
         for s, d in ps:
-            print("%-60s -> %s" % (os.path.relpath(s, AI), d))
-        print("PLAN %d entries" % len(ps))
+            print(f"{os.path.relpath(s, AI)!s:<60} -> {d}")
+        print(f"PLAN {len(ps)} entries")
         return 0
     ok = fail = 0
     with open(LOG, "a", newline="", encoding="utf-8") as fh:
@@ -93,11 +94,11 @@ def main(mode):
                 move(s, d)
                 w.writerow([s, d])
                 ok += 1
-            except (OSError, IOError) as e:
+            except OSError as e:
                 fail += 1
                 print("FAIL", s, type(e).__name__, e)
             fh.flush()
-    print("APPLY moved %d, failed %d (log %s)" % (ok, fail, LOG))
+    print(f"APPLY moved {ok}, failed {fail} (log {LOG})")
     return 1 if fail else 0
 
 

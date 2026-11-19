@@ -1,6 +1,7 @@
-import io
+from pathlib import Path
+
 p = "garden.sh"
-s = io.open(p, encoding="utf-8", newline="").read()
+s = Path(p).read_bytes().decode("utf-8")
 def rep(a, b, n=1):
     global s
     assert s.count(a) == n, (a[:70], s.count(a))
@@ -70,5 +71,5 @@ rep("""    has_part wiki && dc restart wiki >/dev/null 2>&1
 rep("""    if photos_addon_load; then return 0; fi
     note "Not found.""", """    if photos_addon_load; then redo_renames; return 0; fi
     note "Not found.""")
-io.open(p, "w", encoding="utf-8", newline="").write(s)
+Path(p).write_text(s, encoding="utf-8", newline="")
 print("ok")

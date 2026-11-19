@@ -26,7 +26,7 @@ OUT = Path(r"D:\backups\photo-verify")
 SKIP = {"#recycle", "#snapshot", "@eaDir", ".SynologyWorkingDirectory", ".tmp.drivedownload"}
 
 
-def sha(p, cache={}):
+def sha(p, cache={}):  # noqa: B006  the shared dict IS the cache, on purpose
     """SHA-256 of a file, cached by path."""
     if p in cache:
         return cache[p]
@@ -85,7 +85,7 @@ def main():
                             continue
                 else:
                     h = ""
-            except OSError as e:
+            except OSError:
                 h, match = "", ""
             if match:
                 have += 1; gb_have += s

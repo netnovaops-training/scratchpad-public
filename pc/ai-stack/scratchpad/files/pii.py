@@ -1,7 +1,12 @@
-import re, pickle, collections
+import collections
+import pickle
+import re
+from pathlib import Path
+
 P=r"C:\Users\USER\AppData\Local\Temp\claude\C--Jasons-New-Site-www-ai-stack\08938579-6dcf-4698-abca-ba2836a833f5\scratchpad"
-cols,data=pickle.load(open(P+r"\db.pkl","rb"))
-sql=open(P+r"\db.sql",encoding="utf-8").read()
+# Unpickles a file this same scratch session wrote a minute earlier, on this PC; never input from anyone else.
+cols,data=pickle.loads(Path(P+r"\db.pkl").read_bytes())  # nosec B301
+sql=Path(P+r"\db.sql").read_text(encoding="utf-8")
 pats={
  'email':r'[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}',
  'ipv4':r'\b(?:\d{1,3}\.){3}\d{1,3}\b',

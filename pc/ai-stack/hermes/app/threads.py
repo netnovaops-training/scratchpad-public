@@ -61,8 +61,18 @@ def _safe(s, fallback):
 
 
 def _path(email, surface):
-    return os.path.join(ROOT, _safe(email, "unknown"),
-                        _safe(surface, "app") + ".json")
+    """The thread file for this person and surface, guaranteed to sit inside ROOT.
+
+    2026-11-19 (CodeQL py/path-injection): _safe() already strips slashes, but "." and ".." survive it
+    (an email of ".." would have pointed at ROOT's parent). The resolved path is now checked to be inside
+    ROOT; load/save/clear catch the ValueError like any other failure.
+    """
+    root = os.path.realpath(ROOT)
+    path = os.path.realpath(os.path.join(root, _safe(email, "unknown"),
+                                         _safe(surface, "app") + ".json"))
+    if not path.startswith(root + os.sep):
+        raise ValueError("thread path outside ROOT")
+    return path
 
 
 def load(email, surface):
@@ -99,8 +109,8 @@ def save(email, surface, turns):
              and isinstance(t.get("content"), str) and t["content"]]
     if not turns:
         return False
-    path = _path(email, surface)
     try:
+        path = _path(email, surface)  # inside the try: a refused path is a failed save, not a crash
         os.makedirs(os.path.dirname(path), exist_ok=True)
         # Written beside and renamed, so a crash mid-write leaves the
         # previous thread intact rather than a half-file that loads as

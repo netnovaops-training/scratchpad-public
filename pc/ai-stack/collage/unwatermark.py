@@ -50,8 +50,8 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
-import watermark  # noqa: E402
-from PIL import Image, ImageOps  # noqa: E402
+import watermark
+from PIL import Image, ImageOps
 
 SUFFIXES = {".jpg", ".jpeg", ".png", ".webp"}
 
@@ -114,14 +114,14 @@ def main():
     a = ap.parse_args()
 
     if not a.folder.is_dir():
-        sys.exit("%s is not a folder" % a.folder)
+        sys.exit(f"{a.folder} is not a folder")
 
     files = sorted(
         p for p in (a.folder.rglob("*") if a.recursive else a.folder.iterdir())
         if p.is_file() and p.suffix.lower() in SUFFIXES
         and ".originals" not in p.parts)
 
-    print("  %d image(s) in %s" % (len(files), a.folder))
+    print(f"  {len(files)} image(s) in {a.folder}")
     print("  %s\n" % ("WRITING" if a.apply else
                       "dry run -- nothing will be changed. Add --apply."))
 
@@ -140,13 +140,12 @@ def main():
                 busy = ring_variation(img, box)
                 if busy > BUSY_LIMIT and not a.force:
                     skipped += 1
-                    print("  skip  %-44s mark at %s, but the area around it "
-                          "is busy (%.0f) -- the fill would smudge. --force "
-                          "to do it anyway." % (p.name[:44], box, busy))
+                    print(f"  skip  {p.name[:44]!s:<44} mark at {box}, but the area around it "
+                          f"is busy ({busy:.0f}) -- the fill would smudge. --force "
+                          "to do it anyway.")
                     continue
 
-                print("  clean %-44s %s  confidence %.2f  background %.0f"
-                      % (p.name[:44], box, score, busy))
+                print(f"  clean {p.name[:44]!s:<44} {box}  confidence {score:.2f}  background {busy:.0f}")
 
                 # THE PREVIEW IS BUILT IN A DRY RUN TOO, which is the point
                 # of a dry run: deciding whether to trust the detector by
@@ -166,20 +165,18 @@ def main():
                 save_like(out, p, raw)
                 cleaned += 1
         except Exception as e:  # noqa: BLE001
-            print("  ERROR %-44s %s" % (p.name[:44], e))
+            print(f"  ERROR {p.name[:44]!s:<44} {e}")
 
-    print("\n  %d carried a mark, %d had none" % (found, clean_already))
+    print(f"\n  {found} carried a mark, {clean_already} had none")
     if a.apply:
-        print("  %d cleaned%s, %d skipped as too busy"
-              % (cleaned,
+        print("  {} cleaned{}, {} skipped as too busy".format(cleaned,
                  "" if a.replace else " (originals in .originals/)", skipped))
     else:
-        print("  %d would be cleaned, %d skipped as too busy"
-              % (found - skipped, skipped))
+        print(f"  {found - skipped} would be cleaned, {skipped} skipped as too busy")
 
     if sheet and a.contact_sheet is not None:
         _write_sheet(sheet, a.contact_sheet)
-        print("  before/after strip: %s" % a.contact_sheet)
+        print(f"  before/after strip: {a.contact_sheet}")
 
 
 def _pad(box, size, pad=50):

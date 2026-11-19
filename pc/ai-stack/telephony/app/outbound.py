@@ -31,11 +31,12 @@ from __future__ import annotations
 import logging
 import sqlite3
 import threading
+from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import datetime, time, timedelta, timezone
+from datetime import UTC, datetime, time
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 from zoneinfo import ZoneInfo
 
 from .callers import normalise
@@ -74,7 +75,7 @@ KINDS = ("confirmation", "reminder", "followup")
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 @dataclass
@@ -278,7 +279,7 @@ def due_messages(
         except (KeyError, ValueError):
             continue
         if start.tzinfo is None:
-            start = start.replace(tzinfo=timezone.utc)
+            start = start.replace(tzinfo=UTC)
 
         until = (start - now_utc).total_seconds() / 3600.0
         since = (now_utc - start).total_seconds() / 3600.0

@@ -19,11 +19,24 @@ lost, which is exactly what a house assistant hears all day.
 from __future__ import annotations
 
 import json
-import time as _t
 import os
 import re
+import time as _t
 import urllib.parse
 import urllib.request
+
+
+def _http_only(target):
+    """Return target (a URL string or urllib Request) if its scheme is http or https, else raise ValueError.
+
+    urlopen also follows file:// and custom schemes (Bandit B310). Every caller here talks to an
+    http(s) service, so anything else is a mistake or a planted URL. Added 2026-11-19.
+    """
+    url = str(getattr(target, "full_url", target))
+    if not url.lower().startswith(("http://", "https://")):
+        raise ValueError(f"refusing a non-http(s) URL: {url[:80]}")
+    return target
+
 
 KUMA_URL = os.environ.get("HOUSE_KUMA_URL", "http://192.168.1.86:3001")
 IMMICH_URL = os.environ.get("HOUSE_IMMICH_URL", "http://192.168.1.86:2283")
@@ -45,7 +58,7 @@ def _q(v: str) -> str:
 
 def _get(url: str, headers: dict | None = None, timeout: int = 20) -> str:
     req = urllib.request.Request(url, headers=headers or {})
-    with urllib.request.urlopen(req, timeout=timeout) as r:
+    with urllib.request.urlopen(_http_only(req), timeout=timeout) as r:  # nosec B310
         return r.read().decode("utf-8", "replace")
 
 
@@ -61,7 +74,7 @@ def _post(url: str, form: dict, headers: dict | None = None,
     data = urllib.parse.urlencode(form).encode()
     req = urllib.request.Request(url, data=data, headers=headers or {},
                                  method="POST")
-    with urllib.request.urlopen(req, timeout=timeout) as r:
+    with urllib.request.urlopen(_http_only(req), timeout=timeout) as r:  # nosec B310
         return r.read().decode("utf-8", "replace")
 
 
@@ -236,7 +249,7 @@ def git_commits(n: int = 6) -> str:
             commits = json.loads(_get(
                 f"{GITEA_URL}/api/v1/repos/{repo}/commits?limit={min(n,20)}&stat=false",
                 {"Authorization": "token " + GITEA_TOKEN}))
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  one unreachable repo is reported, the rest still listed
             out.append(f"{repo}: unreachable ({e})")
             continue
         out.append(repo + ":")
@@ -455,17 +468,17 @@ def find_search(as_email: str, query: str, kind: str = "", limit: int = 10) -> s
         n = max(1, min(int(limit or 10), 25))
     except (TypeError, ValueError):
         n = 10
-    url = "{}/api/search?q={}&limit={}".format(FIND_URL, _q(query), n)
+    url = f"{FIND_URL}/api/search?q={_q(query)}&limit={n}"
     if kind in ("recipe", "workout", "document", "code"):
         url += "&kind=" + kind
     try:
         data = json.loads(_get(url, headers={"X-Auth-Email": as_email or FIND_AS}, timeout=30))
     except Exception as e:  # noqa: BLE001
-        return "The index did not answer: {}".format(e)
+        return f"The index did not answer: {e}"
 
     hits = data.get("hits") or []
     if not hits:
-        return "Nothing of yours matches {!r}.".format(query)
+        return f"Nothing of yours matches {query!r}."
 
     lines = ["{} match(es) for {!r}:".format(
         data.get("estimatedTotalHits", len(hits)), query)]
@@ -477,7 +490,7 @@ def find_search(as_email: str, query: str, kind: str = "", limit: int = 10) -> s
         lines.append("[{}] {}".format(h.get("kind"), h.get("name")))
         lines.append("  id: {}".format(h.get("id")))
         if snippet:
-            lines.append("  {}".format(snippet[:240]))
+            lines.append(f"  {snippet[:240]}")
     lines.append("")
     lines.append("Use find_read(id) for the full text of any of these.")
     return "\n".join(lines)
@@ -494,16 +507,16 @@ def find_read(as_email: str, item_id: str) -> str:
     # has no id parameter and silently ignored it, so every read came back
     # with whatever the empty query ranked first and was then rejected --
     # which looked exactly like "that id does not exist".
-    url = "{}/api/item/{}".format(FIND_URL, _q(item_id))
+    url = f"{FIND_URL}/api/item/{_q(item_id)}"
     try:
         h = json.loads(_get(url, headers={"X-Auth-Email": as_email or FIND_AS}, timeout=30))
     except Exception as e:  # noqa: BLE001
         if "404" in str(e):
-            return ("No item with id {!r} that you can read. Run find_search "
-                    "again -- ids change when the index rebuilds.".format(item_id))
-        return "The index did not answer: {}".format(e)
+            return (f"No item with id {item_id!r} that you can read. Run find_search "
+                    "again -- ids change when the index rebuilds.")
+        return f"The index did not answer: {e}"
     if not isinstance(h, dict) or not h.get("id"):
-        return "No item with id {!r} that you can read.".format(item_id)
+        return f"No item with id {item_id!r} that you can read."
     body = (h.get("body") or "").strip()
     out = ["{}  [{}]".format(h.get("name"), h.get("kind")),
            "path: {}".format(h.get("path"))]
@@ -530,10 +543,10 @@ def shelves(as_email: str = "") -> str:
     somebody else's shelves.
     """
     try:
-        data = json.loads(_get("{}/api/shelves".format(FIND_URL),
+        data = json.loads(_get(f"{FIND_URL}/api/shelves",
                                headers={"X-Auth-Email": as_email or FIND_AS}, timeout=20))
     except Exception as e:  # noqa: BLE001
-        return "The book index did not answer: {}".format(e)
+        return f"The book index did not answer: {e}"
     if data.get("error"):
         return "The book index says: {}".format(data["error"])
     rows = data.get("shelves") or []
@@ -559,7 +572,7 @@ def find_passages(as_email: str, question: str, limit: int = 6, book: str = "",
         n = max(1, min(int(limit or 6), 20))
     except (TypeError, ValueError):
         n = 6
-    url = "{}/api/passages?q={}&limit={}".format(FIND_URL, _q(question), n)
+    url = f"{FIND_URL}/api/passages?q={_q(question)}&limit={n}"
     if (doc_id or "").strip():
         url += "&doc=" + _q(doc_id)
     elif (book or "").strip():
@@ -570,7 +583,7 @@ def find_passages(as_email: str, question: str, limit: int = 6, book: str = "",
         data = json.loads(_get(url, headers={"X-Auth-Email": as_email or FIND_AS},
                                timeout=30))
     except Exception as e:  # noqa: BLE001
-        return "The book index did not answer: {}".format(e)
+        return f"The book index did not answer: {e}"
 
     if data.get("error"):
         return "The book index says: {}".format(data["error"])
@@ -580,8 +593,8 @@ def find_passages(as_email: str, question: str, limit: int = 6, book: str = "",
         # something is the behaviour Jason asked for -- the alternative is
         # composing a plausible paragraph, which is the exact thing this
         # tool exists to avoid.
-        return ("Nothing on the shelf covers {!r}. Say so rather than "
-                "answering from memory.".format(question))
+        return (f"Nothing on the shelf covers {question!r}. Say so rather than "
+                "answering from memory.")
 
     lines = ["{} passage(s) for {!r}. QUOTE THESE; do not paraphrase a "
              "clinical fact, and cite the page shown.".format(

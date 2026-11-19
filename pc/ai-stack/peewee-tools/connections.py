@@ -8,9 +8,22 @@
 #  and writes the audio path back into the JSON. Idempotent.
 # =============================================================================
 import json
-import io
 import os
 import urllib.request
+from pathlib import Path
+
+
+def _http_only(target):
+    """Return target (a URL string or urllib Request) if its scheme is http or https, else raise ValueError.
+
+    urlopen also follows file:// and custom schemes (Bandit B310). Every caller here talks to an
+    http(s) service, so anything else is a mistake or a planted URL. Added 2026-11-19.
+    """
+    url = str(getattr(target, "full_url", target))
+    if not url.lower().startswith(("http://", "https://")):
+        raise ValueError(f"refusing a non-http(s) URL: {url[:80]}")
+    return target
+
 
 VOICE_URL = (os.environ.get("VOICE_NARRATE_URL")
              or os.environ.get("VOICE_URL",
@@ -26,7 +39,7 @@ def say(text, out):
                        "exaggeration": 0.55, "cfg_weight": 0.5}).encode()
     req = urllib.request.Request(VOICE_URL, data=body,
                                  headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=600) as r:
+    with urllib.request.urlopen(_http_only(req), timeout=600) as r:  # nosec B310
         data = r.read()
     if len(data) < 2000:
         raise RuntimeError("suspiciously small audio")
@@ -38,7 +51,7 @@ def main():
     os.chdir(SITE)
     os.makedirs(os.path.join("data", "connections"), exist_ok=True)
     p = os.path.join("data", "connections.json")
-    doc = json.load(io.open(p, encoding="utf-8"))
+    doc = json.loads(Path(p).read_text(encoding="utf-8"))
     changed = 0
     for link in doc.get("links", []):
         if link.get("audio") or not link.get("text"):
@@ -50,7 +63,7 @@ def main():
         link["audio"] = out.replace(os.sep, "/")
         changed += 1
     if changed:
-        with io.open(p, "w", encoding="utf-8", newline="\n") as f:
+        with open(p, "w", encoding="utf-8", newline="\n") as f:
             json.dump(doc, f, indent=2, ensure_ascii=False)
     print(f"rendered {changed} link lines")
 

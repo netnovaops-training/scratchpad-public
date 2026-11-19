@@ -1,13 +1,15 @@
 import sys
 
+
 def load(p):
     d = {}
-    for line in open(p, encoding="utf-8", errors="replace"):
-        line = line.strip()
-        if not line:
-            continue
-        h, f = line.split(None, 1)
-        d[f.lstrip("*")] = h
+    with open(p, encoding="utf-8", errors="replace") as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            h, f = line.split(None, 1)
+            d[f.lstrip("*")] = h
     return d
 
 live, pkg = load(sys.argv[1]), load(sys.argv[2])

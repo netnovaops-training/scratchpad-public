@@ -8,6 +8,9 @@ import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 
+/** Earlier turns sent with each question: enough context, bounded request size. */
+private const val HISTORY_TURNS = 20
+
 /**
  * Talks to Hermes -- the household assistant -- through the auth service.
  *
@@ -50,7 +53,7 @@ class ChatClient(private val accessTokenProvider: suspend () -> Result<String>) 
             // Prior turns travel with the request: the service is stateless,
             // so it can restart mid-conversation without losing the thread.
             put("history", JSONArray().apply {
-                history.takeLast(20).forEach {
+                history.takeLast(HISTORY_TURNS).forEach {
                     put(JSONObject().apply {
                         put("role", it.role)
                         put("content", it.text)
@@ -124,7 +127,7 @@ class ChatClient(private val accessTokenProvider: suspend () -> Result<String>) 
         val token = accessTokenProvider().getOrElse { throw it }
 
         val messages = JSONArray().apply {
-            history.takeLast(20).forEach {
+            history.takeLast(HISTORY_TURNS).forEach {
                 put(JSONObject().apply {
                     put("role", it.role)
                     put("content", it.text)

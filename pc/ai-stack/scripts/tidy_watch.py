@@ -74,15 +74,15 @@ def recycle(paths: list[Path], dry: bool) -> None:
     lst = Path(r"D:\doc-gather\recycle-list-watch.txt")
     lst.write_text("\n".join(str(p) for p in paths), encoding="utf-8")
     subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(RECYCLE_PS),
-                    str(lst), r"D:\doc-gather\recycled-log-watch.csv"], capture_output=True)
+                    str(lst), r"D:\doc-gather\recycled-log-watch.csv"], capture_output=True, check=False)
 
 
 def set_times(p: Path, day: str) -> None:
     t = dt.datetime.fromisoformat(day + "T12:00:00").timestamp()
     os.utime(p, (t, t))
     subprocess.run(["powershell", "-NoProfile", "-Command",
-                    f"(Get-Item -LiteralPath '{str(p).replace(chr(39), chr(39) * 2)}').CreationTime = "
-                    f"[datetime]'{day} 12:00'"], capture_output=True)
+                    (f"(Get-Item -LiteralPath '{str(p).replace(chr(39), chr(39) * 2)}').CreationTime = "
+                    f"[datetime]'{day} 12:00'")], capture_output=True, check=False)
 
 
 # ---------------------------------------------------------------- documents
@@ -90,9 +90,9 @@ def to_pdf_if_smaller(p: Path, dry: bool) -> Path:
     """Word -> PDF through Gotenberg on the NUC; keep the PDF only if it is <= 60% of the size."""
     if p.suffix.lower() != ".docx" or dry:
         return p
-    r = subprocess.run(["ssh", NUC, "docker exec -i paperless-ngx curl -s -f -F 'files=@-;filename=in.docx' "
-                        "http://gotenberg:3000/forms/libreoffice/convert"],
-                       stdin=p.open("rb"), capture_output=True, timeout=300)
+    r = subprocess.run(["ssh", NUC, ("docker exec -i paperless-ngx curl -s -f -F 'files=@-;filename=in.docx' "
+                        "http://gotenberg:3000/forms/libreoffice/convert")],
+                       stdin=p.open("rb"), capture_output=True, timeout=300, check=False)
     pdf = r.stdout
     if r.returncode != 0 or not pdf.startswith(b"%PDF") or len(pdf) > 0.6 * p.stat().st_size:
         return p
@@ -271,11 +271,11 @@ def tidy_images(dry: bool) -> int:
                      f"{w}x{h}" if w else "", cam, what, tool, used))
     if not dry:
         lines = ["# image-files: every image, where it came from, and what uses it",
-                 "", "Kept by `scripts/tidy_watch.py` (runs every 15 minutes). Drop new images straight into "
+                 "", ("Kept by `scripts/tidy_watch.py` (runs every 15 minutes). Drop new images straight into "
                  "`image-files`; they are de-duplicated, dated from their own metadata, renamed and filed by "
-                 "year. Original names: `.original-names.tsv`.", "",
+                 "year. Original names: `.original-names.tsv`."), "",
                  "| File | Date | Size | Pixels | Camera | What it is | Tool | Used |", "|---|---|---|---|---|---|---|---|"]
-        lines += ["| `%s` | %s | %s | %s | %s | %s | %s | %s |" % r for r in sorted(rows)]
+        lines += ["| `{}` | {} | {} | {} | {} | {} | {} | {} |".format(*r) for r in sorted(rows)]
         (IMAGES / "IMAGES.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     return done
 

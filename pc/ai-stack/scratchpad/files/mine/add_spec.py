@@ -1,5 +1,8 @@
-import sys; sys.path.insert(0,".")
+import sys
+
+sys.path.insert(0, ".")
 from cins import apply
+
 S = [
 (17, """//! URL: /streamlit/?tab=1. `render` draws the page for the current step.
 //! `action` handles the POST buttons (create a stub, ask the AI, create the

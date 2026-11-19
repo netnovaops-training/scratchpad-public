@@ -19,7 +19,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.twilio_auth import expected_signature, signature_ok, stream_secret  # noqa: E402
+from app.twilio_auth import expected_signature, signature_ok, stream_secret
 
 TOKEN = "12345678901234567890123456789012"
 HOST = "teewithmsdee.example.org"

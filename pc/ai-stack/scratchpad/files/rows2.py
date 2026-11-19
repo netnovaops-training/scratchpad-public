@@ -1,8 +1,11 @@
-import re, collections, json
-sql=open(r"C:\Users\USER\AppData\Local\Temp\claude\C--Jasons-New-Site-www-ai-stack\08938579-6dcf-4698-abca-ba2836a833f5\scratchpad\db.sql",encoding="utf-8").read()
+import collections
+import re
+from pathlib import Path
+
+sql=Path(r"C:\Users\USER\AppData\Local\Temp\claude\C--Jasons-New-Site-www-ai-stack\08938579-6dcf-4698-abca-ba2836a833f5\scratchpad\db.sql").read_text(encoding="utf-8")
 cols={}
-for t,body in re.findall(r'CREATE TABLE `([^`]+)` \((.*?)\n\)', sql, re.S):
-    cols[t]=re.findall(r'^\s+`([^`]+)`', body, re.M)
+for t,body in re.findall(r'CREATE TABLE `([^`]+)` \((.*?)\n\)', sql, re.DOTALL):
+    cols[t]=re.findall(r'^\s+`([^`]+)`', body, re.MULTILINE)
 def parse_values(s,i):
     rows=[];row=[];cur=[];inq=False;depth=0
     while i<len(s):
@@ -25,5 +28,6 @@ for m in re.finditer(r'INSERT INTO `([^`]+)` VALUESs*', sql):
     rows,_=parse_values(sql,m.end())
     data[m.group(1)].extend(rows)
 import pickle
-pickle.dump((cols,dict(data)),open(r"C:\Users\USER\AppData\Local\Temp\claude\C--Jasons-New-Site-www-ai-stack\08938579-6dcf-4698-abca-ba2836a833f5\scratchpad\db.pkl","wb"))
+
+Path(r"C:\Users\USER\AppData\Local\Temp\claude\C--Jasons-New-Site-www-ai-stack\08938579-6dcf-4698-abca-ba2836a833f5\scratchpad\db.pkl").write_bytes(pickle.dumps((cols,dict(data))))
 for t in cols: print(t, len(data.get(t,[])))

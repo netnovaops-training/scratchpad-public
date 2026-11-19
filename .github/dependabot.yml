@@ -10,7 +10,7 @@ updates:
   - package-ecosystem: pip
     directories: ["/pc/ai-stack/colibri", "/.github/requirements"]
     cooldown: { default-days: 7 }
-    schedule: { interval: weekly, day: monday, time: "05:00", timezone: America/Los_Angeles }
+    schedule: { interval: weekly, day: monday, time: "00:00", timezone: America/New_York }
     open-pull-requests-limit: 5
     labels: [dependencies, python]
     groups:
@@ -19,7 +19,7 @@ updates:
   - package-ecosystem: cargo
     directory: /pc/ai-stack/rust
     cooldown: { default-days: 7 }
-    schedule: { interval: weekly, day: monday, time: "05:00", timezone: America/Los_Angeles }
+    schedule: { interval: weekly, day: monday, time: "00:00", timezone: America/New_York }
     open-pull-requests-limit: 5
     labels: [dependencies, rust]
     groups:
@@ -44,7 +44,7 @@ updates:
       - /pc/ai-stack/watchdog
       - /pc/ai-stack/web
     cooldown: { default-days: 7 }
-    schedule: { interval: weekly, day: monday, time: "05:00", timezone: America/Los_Angeles }
+    schedule: { interval: weekly, day: monday, time: "00:00", timezone: America/New_York }
     open-pull-requests-limit: 5
     labels: [dependencies, docker]
     groups:
@@ -53,7 +53,7 @@ updates:
   - package-ecosystem: github-actions
     directory: /
     cooldown: { default-days: 7 }
-    schedule: { interval: weekly, day: monday, time: "05:00", timezone: America/Los_Angeles }
+    schedule: { interval: weekly, day: monday, time: "00:00", timezone: America/New_York }
     open-pull-requests-limit: 3
     labels: [dependencies, github-actions]
     groups:

@@ -30,14 +30,16 @@ def sha(p):
 
 def main(src, dst):
     """Hash every path in src not yet in dst."""
-    todo = [json.loads(l) for l in open(src, encoding="utf-8") if l.strip()]
+    with open(src, encoding="utf-8") as fh:
+        todo = [json.loads(l) for l in fh if l.strip()]
     done = set()
     if os.path.exists(dst):
-        for l in open(dst, encoding="utf-8"):
-            try:
-                done.add(json.loads(l)["p"])
-            except ValueError:
-                pass  # half-written last line after a kill
+        with open(dst, encoding="utf-8") as fh_:
+            for l in fh_:
+                try:
+                    done.add(json.loads(l)["p"])
+                except ValueError:
+                    pass  # half-written last line after a kill
     todo = [p for p in todo if p not in done]
     print(time.strftime("%F %T"), "to do:", len(todo), "files; already done:", len(done), flush=True)
     n, b, t0 = 0, 0, time.time()

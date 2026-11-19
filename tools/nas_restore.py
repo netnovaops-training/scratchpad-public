@@ -16,27 +16,28 @@ import sys
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from nas_move import move  # noqa: E402  same move rules (rename, else reflink + size check)
+from nas_move import move
 
 
 def main(argv):
     dry = "--dry" in argv
     files = [a for a in argv if not a.startswith("--")]
-    log = open(os.path.expanduser(time.strftime("~/t1014/restore-%Y%m%d-%H%M%S.log")), "a", encoding="utf-8")
-    back = skip = 0
-    for jf in files:
-        recs = [json.loads(l) for l in open(jf, encoding="utf-8") if l.strip()]
-        for r in reversed([r for r in recs if r.get("ok")]):
-            if not os.path.exists(r["dst"]) or os.path.lexists(r["src"]):
-                skip += 1
-                log.write(f"skip {r['n']}: dst gone or src taken: {r['src']}\n")
-                continue
-            if not dry:
-                move(r["dst"], r["src"])
-            back += 1
-    msg = f"{'DRY: would restore' if dry else 'restored'} {back}, skipped {skip}"
-    log.write(msg + "\n")
-    print(msg)
+    with open(os.path.expanduser(time.strftime("~/t1014/restore-%Y%m%d-%H%M%S.log")), "a", encoding="utf-8") as log:
+        back = skip = 0
+        for jf in files:
+            with open(jf, encoding="utf-8") as fh:
+                recs = [json.loads(l) for l in fh if l.strip()]
+            for r in reversed([r for r in recs if r.get("ok")]):
+                if not os.path.exists(r["dst"]) or os.path.lexists(r["src"]):
+                    skip += 1
+                    log.write(f"skip {r['n']}: dst gone or src taken: {r['src']}\n")
+                    continue
+                if not dry:
+                    move(r["dst"], r["src"])
+                back += 1
+        msg = f"{'DRY: would restore' if dry else 'restored'} {back}, skipped {skip}"
+        log.write(msg + "\n")
+        print(msg)
 
 
 if __name__ == "__main__":

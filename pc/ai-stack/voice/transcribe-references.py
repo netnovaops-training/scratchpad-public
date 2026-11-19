@@ -36,6 +36,19 @@ import urllib.request
 import uuid
 from pathlib import Path
 
+
+def _http_only(target):
+    """Return target (a URL string or urllib Request) if its scheme is http or https, else raise ValueError.
+
+    urlopen also follows file:// and custom schemes (Bandit B310). Every caller here talks to an
+    http(s) service, so anything else is a mistake or a planted URL. Added 2026-11-19.
+    """
+    url = str(getattr(target, "full_url", target))
+    if not url.lower().startswith(("http://", "https://")):
+        raise ValueError(f"refusing a non-http(s) URL: {url[:80]}")
+    return target
+
+
 VOICES = Path(os.environ.get("VOICES_DIR", "/voices"))
 STT = os.environ.get("STT_URL", "http://stt:8092/v1/audio/transcriptions")
 
@@ -59,7 +72,7 @@ def _multipart(path: Path) -> tuple[bytes, str]:
 def transcribe(path: Path) -> str:
     body, ctype = _multipart(path)
     req = urllib.request.Request(STT, data=body, headers={"Content-Type": ctype})
-    with urllib.request.urlopen(req, timeout=600) as r:
+    with urllib.request.urlopen(_http_only(req), timeout=600) as r:  # nosec B310
         return (json.loads(r.read()).get("text") or "").strip()
 
 

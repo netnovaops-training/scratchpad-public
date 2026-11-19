@@ -34,11 +34,10 @@ import time
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
-
-from PIL import Image, ImageOps
+from urllib.parse import urlparse
 
 import watermark
+from PIL import Image, ImageOps
 
 ROOT = Path(os.environ.get("COLLAGE_ROOT", "/data"))
 PHOTOS = ROOT / "photos"
@@ -102,7 +101,7 @@ def make_thumb(name):
             im = ImageOps.exif_transpose(im)
             im.thumbnail((THUMB_EDGE, THUMB_EDGE), Image.LANCZOS)
             im.convert("RGB").save(dst, "JPEG", quality=86, optimize=True)
-    except Exception:
+    except Exception:  # noqa: BLE001  thumbnail is optional; any decode failure serves the full photo
         # A thumbnail is an optimisation. If one cannot be made the full photo
         # is served instead, which is slower and correct.
         if dst.exists():
@@ -270,7 +269,7 @@ class Handler(BaseHTTPRequestHandler):
                 if max(im.size) > MAX_EDGE:
                     im.thumbnail((MAX_EDGE, MAX_EDGE), Image.LANCZOS)
                 im.save(dst, "JPEG", quality=90, optimize=True)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  any Pillow failure on an upload becomes a 400 for the user
             dst.unlink(missing_ok=True)
             return self._send(400, {"error": f"could not read that image: {e}"})
 
@@ -322,4 +321,5 @@ if __name__ == "__main__":
     if missing:
         print(f"built {len(missing)} thumbnail(s) at start", flush=True)
     print(f"collage on 0.0.0.0:{PORT}, {len(load_order())} photo(s)", flush=True)
-    ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
+    # Listens on every interface inside its own container; only the docker network and Caddy reach it (no published port).
+    ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()  # nosec B104

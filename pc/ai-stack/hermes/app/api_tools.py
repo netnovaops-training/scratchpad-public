@@ -30,6 +30,19 @@ import urllib.request
 
 from .plant_tools import _pass_key
 
+
+def _http_only(target):
+    """Return target (a URL string or urllib Request) if its scheme is http or https, else raise ValueError.
+
+    urlopen also follows file:// and custom schemes (Bandit B310). Every caller here talks to an
+    http(s) service, so anything else is a mistake or a planted URL. Added 2026-11-19.
+    """
+    url = str(getattr(target, "full_url", target))
+    if not url.lower().startswith(("http://", "https://")):
+        raise ValueError(f"refusing a non-http(s) URL: {url[:80]}")
+    return target
+
+
 _TIMEOUT = 20
 _UA = {"User-Agent": "Hermes/1.0 (household assistant)"}
 _SECRET_QS = re.compile(r"(?i)([?&](?:key|token|api[-_]?key)=)[^&\s]+")
@@ -46,7 +59,7 @@ def _call(url: str, headers: dict | None = None, body: dict | None = None) -> di
         hdrs["Content-Type"] = "application/json"
     req = urllib.request.Request(url, data=data, headers=hdrs)
     try:
-        with urllib.request.urlopen(req, timeout=_TIMEOUT) as r:
+        with urllib.request.urlopen(_http_only(req), timeout=_TIMEOUT) as r:  # nosec B310
             return json.loads(r.read().decode())
     except urllib.error.HTTPError as e:
         raise RuntimeError(_safe(f"HTTP {e.code} from {url.split('?')[0]}")) from e

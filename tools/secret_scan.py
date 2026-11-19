@@ -75,8 +75,8 @@ def main() -> int:
             if h:
                 rows.append((s, h))
     lines = ["# Plain-text secrets found (paths and kinds only)", "",
-             "Written by `tools/secret_scan.py`. Values are never shown. Fix: move the value to Proton Pass, "
-             "leave a `pass://` reference.", "", "| File | What | Count |", "|---|---|---|"]
+             ("Written by `tools/secret_scan.py`. Values are never shown. Fix: move the value to Proton Pass, "
+             "leave a `pass://` reference."), "", "| File | What | Count |", "|---|---|---|"]
     for s, h in sorted(rows):
         lines.append(f"| `{s}` | {', '.join(sorted(h))} | {sum(h.values())} |")
     OUT.write_text("\n".join(lines) + "\n", encoding="utf-8")

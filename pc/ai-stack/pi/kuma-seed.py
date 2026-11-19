@@ -131,9 +131,10 @@ def main():
         # Built outside the f-string: a backslash inside an f-string
         # expression is a syntax error before Python 3.12, and this needs
         # to run on whatever the Pi happens to ship.
-        collist = ",".join('"%s"' % c for c in use)
+        collist = ",".join(f'"{c}"' for c in use)
         marks = ",".join("?" * len(use))
-        q = "INSERT INTO monitor (%s) VALUES (%s)" % (collist, marks)
+        # Column names are this script's own dict keys, kept only if they are real columns of the table; every value is a ? parameter.
+        q = f"INSERT INTO monitor ({collist}) VALUES ({marks})"  # nosec B608
         cur.execute(q, list(use.values()))
         note = f"   [skipped: {','.join(sorted(dropped))}]" if dropped else ""
         print(f"    + {name}{note}")

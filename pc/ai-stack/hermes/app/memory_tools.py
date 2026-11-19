@@ -16,7 +16,8 @@ path for "remember this about Casey instead" to be honoured.
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from shared.memory import MemoryStore
 

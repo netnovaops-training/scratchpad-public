@@ -9,7 +9,7 @@ out = os.path.abspath(sys.argv[2])
 bad = [i.filename for i in z.infolist()
        if not os.path.abspath(os.path.join(out, i.filename)).startswith(out + os.sep)
        and os.path.abspath(os.path.join(out, i.filename)) != out]
-print("entries %d, unsafe names %d" % (len(z.infolist()), len(bad)))
+print(f"entries {len(z.infolist())}, unsafe names {len(bad)}")
 if not bad:
     z.extractall(out)
     tops = sorted({i.filename.replace("\\", "/").split("/")[0] for i in z.infolist()})

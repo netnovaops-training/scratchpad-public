@@ -1,5 +1,7 @@
 """Insert plain-English comments above PowerShell functions that have none (comment-only)."""
-import re, sys
+import re
+import sys
+from pathlib import Path
 
 C = {
  "Note": "An indented line of plain text.",
@@ -28,12 +30,12 @@ C = {
  "Show-Page": "Show page number n and set the Back/Next buttons for it.",
 }
 for path in sys.argv[1:]:
-    lines = open(path, encoding="utf-8").read().split("\n")
+    lines = Path(path).read_text(encoding="utf-8").split("\n")
     out, added = [], 0
     for line in lines:
         m = re.match(r"^function ([A-Za-z-]+)", line)
         if m and m.group(1) in C and not (out and out[-1].lstrip().startswith("#")):
             out.append("# " + C[m.group(1)]); added += 1
         out.append(line)
-    open(path, "w", encoding="utf-8", newline="").write("\n".join(out))
+    Path(path).write_text("\n".join(out), encoding="utf-8", newline="")
     print(path, "comments added:", added)

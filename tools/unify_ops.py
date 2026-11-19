@@ -18,7 +18,6 @@ OUTCOME 2026-11-17: written for T1014 phase 2.
 """
 import csv
 import json
-import os
 from pathlib import Path
 
 from unify_photos import WORK, to_nas
@@ -79,8 +78,7 @@ def build(rows):
 def write(ops, path):
     """Numbered JSON lines."""
     with open(path, "w", encoding="utf-8", newline="\n") as f:
-        for i, op in enumerate(ops, 1):
-            f.write(json.dumps(dict(op, n=i), ensure_ascii=False) + "\n")
+        f.writelines(json.dumps(dict(op, n=i), ensure_ascii=False) + "\n" for i, op in enumerate(ops, 1))
 
 
 def main():

@@ -66,16 +66,14 @@ from __future__ import annotations
 
 import json
 import pathlib
-import shutil
 import subprocess
 import sys
 import textwrap
 
-from PIL import Image, ImageDraw, ImageFont
-
 import intro_fx
 import mapfilm
 import portrait_act
+from PIL import Image, ImageDraw, ImageFont
 
 sys.stdout.reconfigure(encoding="utf-8", newline="\n")
 
@@ -110,7 +108,7 @@ RACK = (28, 31, 36)
 
 
 def run(args):
-    r = subprocess.run(args, capture_output=True)
+    r = subprocess.run(args, capture_output=True, check=False)
     return r.returncode, (r.stdout or b"").decode("utf-8", "replace"), \
         (r.stderr or b"").decode("utf-8", "replace")
 
@@ -124,7 +122,7 @@ def ff(args, tool="ffmpeg", mount_imports=False):
 
 
 def duration(rel):
-    code, out, err = ff(["-v", "error", "-show_entries", "format=duration",
+    _code, out, err = ff(["-v", "error", "-show_entries", "format=duration",
                          "-of", "csv=p=0", f"/in/{rel}"], tool="ffprobe")
     try:
         return float(out.strip())
@@ -134,7 +132,7 @@ def duration(rel):
 
 def duration_of(path):
     """Seconds of a file in OUT, for the length check at the end."""
-    code, out, err = ff(["-v", "error", "-show_entries", "format=duration",
+    _code, out, _err = ff(["-v", "error", "-show_entries", "format=duration",
                          "-of", "csv=p=0", f"/out/{path.name}"], tool="ffprobe")
     try:
         return float(out.strip())
@@ -180,7 +178,7 @@ def words_card(path, w, h, text):
 
 def photo_clip(src, index, secs, w, h, zoom_in):
     """One family photograph: blurred fill behind, the print in front."""
-    frames = max(2, int(round(secs * FPS)))
+    frames = max(2, round(secs * FPS))
     with Image.open(AUDIO / src) as im:
         iw, ih = im.size
 
@@ -242,7 +240,7 @@ def pipe_encoder(w, h, out_name):
     thousand frames in. The traceback pointed at the write and said
     nothing about the cause. A file cannot fill.
     """
-    log = open(OUT / "encode.log", "wb")
+    log = open(OUT / "encode.log", "wb")  # noqa: SIM115  returned to the caller; finish_encoder() closes it
     proc = subprocess.Popen(
         ["docker", "run", "--rm", "-i", "-v", f"{OUT}:/out",
          "--entrypoint", "ffmpeg", IMAGE,
@@ -266,7 +264,7 @@ def finish_encoder(proc, log, what):
 
 
 def has_audio(path_in_container, mount_imports=False):
-    code, out, _ = ff(["-v", "error", "-select_streams", "a",
+    _code, out, _ = ff(["-v", "error", "-select_streams", "a",
                        "-show_entries", "stream=index", "-of", "csv=p=0",
                        path_in_container], tool="ffprobe",
                       mount_imports=mount_imports)
@@ -357,7 +355,7 @@ def render_portrait(w, h, index):
     """
     act = portrait_act.PortraitAct(SITE, w, h)
     proc, log = pipe_encoder(w, h, f"/out/{CLIP}{index:03d}.mp4")
-    for i in range(int(round(act.total * FPS))):
+    for i in range(round(act.total * FPS)):
         proc.stdin.write(act.frame(i / FPS).convert("RGB").tobytes())
     finish_encoder(proc, log, "the portrait card")
     print(f"  portrait card: {act.total:.0f}s, silent")
@@ -374,7 +372,7 @@ def render_insignia(w, h, index):
     """
     intro = intro_fx.Intro(w, h)
     proc, log = pipe_encoder(w, h, f"/out/{CLIP}{index:03d}.mp4")
-    n = int(round(intro.total * FPS))
+    n = round(intro.total * FPS)
     for i in range(n):
         proc.stdin.write(intro.frame(i / FPS).convert("RGB").tobytes())
     finish_encoder(proc, log, "the insignia")
@@ -428,7 +426,7 @@ def render_journey(w, h, index):
     written = 0
     for (name, place), length in zip(legs, secs):
         target = mapfilm.cam_for(film, place or None)
-        frames = max(1, int(round(length * FPS)))
+        frames = max(1, round(length * FPS))
         fly = min(int(FLIGHT * FPS), frames // 2) if place else 0
         start = cam
         if place:

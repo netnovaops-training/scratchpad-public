@@ -1,3 +1,8 @@
+# The filebrowser service block, kept as a valid compose file of its own (the CI compose check
+# rejected the bare block: "additional properties 'filebrowser' not allowed"). The live copy is in
+# ../docker-compose.yml; paste only the indented service below `services:` when changing it.
+# Wrapped 2026-11-19; checked with `docker compose -f files/compose-block.yml config -q`.
+services:
   # ---------------------------------------------------------------------------
   #  filebrowser -- the way things get ONTO the shelves.
   #
@@ -69,3 +74,6 @@
     logging:
       driver: json-file
       options: { max-size: "10m", max-file: "3" }
+
+volumes:
+  filebrowser_data:

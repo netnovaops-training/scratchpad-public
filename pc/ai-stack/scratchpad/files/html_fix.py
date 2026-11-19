@@ -1,12 +1,14 @@
-import io
+from pathlib import Path
+
+
 def edit(p, pairs):
-    s = io.open(p, encoding="utf-8", newline="").read()
+    s = Path(p).read_bytes().decode("utf-8")
     nl = "\r\n" if "\r\n" in s else "\n"
     for a, b in pairs:
         a2, b2 = a.replace("\n", nl), b.replace("\n", nl)
         assert s.count(a2) == 1, (p, a[:80], s.count(a2))
         s = s.replace(a2, b2)
-    io.open(p, "w", encoding="utf-8", newline="").write(s)
+    Path(p).write_text(s, encoding="utf-8", newline="")
 
 edit("00-READ-ME-FIRST.html", [
 ("""        <strong>local IP address</strong> (on that computer type <code>hostname -I</code>; it looks like <code>192.168.1.50</code>)
@@ -44,6 +46,6 @@ edit("HANDOVER-SUMMARY.md", [("- **Guides:** 28 in English and 26 in Korean, plu
      "- **Guides:** 30 in English and 28 in Korean, plus 12 project and automation guides; a\n  beginner's bash walkthrough; 46 pictures taken from the real program,")])
 
 # n8n: the menu's own n8n part is the main way.
-s = io.open("START-HERE/n8n/N1-install-and-first-email.md", encoding="utf-8").read()
+s = Path("START-HERE/n8n/N1-install-and-first-email.md").read_text(encoding="utf-8")
 print(s[:900])
 print("ok")

@@ -42,7 +42,7 @@ FALLBACK_URL = "https://watch.home.example.net/dashboard"
 
 
 def sh(*a):
-    r = subprocess.run(a, capture_output=True, text=True)
+    r = subprocess.run(a, capture_output=True, text=True, check=False)
     if r.returncode:
         sys.exit(f"FAILED {' '.join(a)}\n{r.stderr}")
     return r.stdout.strip()
@@ -55,7 +55,7 @@ tmp = tempfile.mkdtemp()
 local = os.path.join(tmp, "kuma.db")
 for suffix in ("", "-wal", "-shm"):
     subprocess.run(["docker", "cp", f"{CONTAINER}:{DB}{suffix}", local + suffix],
-                   capture_output=True)
+                   capture_output=True, check=False)
 shutil.copy2(local, local + f".bak-{time.strftime('%H%M%S')}")
 
 con = sqlite3.connect(local)
@@ -89,8 +89,9 @@ for name, url, accepted, desc in SERVICES:
         "weight": 1500,
     }
     use = {k: v for k, v in vals.items() if k in cols}
-    cur.execute("INSERT INTO monitor (%s) VALUES (%s)" % (
-        ",".join('"%s"' % k for k in use), ",".join("?" * len(use))),
+    # Column names are this script's own dict keys, kept only if they are real columns of the table; every value is a ? parameter.
+    cur.execute("INSERT INTO monitor ({}) VALUES ({})".format(  # nosec B608
+        ",".join(f'"{k}"' for k in use), ",".join("?" * len(use))),
         list(use.values()))
     mid = cur.lastrowid
     if nid:
@@ -106,7 +107,7 @@ print("=== copying back and restarting ===")
 sh("docker", "cp", local, f"{CONTAINER}:{DB}")
 for suffix in ("-wal", "-shm"):
     subprocess.run(["docker", "exec", CONTAINER, "rm", "-f", DB + suffix],
-                   capture_output=True)
+                   capture_output=True, check=False)
 sh("docker", "start", CONTAINER)
 print("  started")
 shutil.rmtree(tmp, ignore_errors=True)

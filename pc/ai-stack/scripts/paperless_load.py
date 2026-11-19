@@ -24,6 +24,19 @@ import urllib.request
 import uuid
 from pathlib import Path
 
+
+def _http_only(target):
+    """Return target (a URL string or urllib Request) if its scheme is http or https, else raise ValueError.
+
+    urlopen also follows file:// and custom schemes (Bandit B310). Every caller here talks to an
+    http(s) service, so anything else is a mistake or a planted URL. Added 2026-11-19.
+    """
+    url = str(getattr(target, "full_url", target))
+    if not url.lower().startswith(("http://", "https://")):
+        raise ValueError(f"refusing a non-http(s) URL: {url[:80]}")
+    return target
+
+
 BASE = os.environ.get("PAPERLESS_BASE", "http://192.168.1.86:8000")
 VAULT = "API keys"
 ITEM = "Paperless Hermes token (hermes-docs)"
@@ -36,6 +49,7 @@ def token() -> str:
     r = subprocess.run(
         ["pass-cli", "item", "view", "--vault-name", VAULT, "--item-title", ITEM, "--field", "password"],
         env=env, capture_output=True, text=True, timeout=20,
+        check=False,
     )
     t = r.stdout.strip()
     if r.returncode != 0 or not t:
@@ -50,7 +64,7 @@ def api(tok: str, path: str, data: bytes | None = None, ctype: str | None = None
         headers["Content-Type"] = ctype
     req = urllib.request.Request(BASE + path, data=data, headers=headers, method=method)
     try:
-        with urllib.request.urlopen(req, timeout=60) as resp:
+        with urllib.request.urlopen(_http_only(req), timeout=60) as resp:  # nosec B310
             body = resp.read().decode() or "{}"
             try:
                 return json.loads(body)

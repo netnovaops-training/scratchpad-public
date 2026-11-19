@@ -23,6 +23,19 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+
+def _http_only(target):
+    """Return target (a URL string or urllib Request) if its scheme is http or https, else raise ValueError.
+
+    urlopen also follows file:// and custom schemes (Bandit B310). Every caller here talks to an
+    http(s) service, so anything else is a mistake or a planted URL. Added 2026-11-19.
+    """
+    url = str(getattr(target, "full_url", target))
+    if not url.lower().startswith(("http://", "https://")):
+        raise ValueError(f"refusing a non-http(s) URL: {url[:80]}")
+    return target
+
+
 # Fixed 2026-10-28 night: the old domain (plants.sc.egov.usda.gov/api/plants/search)
 # 404'd every time. This is the real one -- same one the plant-v2 backfill
 # pipeline already uses successfully (pipeline/lib/apis.py).
@@ -43,14 +56,17 @@ def _ensure_logged_in(env: dict) -> None:
     2026-10-28 night that a Windows-created session is not readable by the
     Linux binary, even in matching 'fs' mode). Does nothing if already
     logged in or if no PAT file is mounted."""
-    check = subprocess.run([_PASS_CLI, "info"], env=env, capture_output=True, text=True, timeout=15)
+    # argv list, no shell; env is our own copy of os.environ (Semgrep's tainted-env rule is a false positive)
+    # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-tainted-env-args.dangerous-subprocess-use-tainted-env-args
+    check = subprocess.run([_PASS_CLI, "info"], env=env, capture_output=True, text=True, timeout=15, check=False)
     if check.returncode == 0:
         return
     if not _PAT_FILE or not os.path.isfile(_PAT_FILE):
         return  # nothing we can do; the real error surfaces from the caller
     with open(_PAT_FILE, "r", encoding="utf-8") as f:
         token = f.read().strip()
-    subprocess.run([_PASS_CLI, "login", "--pat", token], env=env, capture_output=True, text=True, timeout=20)
+    # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-tainted-env-args.dangerous-subprocess-use-tainted-env-args
+    subprocess.run([_PASS_CLI, "login", "--pat", token], env=env, capture_output=True, text=True, timeout=20, check=False)
 
 
 def _pass_key(item_title: str, field: str = "API Key") -> str:
@@ -69,6 +85,7 @@ def _pass_key(item_title: str, field: str = "API Key") -> str:
              "--field", field],
             env=env,
             capture_output=True, text=True, timeout=15,
+            check=False,
         )
     except FileNotFoundError:
         raise RuntimeError("pass-cli not found in the container. Rebuild Hermes.")
@@ -103,7 +120,7 @@ def _redact_url(url: str) -> str:
 def _get(url: str) -> dict | list:
     req = urllib.request.Request(url, headers={"User-Agent": "Hermes/1.0"})
     try:
-        with urllib.request.urlopen(req, timeout=_TIMEOUT) as resp:
+        with urllib.request.urlopen(_http_only(req), timeout=_TIMEOUT) as resp:  # nosec B310
             return json.loads(resp.read().decode())
     except urllib.error.HTTPError as e:
         raise RuntimeError(f"HTTP {e.code} from {_redact_url(url)}") from e

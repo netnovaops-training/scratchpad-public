@@ -45,6 +45,19 @@ import urllib.request
 from datetime import date
 from pathlib import Path
 
+
+def _http_only(target):
+    """Return target (a URL string or urllib Request) if its scheme is http or https, else raise ValueError.
+
+    urlopen also follows file:// and custom schemes (Bandit B310). Every caller here talks to an
+    http(s) service, so anything else is a mistake or a planted URL. Added 2026-11-19.
+    """
+    url = str(getattr(target, "full_url", target))
+    if not url.lower().startswith(("http://", "https://")):
+        raise ValueError(f"refusing a non-http(s) URL: {url[:80]}")
+    return target
+
+
 try:
     import yaml
 except ImportError:
@@ -230,7 +243,7 @@ def from_url(url: str) -> list[dict]:
     """
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-        with urllib.request.urlopen(req, timeout=15) as r:
+        with urllib.request.urlopen(_http_only(req), timeout=15) as r:  # nosec B310
             final = r.geturl()
     except Exception as e:  # noqa: BLE001
         print(f"  couldn't follow that link: {e}")
@@ -303,7 +316,7 @@ def from_places_api(query: str, api_key: str, limit: int = 20, rich: bool = True
         },
     )
     try:
-        with urllib.request.urlopen(req, timeout=30) as r:
+        with urllib.request.urlopen(_http_only(req), timeout=30) as r:  # nosec B310
             data = json.loads(r.read())
     except urllib.error.HTTPError as e:
         detail = e.read().decode(errors="replace")[:400]

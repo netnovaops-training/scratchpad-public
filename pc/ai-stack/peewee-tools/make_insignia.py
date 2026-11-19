@@ -108,23 +108,22 @@ def main():
         return
 
     print(f"  {name or 'no wordmark'} · {pal_name} · {seconds:.0f}s · {w}x{h}")
-    log = open(OUT / "insignia.log", "wb")
-    proc = subprocess.Popen(
-        ["docker", "run", "--rm", "-i", "-v", f"{OUT}:/out",
-         "--entrypoint", "ffmpeg", IMAGE,
-         "-y", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{w}x{h}",
-         "-r", str(FPS), "-i", "-",
-         "-c:v", "libx264", "-preset", "slow", "-crf", "18",
-         "-profile:v", "high", "-pix_fmt", "yuv420p",
-         "-movflags", "+faststart", f"/out/{out_name}"],
-        stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=log)
+    with open(OUT / "insignia.log", "wb") as log:  # closed before the log is read or deleted below
+        proc = subprocess.Popen(
+            ["docker", "run", "--rm", "-i", "-v", f"{OUT}:/out",
+             "--entrypoint", "ffmpeg", IMAGE,
+             "-y", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{w}x{h}",
+             "-r", str(FPS), "-i", "-",
+             "-c:v", "libx264", "-preset", "slow", "-crf", "18",
+             "-profile:v", "high", "-pix_fmt", "yuv420p",
+             "-movflags", "+faststart", f"/out/{out_name}"],
+            stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=log)
 
-    frames = int(round(seconds * FPS))
-    for i in range(frames):
-        proc.stdin.write(intro.frame(i / FPS).convert("RGB").tobytes())
-    proc.stdin.close()
-    code = proc.wait()
-    log.close()
+        frames = round(seconds * FPS)
+        for i in range(frames):
+            proc.stdin.write(intro.frame(i / FPS).convert("RGB").tobytes())
+        proc.stdin.close()
+        code = proc.wait()
     if code != 0:
         tail = (OUT / "insignia.log").read_bytes()[-1200:].decode("utf-8", "replace")
         sys.exit("ffmpeg failed:\n" + tail)
