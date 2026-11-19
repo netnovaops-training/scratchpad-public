@@ -3,7 +3,7 @@
 #
 # NOT on the public path. Caddy asks the Rust admin whether you are signed in
 # before proxying anything here, so this image never faces the internet.
-FROM python:3.15-slim-trixie@sha256:533b0b2f9b5d46fd097091cf826f27902f1d6c3bca714b6dc74551356aa97a51
+FROM python:3.15-slim-trixie@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928
 
 # curl for the healthcheck. slim ships neither curl nor wget.
 RUN apt-get update \
