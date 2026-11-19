@@ -59,7 +59,11 @@ jobs:
             "https://repo1.maven.org/maven2/io/gitlab/arturbosch/detekt/detekt-cli/${DETEKT_VERSION}/detekt-cli-${DETEKT_VERSION}-all.jar"
           echo "${DETEKT_SHA256}  detekt-cli.jar" | sha256sum --check --strict -
           rc=0
-          java -jar detekt-cli.jar --input . --build-upon-default-config --report sarif:detekt.sarif || rc=$?
+          # pc/apps/detekt.yml (2026-11-19): MagicNumber ignores for themes, HTTP codes, timeouts, Compose UI.
+          # Same as the private Scratchpad mobile.yml; public_copy.py does not copy .github, so set here too.
+          cfg=()
+          [ -f pc/apps/detekt.yml ] && cfg=(--config pc/apps/detekt.yml)
+          java -jar detekt-cli.jar --input . --build-upon-default-config "${cfg[@]}" --report sarif:detekt.sarif || rc=$?
           echo "detekt exit code: $rc (2 = findings, which is fine here)"
           [ "$rc" = 0 ] || [ "$rc" = 2 ] || exit 1
       - name: Send the findings to the Security tab (category detekt)
