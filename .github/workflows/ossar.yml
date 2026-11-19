@@ -46,7 +46,10 @@ jobs:
 
       # Run open source static analysis tools
     - name: Run OSSAR
-      uses: github/ossar-action@5871e59f2d6785d1290e82568cbe9e236814adcb # v1.1.0 (same major as before)
+      # Pinned to the head of the action's v1 BRANCH (what @v1 resolved to). OUTCOME 2026-11-19: the v1.1.0
+      # tag (5871e59) needs .NET Core 3.1.2, which the windows runner no longer has: every run failed with
+      # app-launch-failed. The v1 branch ran fine before the pin.
+      uses: github/ossar-action@786a16a90ba92b4ae6228fe7382fb16ef5c51000 # v1 branch
       id: ossar
 
       # Upload results to the Security tab
