@@ -35,7 +35,7 @@ jobs:
     # v2.7.0 (same commit code-health pins). OUTCOME 2026-11-19: v1.7.1 uses upload-artifact v3, which
     # GitHub now refuses ("deprecated version of actions/upload-artifact"), so every PR scan failed in 3 s.
     # v2 dropped --skip-git (git roots are not scanned by default any more).
-    uses: "google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@b1d267aea5211fa648d9d442fa64b90dbdcbdd36" # v2.7.0
+    uses: "google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@32d3cd482bdadfb38b186c0ad1b031902d55d932" # v2.7.1
     with:
       # 2026-11-19: the scheduled/push scan reports to the Security tab and no longer turns red on known
       # vulnerabilities (it failed every run on pc/ai-stack/rust/Cargo.lock). The PR scan below still fails
@@ -46,7 +46,7 @@ jobs:
         ./
   scan-pr:
     if: ${{ github.event_name == 'pull_request' || github.event_name == 'merge_group' }}
-    uses: "google/osv-scanner-action/.github/workflows/osv-scanner-reusable-pr.yml@b1d267aea5211fa648d9d442fa64b90dbdcbdd36" # v2.7.0
+    uses: "google/osv-scanner-action/.github/workflows/osv-scanner-reusable-pr.yml@32d3cd482bdadfb38b186c0ad1b031902d55d932" # v2.7.1
     with:
       scan-args: |-
         -r
