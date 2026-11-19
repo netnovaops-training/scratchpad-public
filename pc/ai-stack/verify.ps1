@@ -66,8 +66,9 @@ $expected = @{
 foreach ($k in $expected.Keys | Sort-Object) {
     if ($running -contains $k) { Ok "$k" } else { Bad "$k is not running" $expected[$k] }
 }
-foreach ($k in @("telephony","stt","tunnel")) {
-    if ($running -contains $k) { Ok "$k" } else { Warn "$k not running" "only needed for the phone line" }
+# telephony and tunnel removed 2026-11-19 (archived in D:\ai-stack-archive\outdated\telephony\).
+foreach ($k in @("stt")) {
+    if ($running -contains $k) { Ok "$k" } else { Warn "$k not running" "speech-to-text (runs on the NUC)" }
 }
 foreach ($k in @("caddy","landing","casey","mom","teabook","watchtower")) {
     if ($running -contains $k) { Ok "$k" } else { Warn "$k not running" "only needed for the websites" }
