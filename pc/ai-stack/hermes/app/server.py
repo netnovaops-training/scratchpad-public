@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import traceback
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -168,7 +169,10 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         surface = data.get("session") or "app"
-        if not isinstance(surface, str) or len(surface) > 40:
+        # 2026-11-19: the session name becomes a transcript folder name, so anything that is not a plain
+        # name (slashes, "..", leading dot) falls back to "app" instead of reaching the filesystem.
+        if (not isinstance(surface, str) or len(surface) > 40
+                or not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9._-]*", surface)):
             surface = "app"
 
         agent = _agent_for(person.email, person.display, surface)

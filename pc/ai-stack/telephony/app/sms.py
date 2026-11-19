@@ -125,7 +125,10 @@ def handle(
         return _reply(thanks_text(score, review_link=review_link, tip_link=tip_link))
 
     # --- leave a note --------------------------------------------------------
-    m = re.match(r"^\s*NOTE\b[\s:,-]*(.+)$", text, re.IGNORECASE | re.DOTALL)
+    # (\S.*) not (.+): 2026-11-19 CodeQL py/polynomial-redos, [\s:,-]* and .+ both matched runs of
+    # whitespace, so a long run of tabs backtracked badly. Same note after .strip() (checked on 6 sample
+    # texts); a bare "NOTE   " no longer saves an empty note.
+    m = re.match(r"^\s*NOTE\b[\s:,-]*(\S.*)$", text, re.IGNORECASE | re.DOTALL)
     if m:
         note = m.group(1).strip()
         if not client:

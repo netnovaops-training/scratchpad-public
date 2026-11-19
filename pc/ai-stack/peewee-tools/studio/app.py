@@ -172,6 +172,7 @@ def fetch_images(url, want=14, min_side=220):
                 blob = r.read(8_000_000)
         except Exception:  # noqa: BLE001, S112  scraped image: any fetch failure skips that image
             continue
+        # nosemgrep: python.lang.security.insecure-hash-algorithms.insecure-hash-algorithm-sha1
         h = _hashlib.sha1(blob, usedforsecurity=False).hexdigest()  # a duplicate check, not security
         if h in seen_bytes:
             continue
@@ -219,7 +220,7 @@ def stage_images(slug, urls, want=14):
 
 def adopt_image(slug, path):
     """Move one staged picture into the person's folder as the next photo."""
-    d = os.path.join(PEOPLE, slug)
+    d = person_dir(slug)
     os.makedirs(d, exist_ok=True)
     n = 1
     while os.path.exists(os.path.join(d, f"photo-{n}.jpg")):
@@ -374,6 +375,20 @@ def slugify(name):
     return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
 
 
+def person_dir(slug):
+    """people/<slug>, refused unless it is a real sub-folder of PEOPLE.
+
+    2026-11-19 (CodeQL py/path-injection): slugs come from slugify() or folder listings, so they were
+    already plain; an empty slug, though, meant PEOPLE itself. The resolved path must now sit strictly
+    inside PEOPLE, so a bad slug stops here instead of touching the wrong folder.
+    """
+    root = os.path.realpath(PEOPLE)
+    d = os.path.realpath(os.path.join(root, slug))
+    if not slug or not d.startswith(root + os.sep):
+        raise ValueError(f"not a person folder: {slug!r}")
+    return d
+
+
 def load(slug):
     with open(os.path.join(PEOPLE, slug, "person.json"), encoding="utf-8") as f:
         return json.load(f)
@@ -386,7 +401,7 @@ def save(slug, data):
 
 
 def files_of(slug, kind):
-    d = os.path.join(PEOPLE, slug)
+    d = person_dir(slug)
     if kind == "photos":
         return sorted(f for f in os.listdir(d) if re.fullmatch(r"photo-\d+\.jpg", f))
     if kind == "stories":
@@ -442,7 +457,7 @@ with tab_edit:
                         format_func=lambda s: load(s).get("name", s))
     if slug:
         p = load(slug)
-        d = os.path.join(PEOPLE, slug)
+        d = person_dir(slug)
 
         st.subheader("Who they are")
         c1, c2 = st.columns(2)
@@ -575,7 +590,7 @@ with tab_new:
         "nothing published)", value=True, key="pull-pics")
     if st.button("Fetch links and draft the tellings") and name.strip() and urls_raw.strip():
         slug = slugify(name)
-        d = os.path.join(PEOPLE, slug)
+        d = person_dir(slug)
         urls = [u.strip() for u in urls_raw.splitlines() if u.strip()][:5]
         sources = []
         prog = st.progress(0.0, "reading the pages...")
@@ -630,7 +645,7 @@ with tab_new:
 
     if st.button("Create", type="primary") and name.strip():
         slug = slugify(name)
-        d = os.path.join(PEOPLE, slug)
+        d = person_dir(slug)
         if os.path.exists(d):
             st.error("that folder already exists")
         else:
@@ -852,7 +867,7 @@ with tab_voice:
         else:
             want = "handoff-" if rv_kind.startswith("handoffs") else "story-"
             for slug in sorted(os.listdir(PEOPLE)):
-                d = os.path.join(PEOPLE, slug)
+                d = person_dir(slug)
                 if not os.path.isdir(d):
                     continue
                 for f in sorted(os.listdir(d)):
@@ -1139,7 +1154,7 @@ with tab_roster:
     def roster_read():
         out = []
         for slug in sorted(os.listdir(PEOPLE)):
-            d = os.path.join(PEOPLE, slug)
+            d = person_dir(slug)
             pj = os.path.join(d, "person.json")
             if not os.path.isfile(pj):
                 continue
@@ -1240,7 +1255,7 @@ with tab_roster:
         elif os.path.exists(os.path.join(PEOPLE, slug)):
             st.error(f"people/{slug}/ already exists.")
         else:
-            d = os.path.join(PEOPLE, slug)
+            d = person_dir(slug)
             os.makedirs(d)
             with open(os.path.join(d, "person.json"), "w",
                       encoding="utf-8", newline="\n") as f:

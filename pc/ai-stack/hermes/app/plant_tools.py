@@ -56,6 +56,8 @@ def _ensure_logged_in(env: dict) -> None:
     2026-10-28 night that a Windows-created session is not readable by the
     Linux binary, even in matching 'fs' mode). Does nothing if already
     logged in or if no PAT file is mounted."""
+    # argv list, no shell; env is our own copy of os.environ (Semgrep's tainted-env rule is a false positive)
+    # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-tainted-env-args.dangerous-subprocess-use-tainted-env-args
     check = subprocess.run([_PASS_CLI, "info"], env=env, capture_output=True, text=True, timeout=15, check=False)
     if check.returncode == 0:
         return
@@ -63,6 +65,7 @@ def _ensure_logged_in(env: dict) -> None:
         return  # nothing we can do; the real error surfaces from the caller
     with open(_PAT_FILE, "r", encoding="utf-8") as f:
         token = f.read().strip()
+    # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-tainted-env-args.dangerous-subprocess-use-tainted-env-args
     subprocess.run([_PASS_CLI, "login", "--pat", token], env=env, capture_output=True, text=True, timeout=20, check=False)
 
 
