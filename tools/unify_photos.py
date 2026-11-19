@@ -177,12 +177,13 @@ def nas_hashes():
     """{windows path: sha256} from the NAS run (unify\\nas-sha.jsonl), empty if not copied back yet."""
     out = {}
     if NAS_SHA.exists():
-        for line in open(NAS_SHA, encoding="utf-8"):
-            try:
-                d = json.loads(line)
-            except ValueError:
-                continue
-            out[from_nas(d["p"])] = d["h"]
+        with open(NAS_SHA, encoding="utf-8") as fh:
+            for line in fh:
+                try:
+                    d = json.loads(line)
+                except ValueError:
+                    continue
+                out[from_nas(d["p"])] = d["h"]
     return out
 
 
@@ -244,8 +245,7 @@ def stage_hash(rows):
     todo = collisions(rows)
     nas = [r for r in todo if r["src"] in ROOTS]
     with open(NAS_LIST, "w", encoding="utf-8", newline="\n") as f:
-        for r in nas:
-            f.write(json.dumps(to_nas(r["path"])) + "\n")
+        f.writelines(json.dumps(to_nas(r["path"])) + "\n" for r in nas)
     log(f"hash: {len(nas)} NAS files ({sum(r['size'] for r in nas) / 1e9:.1f} GB) -> {NAS_LIST}; run nas_sha.py on the NAS")
     cache = load_cache(HASHES, ["path", "size", "mtime"], "sha256")
     local = [r for r in todo if r["src"] == "M" and (r["path"], str(r["size"]), str(r["mtime"])) not in cache]
@@ -295,9 +295,7 @@ def stage_meta(rows):
     need = []
     for r in m:
         stem = Path(r["path"]).stem
-        if r["kind"] == "raw" or (r["ext"] in pm.EXIF_READABLE and pm.shot_key(stem) in raw_keys):
-            need.append(r)
-        elif not in_layout(r) and not pm.name_date(stem):
+        if r["kind"] == "raw" or (r["ext"] in pm.EXIF_READABLE and pm.shot_key(stem) in raw_keys) or not in_layout(r) and not pm.name_date(stem):
             need.append(r)
     cache = load_cache(META, ["path", "size", "mtime"], "date")
     todo = [r for r in need if (r["path"], str(r["size"]), str(r["mtime"])) not in cache]

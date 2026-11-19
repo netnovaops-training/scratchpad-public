@@ -47,7 +47,7 @@ import logging
 import os
 import re
 import sqlite3
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 log = logging.getLogger("telephony.consent")
@@ -96,11 +96,11 @@ DISCLOSURE = (
 _YES = re.compile(
     r"\b(yes|yeah|yep|yup|sure|ok|okay|fine|alright|all right|go ahead|"
     r"that'?s fine|i don'?t mind|no problem|of course|please do)\b",
-    re.I,
+    re.IGNORECASE,
 )
 _NO = re.compile(
     r"\b(no|nope|don'?t|do not|rather not|prefer not|stop|private)\b",
-    re.I,
+    re.IGNORECASE,
 )
 
 # Phrases that contain a refusal word but mean the opposite. "I don't mind" is
@@ -109,12 +109,12 @@ _NO = re.compile(
 _YES_DESPITE_NO = re.compile(
     r"\b(don'?t mind|do not mind|don'?t care|no problem|no worries|"
     r"why not|can'?t see why not|no objection)\b",
-    re.I,
+    re.IGNORECASE,
 )
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return datetime.now(UTC).isoformat(timespec="seconds")
 
 
 class ConsentStore:
@@ -159,7 +159,7 @@ class ConsentStore:
 
     def purge(self, days: int | None = None) -> int:
         """Consent records outlive transcripts -- they're the proof you asked."""
-        cutoff = (datetime.now(timezone.utc) - timedelta(days=days or 365 * 2)).isoformat()
+        cutoff = (datetime.now(UTC) - timedelta(days=days or 365 * 2)).isoformat()
         with self._db() as db:
             cur = db.execute("DELETE FROM consent WHERE created_at < ?", (cutoff,))
             return cur.rowcount
@@ -219,7 +219,7 @@ def purge_transcripts(root: str | Path, days: int | None = None) -> int:
     consent question, no reason to expire them.
     """
     days = days if days is not None else RETAIN_DAYS
-    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    cutoff = datetime.now(UTC) - timedelta(days=days)
     base = Path(root) / "phone"
     if not base.exists():
         return 0
@@ -229,7 +229,7 @@ def purge_transcripts(root: str | Path, days: int | None = None) -> int:
         if not day_dir.is_dir():
             continue
         try:
-            day = datetime.strptime(day_dir.name, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+            day = datetime.strptime(day_dir.name, "%Y-%m-%d").replace(tzinfo=UTC)
         except ValueError:
             continue
         if day >= cutoff:
@@ -260,7 +260,7 @@ def purge_transcripts(root: str | Path, days: int | None = None) -> int:
 
 _SSN  = re.compile(r"\b\d{3}[- ]?\d{2}[- ]?\d{4}\b")
 _CARD = re.compile(r"\b(?:\d[ -]?){13,19}\b")
-_ACCT = re.compile(r"\b(?:account|routing|policy|member|medicare)\s*(?:number|#|no\.?)?\s*[:# ]\s*[\w-]{5,}\b", re.I)
+_ACCT = re.compile(r"\b(?:account|routing|policy|member|medicare)\s*(?:number|#|no\.?)?\s*[:# ]\s*[\w-]{5,}\b", re.IGNORECASE)
 
 
 def redact(text: str) -> str:

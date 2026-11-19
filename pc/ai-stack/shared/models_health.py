@@ -91,9 +91,7 @@ def _matches(backing: str, installed: set[str]) -> bool:
         return True
     if ":" not in backing and f"{backing}:latest" in installed:
         return True
-    if backing.endswith(":latest") and backing[: -len(":latest")] in installed:
-        return True
-    return False
+    return bool(backing.endswith(":latest") and backing[:-len(":latest")] in installed)
 
 
 def reconcile(routes: list[dict[str, str]], installed: set[str]) -> list[dict[str, Any]]:

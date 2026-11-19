@@ -1,11 +1,32 @@
 #!/usr/bin/env python3
 # Test helper: checks the test wiki at http://127.0.0.1:13000 against the seed.
 # Usage: python verify.py SEED.json.gz ADMIN_PW_FILE
-import gzip, html, json, random, re, sys, urllib.request
+import gzip
+import html
+import json
+import random
+import re
+import sys
+import urllib.request
+from pathlib import Path
+
+
+def _http_only(target):
+    """Return target (a URL string or urllib Request) if its scheme is http or https, else raise ValueError.
+
+    urlopen also follows file:// and custom schemes (Bandit B310). Every caller here talks to an
+    http(s) service, so anything else is a mistake or a planted URL. Added 2026-11-19.
+    """
+    url = str(getattr(target, "full_url", target))
+    if not url.lower().startswith(("http://", "https://")):
+        raise ValueError(f"refusing a non-http(s) URL: {url[:80]}")
+    return target
+
 
 BASE = "http://127.0.0.1:13000"
-seed = json.load(gzip.open(sys.argv[1], "rt", encoding="utf-8"))
-pw = open(sys.argv[2], encoding="utf-8").read().strip()
+with gzip.open(sys.argv[1], "rt", encoding="utf-8") as fh:
+    seed = json.load(fh)
+pw = Path(sys.argv[2]).read_text(encoding="utf-8").strip()
 
 
 def gql(query, variables=None, token=None):
@@ -14,7 +35,7 @@ def gql(query, variables=None, token=None):
                                  headers={"Content-Type": "application/json"})
     if token:
         req.add_header("Authorization", "Bearer " + token)
-    return json.load(urllib.request.urlopen(req, timeout=60))
+    return json.load(urllib.request.urlopen(_http_only(req), timeout=60))  # nosec B310
 
 
 # 1. Page count, as a guest (no sign-in at all)
@@ -35,7 +56,7 @@ print(f"pages tagged 'genus': seed {sum('genus' in p['tags'] for p in seed['page
 random.seed(20261013)
 for p in random.sample(seed["pages"], 5):
     url = f"{BASE}/{p['locale']}/{p['path']}"
-    body = urllib.request.urlopen(url, timeout=60).read().decode("utf-8")
+    body = urllib.request.urlopen(_http_only(url), timeout=60).read().decode("utf-8")  # nosec B310
     # a plain sentence from the page text (no markdown symbols), first 50 chars
     lines = [l.strip() for l in p["content"].splitlines()
              if len(l.strip()) > 30 and not re.search(r"[#*\[\]!|>_`]", l)]

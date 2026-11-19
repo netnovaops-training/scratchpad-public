@@ -19,9 +19,22 @@
 import json
 import os
 import random
-import sys
 import time
 import urllib.request
+from pathlib import Path
+
+
+def _http_only(target):
+    """Return target (a URL string or urllib Request) if its scheme is http or https, else raise ValueError.
+
+    urlopen also follows file:// and custom schemes (Bandit B310). Every caller here talks to an
+    http(s) service, so anything else is a mistake or a planted URL. Added 2026-11-19.
+    """
+    url = str(getattr(target, "full_url", target))
+    if not url.lower().startswith(("http://", "https://")):
+        raise ValueError(f"refusing a non-http(s) URL: {url[:80]}")
+    return target
+
 
 VOICE_URL = (os.environ.get("VOICE_NARRATE_URL")
              or os.environ.get("VOICE_URL",
@@ -72,10 +85,10 @@ def say(text, out):
     }).encode()
     req = urllib.request.Request(VOICE_URL, data=body,
                                  headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=600) as r:
+    with urllib.request.urlopen(_http_only(req), timeout=600) as r:  # nosec B310
         data = r.read()
     if len(data) < 2000:
-        raise RuntimeError("suspiciously small audio (%d bytes)" % len(data))
+        raise RuntimeError(f"suspiciously small audio ({len(data)} bytes)")
     with open(out, "wb") as f:
         f.write(data)
 
@@ -90,7 +103,7 @@ def main():
             continue
         if slug == "peewee-harris":
             continue        # the host is announced by his resurrection
-        person = json.load(open(pj, encoding="utf-8"))
+        person = json.loads(Path(pj).read_text(encoding="utf-8"))
         name = person.get("name") or slug.replace("-", " ").title()
         rng = random.Random(slug)   # reproducible per person, varied across
         picks = {

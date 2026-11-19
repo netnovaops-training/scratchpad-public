@@ -158,7 +158,7 @@ def stretch(audio, sr, speed):
             input=src.getvalue(), capture_output=True, check=True)
         out, _sr = sf.read(io.BytesIO(p.stdout), dtype="float32")
         return out
-    except Exception:  # noqa: BLE001
+    except Exception:
         log.exception("stretch failed; serving full speed")
         return audio
 SECRET = os.environ.get("VOICE_SECRET", "")
@@ -217,7 +217,6 @@ def _release_engine():
     the whole of generation, so trying to take it is the honest test of
     whether anybody is mid-sentence.
     """
-    global _engine, _engine_name
     if not _gen_lock.acquire(blocking=False):
         return                      # busy speaking; try again next tick
     try:
@@ -243,7 +242,7 @@ def _release_engine_locked():
             gc.collect()
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
-        except Exception:  # noqa: BLE001
+        except Exception:  # noqa: BLE001, S110  freeing GPU memory is best-effort
             # Freeing is best-effort. Python dropping the last reference is
             # what actually matters; empty_cache only returns the allocator's
             # spare blocks to the driver.
@@ -476,10 +475,10 @@ def synthesize(text: str, ref: Path | None,
                     cand = engine.generate_speech(
                         text, enc, num_steps=steps or LUXTTS_STEPS,
                         speed=attempt_speed)
-                except RuntimeError as exc:  # noqa: PERF203
+                except RuntimeError as exc:
                     if "Kernel size" not in str(exc):
                         raise
-                    last = "too short for the vocoder at speed %.2f" % attempt_speed
+                    last = f"too short for the vocoder at speed {attempt_speed:.2f}"
                     log.info("luxtts: %r %s, retrying slower", text[:40], last)
                     continue
 
@@ -491,8 +490,7 @@ def synthesize(text: str, ref: Path | None,
                 n = cand.numel() if hasattr(cand, "numel") else len(cand)
                 secs = n / float(NATIVE_RATE)
                 if secs < words * MIN_SEC_PER_WORD:
-                    last = ("%.3fs for %d word(s) at speed %.2f -- truncated"
-                            % (secs, words, attempt_speed))
+                    last = (f"{secs:.3f}s for {words} word(s) at speed {attempt_speed:.2f} -- truncated")
                     log.warning("luxtts: %r %s, retrying slower", text[:40], last)
                     continue
 
@@ -501,9 +499,9 @@ def synthesize(text: str, ref: Path | None,
 
             if wav is None:
                 raise RuntimeError(
-                    "LuxTTS could not synthesize %r: %s. It is too short for "
+                    f"LuxTTS could not synthesize {text[:60]!r}: {last}. It is too short for "
                     "the vocoder 7-frame kernel even at the slowest pace -- "
-                    "give it a longer phrase." % (text[:60], last)
+                    "give it a longer phrase."
                 )
             arr = wav.numpy() if hasattr(wav, "numpy") else np.asarray(wav)
             return np.asarray(arr, dtype=np.float32).squeeze(), NATIVE_RATE
@@ -674,7 +672,7 @@ async def raw_pcm_request(request: Request):
 
     try:
         audio, src_rate = synthesize(text[:2000], ref)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         log.exception("synthesis failed")
         raise HTTPException(status_code=500, detail=f"synthesis failed: {exc}") from exc
 
@@ -722,7 +720,7 @@ def normalize_narration(text: str) -> str:
     t = t.replace("**", "").replace("`", "")
     t = _re.sub(r"(?<!\w)\*(\S[^*\n]*?)\*(?!\w)", r"\1", t)
     t = t.replace("*", "")
-    t = _re.sub(r"^\s*#{1,6}\s+", "", t, flags=_re.M)
+    t = _re.sub(r"^\s*#{1,6}\s+", "", t, flags=_re.MULTILINE)
     # typographic quotes and apostrophes -> plain (engines read them as noise)
     t = t.replace("\u2018", "'").replace("\u2019", "'")
     t = t.replace("\u201c", "").replace("\u201d", "")
@@ -942,4 +940,5 @@ def unhandled(_request: Request, exc: Exception):
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", "8091")))
+    # Listens on every interface inside its own container; only the docker network and Caddy reach it (no published port).
+    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", "8091")))  # nosec B104

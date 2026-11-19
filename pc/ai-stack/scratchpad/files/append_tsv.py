@@ -9,7 +9,7 @@ from pathlib import Path
 
 tsv = Path(sys.argv[1]); src = Path(sys.argv[2])
 sys.path.insert(0, str(tsv.parent))
-import extract_strings  # noqa: E402
+import extract_strings
 
 static, _ = extract_strings.collect()
 found = {t for t, _ in static}

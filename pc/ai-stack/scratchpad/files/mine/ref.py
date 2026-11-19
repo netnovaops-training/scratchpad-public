@@ -1,4 +1,8 @@
-import sys; sys.path.insert(0,"."); from cins import apply
+import sys
+
+sys.path.insert(0, ".")
+from cins import apply
+
 S = [
 (5, """//!
 //! URL: /streamlit/?tab=11&sub=6 (tab 11 is "JSON Pipeline", inner tab 6).

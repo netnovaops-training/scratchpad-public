@@ -29,6 +29,19 @@ import json
 import os
 import urllib.request
 
+
+def _http_only(target):
+    """Return target (a URL string or urllib Request) if its scheme is http or https, else raise ValueError.
+
+    urlopen also follows file:// and custom schemes (Bandit B310). Every caller here talks to an
+    http(s) service, so anything else is a mistake or a planted URL. Added 2026-11-19.
+    """
+    url = str(getattr(target, "full_url", target))
+    if not url.lower().startswith(("http://", "https://")):
+        raise ValueError(f"refusing a non-http(s) URL: {url[:80]}")
+    return target
+
+
 # THE SAME GATEWAY THE REST OF HERMES USES, read from the same two
 # variables. My first version invented LLM_URL and LITELLM_MASTER_KEY, which
 # are not set in this container -- every call came back HTTPError. Reusing
@@ -161,7 +174,7 @@ def rewrite(text, who="robin", korean=False):
     if KEY:
         req.add_header("Authorization", "Bearer " + KEY)
     try:
-        with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
+        with urllib.request.urlopen(_http_only(req), timeout=TIMEOUT) as r:  # nosec B310
             out = json.loads(r.read())
         return out["choices"][0]["message"]["content"].strip(), ""
     except Exception as e:  # noqa: BLE001

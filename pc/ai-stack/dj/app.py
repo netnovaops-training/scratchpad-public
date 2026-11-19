@@ -86,7 +86,7 @@ def load():
     try:
         data = json.loads(LIBRARY.read_text(encoding="utf-8"))
         if not isinstance(data, dict):
-            raise ValueError
+            raise ValueError  # noqa: TRY004  caught just below with every other bad library file
     except Exception:  # noqa: BLE001
         data = {}
     data.setdefault("gigs", [])
@@ -424,4 +424,5 @@ if __name__ == "__main__":
         print(f"built {len(missing)} thumbnail(s) at start", flush=True)
     print(f"dj on 0.0.0.0:{PORT} -- {len(lib['gigs'])} night(s), "
           f"{len(lib['photos'])} photo(s), heic={HEIC}", flush=True)
-    ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
+    # Listens on every interface inside its own container; only the docker network and Caddy reach it (no published port).
+    ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()  # nosec B104

@@ -25,9 +25,9 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import skills_prompt as sp  # noqa: E402  (same folder on the NUC: ~/learning-src)
+import skills_prompt as sp
 
-DONE_RE = re.compile(r"\b(?:slice|step|phase|part)\s+(\d+)\s+(?:is\s+)?(?:done|finished)", re.I)
+DONE_RE = re.compile(r"\b(?:slice|step|phase|part)\s+(\d+)\s+(?:is\s+)?(?:done|finished)", re.IGNORECASE)
 STEP_RE = re.compile(r"(?:^|\s)(\d+)\)\s+(.*?)(?=\s+\d+\)\s|$)")
 STAGE_SKILLS = {"plan": ("before", "review"), "build": (), "finish": ("review", "finish")}
 RULE = ("Rules: read HANDOFF.md first. One slice, about 1-2 hours, in 15-minute spurts; after each spurt add a "
@@ -80,12 +80,12 @@ def plan_for(item):
 
 def prompt(p):
     """The copy-paste prompt for one plan_for() result."""
-    out = ["/caveman", "%s %s" % (p["id"], p["title"]), ""]
+    out = ["/caveman", "{} {}".format(p["id"], p["title"]), ""]
     if p["stage"] == "plan":
         out.append("Stage: PLAN. Read the item, its Review/Answer lines and todo-code file. Audit the code in "
                    "scope with the skills below, write a short plan as a Review line, then build step 1.")
     elif p["stage"] == "build":
-        out.append("Stage: BUILD step %s: %s" % (p["step"], p["step_text"] or "(see the Do line)"))
+        out.append("Stage: BUILD step {}: {}".format(p["step"], p["step_text"] or "(see the Do line)"))
     else:
         out.append("Stage: FINISH. Every Do step is done. Re-run the skills that ran before, write the "
                    "before/after table into a Review line and the project walkthrough, then tick the item "
@@ -94,10 +94,10 @@ def prompt(p):
         # The autopilot runs these itself: "/a:b args" -> Skill tool with skill="a:b", args="args".
         out.append("Skills, cheapest first (invoke each with the Skill tool; drop the leading /, text after a "
                    "space is the args): " + ", ".join(p["skills"]) +
-                   " (record with: skills_prompt.py done %s %s)" % (p["id"], ",".join(map(str, p["skill_nums"]))))
+                   " (record with: skills_prompt.py done {} {})".format(p["id"], ",".join(map(str, p["skill_nums"]))))
     if p["asks"]:
         out.append("Open questions (ask only if this step needs them, all at once; \"defaults\" = recommended):")
-        out += ["  %d. %s" % (k, a) for k, a in enumerate(p["asks"], 1)]
+        out += [f"  {k}. {a}" for k, a in enumerate(p["asks"], 1)]
     out += ["", RULE]
     return "\n".join(out)
 
@@ -123,16 +123,16 @@ def main(argv):
         else:
             n = 0
             for r in rows:
-                print("%s %s" % (r["id"], r["title"]))
+                print("{} {}".format(r["id"], r["title"]))
                 for a in r["asks"]:
                     n += 1
-                    print("  %d. %s" % (n, a))
+                    print(f"  {n}. {a}")
         return 0
     if what == "first":
         # Items another session owns, or that wait on Jason, are listed one per line in autopilot-skip.txt
         # ("T1014  photo session"); the autopilot (T1017 step 4) never picks them.
         skip_file = sp.LIST.parent / "autopilot-skip.txt"
-        skip = set(re.findall(r"^(T\d{4,})", skip_file.read_text(encoding="utf-8"), re.M)) if skip_file.exists() else set()
+        skip = set(re.findall(r"^(T\d{4,})", skip_file.read_text(encoding="utf-8"), re.MULTILINE)) if skip_file.exists() else set()
         pick = next((plan_for(i) for i in first_items() if i["id"] not in skip), None)
     else:
         found = [i for i in sp.items() if i["id"] == what]

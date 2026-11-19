@@ -33,7 +33,6 @@ extension only, which is the one Windows actually acts on.
 from __future__ import annotations
 
 import re
-from typing import Any
 
 # Everything Windows can print from a shell "print" verb with an ordinary
 # document handler, and nothing that can execute. If you add to this, ask

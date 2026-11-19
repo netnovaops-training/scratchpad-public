@@ -7,6 +7,7 @@ import json
 import os
 import tempfile
 import unittest
+from pathlib import Path
 from unittest import mock
 
 import nas_move
@@ -16,9 +17,9 @@ import nas_restore
 class T(unittest.TestCase):
     def test_move_refuse_restore(self):
         d = tempfile.mkdtemp()
-        p = lambda *a: os.path.join(d, *a)  # noqa: E731
+        p = lambda *a: os.path.join(d, *a)
         for name, data in (("keep.jpg", b"aaaa"), ("dup.jpg", b"aaaa"), ("orphan.jpg", b"bb")):
-            open(p(name), "wb").write(data)
+            Path(p(name)).write_bytes(data)
         ops = [{"n": 1, "act": "duplicate", "src": p("dup.jpg"), "dst": p("hold", "dup.jpg"), "size": 4,
                 "need": p("keep.jpg"), "need_size": 4},
                {"n": 2, "act": "duplicate", "src": p("orphan.jpg"), "dst": p("hold", "orphan.jpg"), "size": 2,

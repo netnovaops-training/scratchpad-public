@@ -1,6 +1,7 @@
-import io
+from pathlib import Path
+
 p = "Garden-Menu.ps1"
-s = io.open(p, encoding="utf-8", newline="").read()
+s = Path(p).read_bytes().decode("utf-8")
 def rep(a, b):
     global s
     assert s.count(a) == 1, a[:70]
@@ -22,5 +23,5 @@ rep('''    } elseif ($c -eq "2") {
         $T.mode = "wsl"
         Choose-Engine
     } else { return $false }''')
-io.open(p, "w", encoding="utf-8", newline="").write(s)
+Path(p).write_text(s, encoding="utf-8", newline="")
 print("ok")

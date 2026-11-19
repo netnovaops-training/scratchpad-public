@@ -1,22 +1,25 @@
-import io, re
+import re
+from pathlib import Path
+
+
 def edit(p, pairs):
-    s = io.open(p, encoding="utf-8", newline="").read()
+    s = Path(p).read_bytes().decode("utf-8")
     nl = "\r\n" if "\r\n" in s else "\n"
     for a, b in pairs:
         a2, b2 = a.replace("\n", nl), b.replace("\n", nl)
         assert s.count(a2) >= 1, (p, a[:80])
         s = s.replace(a2, b2)
-    io.open(p, "w", encoding="utf-8", newline="").write(s)
+    Path(p).write_text(s, encoding="utf-8", newline="")
 
 def cut_section(p, start, until):
     """Remove from the line starting with `start` up to (not including) the next line starting with `until`."""
-    s = io.open(p, encoding="utf-8", newline="").read()
+    s = Path(p).read_bytes().decode("utf-8")
     i = s.index(start); j = s.index(until, i)
-    io.open(p, "w", encoding="utf-8", newline="").write(s[:i] + s[j:])
+    Path(p).write_text(s[:i] + s[j:], encoding="utf-8", newline="")
 
 # ---------- guide 19, Korean ----------
 K = "ko/19-every-menu-option.md"
-s = io.open(K, encoding="utf-8").read()
+s = Path(K).read_text(encoding="utf-8")
 m = re.search(r"- \*\*되돌리려면:\*\* More, 14[^\n]*", s)
 
 edit(K, [
@@ -46,14 +49,14 @@ edit(K, [
 ("Subdomains 3. More 14는 업데이트 프로그램을 멈춰요 |", "Subdomains 3. More 14, 3은 업데이트 프로그램을 멈춰요 |"),
 ])
 cut_section(K, "### 19) On / off switch, check-up and Docker clean-up", "## Backups (6)")
-s = io.open(K, encoding="utf-8", newline="").read()
+s = Path(K).read_bytes().decode("utf-8")
 i = s.index("`garden.sh`가 보여 주는 메시지는 Ubuntu 번호를 써요.")
 j = s.index("\n\n", i)
 nl = "\r\n" if "\r\n" in s else "\n"
 s = s[:i] + ("`garden.sh`가 보여 주는 메시지는 Ubuntu 번호를 써요. Windows에서는 Ubuntu 13~16은" + nl +
              "1을 더하고(Ubuntu의 \"menu M, then 13\"은 Windows의 More 14예요), Ubuntu 17과 18은 2를" + nl +
              "더하세요(Tailscale은 Windows More 19, 이름 바꾸기는 Windows More 20이에요).") + s[j:]
-io.open(K, "w", encoding="utf-8", newline="").write(s)
+Path(K).write_text(s, encoding="utf-8", newline="")
 
 # ---------- the other guides and pages ----------
 for p, pairs in {

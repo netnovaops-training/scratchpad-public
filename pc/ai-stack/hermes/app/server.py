@@ -40,6 +40,7 @@ from shared.identity import by_email
 from shared.memory import MemoryStore
 from shared.router import Router
 from shared.transcript import Transcript
+
 from app import threads
 
 from . import garden_tools
@@ -50,7 +51,8 @@ MEMORY_ROOT = os.environ.get("HERMES_MEMORY_ROOT", "/memory")
 PORT = int(os.environ.get("HERMES_HTTP_PORT", "8014"))
 # Deliberately NOT 0.0.0.0-with-a-published-port. See the header: this is
 # reachable on the docker network and nowhere else.
-BIND = os.environ.get("HERMES_HTTP_BIND", "0.0.0.0")
+# Listens on every interface inside its own container; only the docker network and Caddy reach it (no published port).
+BIND = os.environ.get("HERMES_HTTP_BIND", "0.0.0.0")  # nosec B104
 
 # RAISED FROM 256 KiB ON 2026-09-24, when photographs started arriving.
 # 256 KiB was ample for text and is smaller than a single phone photo: a
@@ -106,7 +108,7 @@ def _agent_for(email: str, display: str, surface: str) -> Agent:
 class Handler(BaseHTTPRequestHandler):
     # Quiet: the default logs every request to stderr in Apache format, which
     # buries the things worth reading in this container's log.
-    def log_message(self, fmt, *args):  # noqa: A003
+    def log_message(self, fmt, *args):
         pass
 
     def _send(self, code: int, payload: dict) -> None:
@@ -117,13 +119,13 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def do_GET(self) -> None:  # noqa: N802
+    def do_GET(self) -> None:
         if self.path.rstrip("/") in ("/healthz", "/health"):
             self._send(200, {"ok": True})
         else:
             self._send(404, {"error": "no such route"})
 
-    def do_POST(self) -> None:  # noqa: N802
+    def do_POST(self) -> None:
         if self.path.rstrip("/") != "/ask":
             self._send(404, {"error": "no such route"})
             return

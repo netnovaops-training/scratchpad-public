@@ -1,5 +1,7 @@
-import re, sys
+import re
+import sys
 from pathlib import Path
+
 root = Path(sys.argv[1])
 files = [root/"00-READ-ME-FIRST-KO.html", root/"00-READ-ME-FIRST.html", root/"WHAT-GETS-INSTALLED.ko.md", root/"WHY-THESE-PROGRAMS.ko.md"] + sorted((root/"START-HERE"/"ko").glob("*.md"))
 bad = 0

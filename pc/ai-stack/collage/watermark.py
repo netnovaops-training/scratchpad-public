@@ -42,8 +42,6 @@ AI-generated. That is worth knowing rather than discovering.
 """
 from __future__ import annotations
 
-import math
-
 # Where the mark is allowed to be: any corner, within this fraction of the
 # image from the edges. Gemini uses the bottom-right, but a corner search
 # costs nothing and survives them changing their mind.
@@ -304,8 +302,8 @@ def remove(img, box, feather: int = 3):
     # when the alternative runs fine on the smooth corners that uploads
     # mostly have. The batch tool runs where cv2 exists, and gets it.
     try:
-        import numpy as np
         import cv2
+        import numpy as np
         x0, y0, x1, y1 = box
         pad = max(3, feather)
         arr = np.array(img)[:, :, ::-1].copy()          # PIL RGB -> cv2 BGR
@@ -354,7 +352,7 @@ def remove(img, box, feather: int = 3):
                 den += wgt
                 for k in range(3):
                     num[k] += rgb[k] * wgt
-            dst[x, y] = tuple(int(round(num[k] / den)) for k in range(3))
+            dst[x, y] = tuple(int(round(num[k] / den)) for k in range(3))  # noqa: RUF046  may be a numpy float; int() keeps a Python int pixel
     return out
 
 

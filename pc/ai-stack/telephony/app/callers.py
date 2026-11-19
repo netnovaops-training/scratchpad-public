@@ -21,10 +21,11 @@ import logging
 import re
 import sqlite3
 import threading
+from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 
 log = logging.getLogger("bridge.callers")
 
@@ -81,7 +82,7 @@ def normalise(number: str | None) -> str:
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return datetime.now(UTC).isoformat(timespec="seconds")
 
 
 class CallerStore:
@@ -181,7 +182,8 @@ class CallerStore:
         sets.append("last_seen = ?"); vals.append(_now())
         vals.append(p)
         with self._lock, self._connect() as c:
-            c.execute(f"UPDATE callers SET {', '.join(sets)} WHERE phone = ?", vals)
+            # The SET list is built from fixed column names in this method; every value is a ? parameter.
+            c.execute(f"UPDATE callers SET {', '.join(sets)} WHERE phone = ?", vals)  # nosec B608
 
     def add_destination(self, phone: str, place: str) -> None:
         p, place = normalise(phone), (place or "").strip()

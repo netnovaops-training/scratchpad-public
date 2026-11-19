@@ -28,7 +28,7 @@ SRC = Path("D:/scratchpad")
 
 def git(repo, *args, check=True, inp=None):
     """Run git in repo and return stdout (text). Raises on failure when check is set."""
-    r = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True, input=inp)
+    r = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True, input=inp, check=False)
     if check and r.returncode != 0:
         print(f"git {' '.join(args[:3])}: {r.stderr.strip()[:300]}")
         sys.exit(1)
@@ -50,7 +50,7 @@ def path_map():
 def main():
     git(PUB, "fetch", "-q", "github")
     local, remote = git(PUB, "rev-parse", "main").strip(), git(PUB, "rev-parse", "github/main").strip()
-    already = subprocess.run(["git", "-C", str(PUB), "merge-base", "--is-ancestor", remote, local]).returncode == 0
+    already = subprocess.run(["git", "-C", str(PUB), "merge-base", "--is-ancestor", remote, local], check=False).returncode == 0
     if local == remote or already:
         print("backport: nothing new on GitHub")
         return 0
@@ -65,7 +65,7 @@ def main():
         if pub != real:
             patch = patch.replace(f"a/{pub}", f"a/{real}").replace(f"b/{pub}", f"b/{real}")
         if subprocess.run(["git", "-C", str(SRC), "apply", "--check", "-"], input=patch, text=True,
-                          capture_output=True).returncode != 0:
+                          capture_output=True, check=False).returncode != 0:
             stuck.append(real)
             continue
         git(SRC, "apply", "-", inp=patch)

@@ -36,6 +36,12 @@ data class PlantSection(
     val rows: List<Pair<String, String>>,
 )
 
+/** The bloom/growth field is a 12-character month bitmap, one character per month. */
+private const val MONTHS = 12
+
+/** Month names are shortened to this many letters in a split-season list ("Mar, Oct"). */
+private const val MONTH_ABBREV_CHARS = 3
+
 private val MONTH_NAMES = listOf(
     "January", "February", "March", "April", "May", "June",
     "July", "August", "September", "October", "November", "December",
@@ -55,11 +61,11 @@ private val MONTH_NAMES = listOf(
 fun monthRange(raw: String?): String {
     val s = raw?.trim().orEmpty()
     if (s.isEmpty()) return ""
-    if (s.length != 12) return s          // not the bitmap; show it as-is
+    if (s.length != MONTHS) return s          // not the bitmap; show it as-is
 
     val on = s.indices.filter { s[it] != '.' && !s[it].isWhitespace() }
     if (on.isEmpty()) return ""
-    if (on.size == 12) return "All year"
+    if (on.size == MONTHS) return "All year"
 
     // Contiguous is the ordinary case and reads best as a range.
     val contiguous = on.zipWithNext().all { (a, b) -> b == a + 1 }
@@ -70,7 +76,7 @@ fun monthRange(raw: String?): String {
     }
     // Split seasons do exist -- something that blooms in spring and again in
     // autumn -- and collapsing those to "March–October" would be a lie.
-    return on.joinToString(", ") { MONTH_NAMES[it].take(3) }
+    return on.joinToString(", ") { MONTH_NAMES[it].take(MONTH_ABBREV_CHARS) }
 }
 
 private fun Map<String, String>.take(key: String): String =
@@ -106,7 +112,7 @@ private fun Map<String, String>.joined(vararg keys: String): String =
  * nobody has thought to place here yet should not vanish because of that.
  */
 fun plantSections(f: Map<String, String>): List<PlantSection> {
-    val out = ArrayList<PlantSection>(5)
+    val out = ArrayList<PlantSection>()
 
     fun add(title: String, icon: String, rows: List<Pair<String, String>>) {
         val kept = rows.filter { it.second.isNotBlank() }
@@ -186,7 +192,7 @@ fun plantNotes(f: Map<String, String>): List<Pair<String, String>> = listOf(
  * before reading anything.
  */
 fun plantChips(f: Map<String, String>): List<Pair<String, String>> {
-    val chips = ArrayList<Pair<String, String>>(10)
+    val chips = ArrayList<Pair<String, String>>()
     fun put(icon: String, v: String) {
         if (v.isNotBlank()) chips.add(icon to v)
     }

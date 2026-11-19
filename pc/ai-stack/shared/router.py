@@ -9,7 +9,8 @@ model actually answers. Nothing in the app code names a real model.
 from __future__ import annotations
 
 import os
-from typing import Any, Iterable
+from collections.abc import Iterable
+from typing import Any
 
 from openai import OpenAI
 
@@ -95,7 +96,7 @@ class Router:
             models = self.client.models.list()
             names = sorted({m.id for m in models.data})
             return names or list(KNOWN_JOBS)
-        except Exception:
+        except Exception:  # noqa: BLE001  model list is optional; fall back to the known jobs
             return list(KNOWN_JOBS)
 
     # -- completion -----------------------------------------------------------

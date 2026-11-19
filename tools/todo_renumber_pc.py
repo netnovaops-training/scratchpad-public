@@ -22,7 +22,8 @@ REF = re.compile(r"(?<![A-Za-z0-9_])(?<!pre-)T(\d{4})(?![0-9])")
 
 
 def main(map_csv, write):
-    mapping = {r["old"]: r["new"] for r in csv.DictReader(open(map_csv, encoding="utf-8"))}
+    with open(map_csv, encoding="utf-8") as fh:
+        mapping = {r["old"]: r["new"] for r in csv.DictReader(fh)}
     bak = Path(r"D:\archive\2026-11-18\renumber")
     for f in FILES:
         if not f.exists():
@@ -30,14 +31,14 @@ def main(map_csv, write):
         text = f.read_text(encoding="utf-8")
         n = [0]
 
-        def sub(m):
+        def sub(m, n=n):  # bound now (B023); REF.sub calls it only for this file
             new = mapping.get("T" + m.group(1))
             if new and new != m.group(0):
                 n[0] += 1
                 return new
             return m.group(0)
         out = REF.sub(sub, text)
-        print("%-60s %d ids" % (f.name, n[0]))
+        print(f"{f.name!s:<60} {n[0]} ids")
         if write and n[0]:
             (bak / f.parent.name).mkdir(parents=True, exist_ok=True)
             shutil.copy2(f, bak / f.parent.name / f.name)

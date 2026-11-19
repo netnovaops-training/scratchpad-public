@@ -7,11 +7,16 @@ when it's unsure is worse than no check at all -- it manufactures a record
 saying someone agreed when they didn't.
 """
 from __future__ import annotations
+
 import sys
 from pathlib import Path
+
 import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from app.consent import interpret, redact, _luhn, ConsentStore, purge_transcripts  # noqa: E402
+from datetime import UTC
+
+from app.consent import ConsentStore, _luhn, interpret, purge_transcripts, redact
 
 
 # --- yes ---------------------------------------------------------------------
@@ -141,8 +146,8 @@ def test_purge_only_touches_phone_transcripts(tmp_path):
 
 
 def test_purge_keeps_recent(tmp_path):
-    from datetime import datetime, timezone
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    from datetime import datetime
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
     d = tmp_path / "phone" / today
     d.mkdir(parents=True)
     (d / "today.jsonl").write_text("{}")

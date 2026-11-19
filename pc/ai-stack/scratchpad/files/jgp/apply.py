@@ -1,6 +1,9 @@
-import sys,re
-spec=open(sys.argv[1],encoding='utf8',newline='').read().replace('\r','').split('\n')
-src=open(sys.argv[2],encoding='utf8',newline='').read()
+import re
+import sys
+from pathlib import Path
+
+spec=Path(sys.argv[1]).read_bytes().decode('utf8').replace('\r','').split('\n')
+src=Path(sys.argv[2]).read_bytes().decode('utf8')
 crlf='\r\n' in src
 lines=src.replace('\r\n','\n').split('\n')
 blocks=[];cur=None
@@ -24,4 +27,4 @@ for n,p,t in blocks:
 res=[]
 for i,l in enumerate(lines,1):
     res.extend(ins.get(i,[]));res.append(l)
-open(sys.argv[2],'w',encoding='utf8',newline='').write(('\r\n' if crlf else '\n').join(res))
+Path(sys.argv[2]).write_text(('\r\n' if crlf else '\n').join(res), encoding='utf8', newline='')

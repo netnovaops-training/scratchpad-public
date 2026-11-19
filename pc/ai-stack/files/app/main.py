@@ -72,9 +72,9 @@ HOUSEHOLD = [
 OWNERS: dict[str, list] = {
     "user@example.com": [
         ("Career portal", "/data/casey",
-         "Everything from your career portal: recordings you uploaded, "
+         ("Everything from your career portal: recordings you uploaded, "
          "answers that were spoken back, exports, and the twice-daily "
-         "backups of your record."),
+         "backups of your record.")),
     ] + HOUSEHOLD,
     "user@example.com": [
         ("Tea with Miss Dee", "/data/mom",

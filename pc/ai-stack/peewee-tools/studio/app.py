@@ -17,23 +17,36 @@
 #  So you can edit all afternoon and nothing goes live until you say so.
 # =============================================================================
 import hashlib as _hashlib
-import urllib.parse as _up
-from PIL import Image as _Image
+import html as _html
 import io
 import json
+import json as _json
 import os
 import re
+import re as _re
 import subprocess
 import sys
+import urllib.parse as _up
+import urllib.request as _ur
 import zipfile
+from pathlib import Path
 
 import streamlit as st
 from PIL import Image, ImageOps
+from PIL import Image as _Image
 
-import json as _json
-import re as _re
-import urllib.request as _ur
-import html as _html
+
+def _http_only(target):
+    """Return target (a URL string or urllib Request) if its scheme is http or https, else raise ValueError.
+
+    urlopen also follows file:// and custom schemes (Bandit B310). Every caller here talks to an
+    http(s) service, so anything else is a mistake or a planted URL. Added 2026-11-19.
+    """
+    url = str(getattr(target, "full_url", target))
+    if not url.lower().startswith(("http://", "https://")):
+        raise ValueError(f"refusing a non-http(s) URL: {url[:80]}")
+    return target
+
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.normpath(os.path.join(HERE, ".."))                 # peewee-tools/
@@ -55,7 +68,7 @@ def clicked_load():
     try:
         with open(CLICKED, encoding="utf-8") as f:
             return _json.load(f)
-    except Exception:
+    except (OSError, ValueError):
         return {}
 
 
@@ -73,7 +86,7 @@ def fetch_text(url, limit=6000):
     and whitespace squeeze cover news pages, obits and wikis well enough for
     drafting, with no dependency to rot."""
     req = _ur.Request(url, headers={"User-Agent": "Mozilla/5.0 (peewee-studio)"})
-    with _ur.urlopen(req, timeout=30) as r:
+    with _ur.urlopen(_http_only(req), timeout=30) as r:  # nosec B310
         raw = r.read(400_000).decode("utf-8", "replace")
     raw = _re.sub(r"(?is)<(script|style|nav|header|footer)[^>]*>.*?</\1>", " ", raw)
     raw = _re.sub(r"(?s)<[^>]+>", " ", raw)
@@ -103,9 +116,9 @@ def _img_candidates(page, base):
     for pat in (r'<meta[^>]+property=["\']og:image["\'][^>]+content=["\']([^"\']+)',
                 r'<meta[^>]+name=["\']twitter:image["\'][^>]+content=["\']([^"\']+)',
                 r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+property=["\']og:image'):
-        urls += _re.findall(pat, page, _re.I)
+        urls += _re.findall(pat, page, _re.IGNORECASE)
     # srcset: take the largest candidate in each set
-    for ss in _re.findall(r'srcset=["\']([^"\']+)["\']', page, _re.I):
+    for ss in _re.findall(r'srcset=["\']([^"\']+)["\']', page, _re.IGNORECASE):
         best, bestw = None, -1
         for bit in ss.split(","):
             parts = bit.strip().split()
@@ -121,7 +134,7 @@ def _img_candidates(page, base):
                 best, bestw = parts[0], w
         if best:
             urls.append(best)
-    urls += _re.findall(r'<img[^>]+src=["\']([^"\']+)["\']', page, _re.I)
+    urls += _re.findall(r'<img[^>]+src=["\']([^"\']+)["\']', page, _re.IGNORECASE)
     out, seen = [], set()
     for u in urls:
         u = _html.unescape(u.strip())
@@ -146,7 +159,7 @@ def fetch_images(url, want=14, min_side=220):
     is furniture, not a photograph. Duplicates are dropped by content, so
     the same picture served from two paths only appears once."""
     req = _ur.Request(url, headers={"User-Agent": "Mozilla/5.0 (peewee-studio)"})
-    with _ur.urlopen(req, timeout=30) as r:
+    with _ur.urlopen(_http_only(req), timeout=30) as r:  # nosec B310
         page = r.read(600_000).decode("utf-8", "replace")
     got, seen_bytes = [], set()
     for iu in _img_candidates(page, url):
@@ -155,11 +168,11 @@ def fetch_images(url, want=14, min_side=220):
         try:
             ir = _ur.Request(iu, headers={"User-Agent": "Mozilla/5.0 (peewee-studio)",
                                           "Referer": url})
-            with _ur.urlopen(ir, timeout=20) as r:
+            with _ur.urlopen(_http_only(ir), timeout=20) as r:  # nosec B310
                 blob = r.read(8_000_000)
-        except Exception:
+        except Exception:  # noqa: BLE001, S112  scraped image: any fetch failure skips that image
             continue
-        h = _hashlib.sha1(blob).hexdigest()
+        h = _hashlib.sha1(blob, usedforsecurity=False).hexdigest()  # a duplicate check, not security
         if h in seen_bytes:
             continue
         try:
@@ -167,7 +180,7 @@ def fetch_images(url, want=14, min_side=220):
             im.verify()
             im = _Image.open(io.BytesIO(blob))
             w, ht = im.size
-        except Exception:
+        except Exception:  # noqa: BLE001, S112  Pillow raises many types on junk bytes; skip it
             continue
         if w < min_side or ht < min_side:
             continue
@@ -195,12 +208,12 @@ def stage_images(slug, urls, want=14):
         for iu, blob, w, ht in found:
             n += 1
             ext = ".png" if blob[:8].startswith(b"\x89PNG") else ".jpg"
-            fp = os.path.join(d, "pull-%03d%s" % (n, ext))
+            fp = os.path.join(d, f"pull-{n:03d}{ext}")
             with open(fp, "wb") as f:
                 f.write(blob)
             with open(fp + ".src.txt", "w", encoding="utf-8") as f:
                 f.write(iu + "\n" + u + "\n")   # where it came from, kept
-            kept.append((fp, "%dx%d" % (w, ht)))
+            kept.append((fp, f"{w}x{ht}"))
     return kept
 
 
@@ -209,13 +222,13 @@ def adopt_image(slug, path):
     d = os.path.join(PEOPLE, slug)
     os.makedirs(d, exist_ok=True)
     n = 1
-    while os.path.exists(os.path.join(d, "photo-%d.jpg" % n)):
+    while os.path.exists(os.path.join(d, f"photo-{n}.jpg")):
         n += 1
     im = _Image.open(path)
     if im.mode not in ("RGB", "L"):
         im = im.convert("RGB")
-    im.save(os.path.join(d, "photo-%d.jpg" % n), "JPEG", quality=92)
-    return "photo-%d.jpg" % n
+    im.save(os.path.join(d, f"photo-{n}.jpg"), "JPEG", quality=92)
+    return f"photo-{n}.jpg"
 
 
 def review_pulled(slug, key):
@@ -239,8 +252,8 @@ def review_pulled(slug, key):
             st.image(fp, use_container_width=True)
             src = ""
             try:
-                src = open(fp + ".src.txt", encoding="utf-8").read().split("\n")[1]
-            except Exception:
+                src = Path(fp + ".src.txt").read_text(encoding="utf-8").split("\n")[1]
+            except (OSError, ValueError, IndexError):
                 pass
             st.caption(src[:46] or f)
             if st.checkbox("keep", key=f"{key}-{f}"):
@@ -268,9 +281,9 @@ def era_search(name, limit=3):
     try:
         req = _ur.Request("https://html.duckduckgo.com/html/?q=" + q,
                           headers={"User-Agent": "Mozilla/5.0"})
-        with _ur.urlopen(req, timeout=20) as r:
+        with _ur.urlopen(_http_only(req), timeout=20) as r:  # nosec B310
             page = r.read().decode("utf-8", "replace")
-    except Exception:
+    except Exception:  # noqa: BLE001  web search is optional; no results on any failure
         return []
     urls = _re.findall(r'class="result__a"[^>]+href="([^"]+)"', page)
     # DDG wraps results in a redirect; unwrap the real target
@@ -286,7 +299,7 @@ def era_search(name, limit=3):
     for u in out:
         try:
             found.append((u, fetch_text(u)))
-        except Exception:
+        except Exception:  # noqa: BLE001, S110  one unreadable page is skipped
             pass
     return found
 
@@ -347,7 +360,7 @@ def draft_tellings(name, sources, n):
     }).encode()
     req = _ur.Request(OLLAMA + "/api/chat", data=body,
                       headers={"Content-Type": "application/json"})
-    with _ur.urlopen(req, timeout=900) as r:
+    with _ur.urlopen(_http_only(req), timeout=900) as r:  # nosec B310
         text = _json.loads(r.read())["message"]["content"]
     parts = [t.strip() for t in text.split("=====") if len(t.strip()) > 200]
     return parts[:n]
@@ -445,12 +458,12 @@ with tab_edit:
         c3, c4 = st.columns(2)
         p["draft"] = c3.checkbox("Still a draft", p.get("draft", True))
         enabled = c4.checkbox("On the dial", p.get("enabled", True) is not False)
-        p["enabled"] = True if enabled else False
+        p["enabled"] = bool(enabled)
 
         st.subheader("The tellings")
         for f in files_of(slug, "stories"):
             path = os.path.join(d, f)
-            txt = open(path, encoding="utf-8").read()
+            txt = Path(path).read_text(encoding="utf-8")
             new = st.text_area(f + ("   \U0001F50A narrated" if
                                os.path.exists(path.replace(".txt", ".mp3"))
                                else "   (not yet narrated)"),
@@ -464,8 +477,7 @@ with tab_edit:
                 st.info(f"{f} saved -- narration will re-render on next Publish")
         if st.button("Add another telling"):
             n = len(files_of(slug, "stories")) + 1
-            open(os.path.join(d, "story-%d.txt" % n), "w",
-                 encoding="utf-8", newline="\n").write("Write the new telling here.")
+            Path(os.path.join(d, f"story-{n}.txt")).write_text("Write the new telling here.", encoding="utf-8", newline="\n")
             st.rerun()
 
         # ---- pictures off a link (2026-09-02) ------------------------
@@ -500,7 +512,7 @@ with tab_edit:
                 done = st.checkbox("enhanced", ps.get(f) == "enhanced",
                                    key=f"ps-{slug}-{f}")
                 ps[f] = "enhanced" if done else "raw"
-                st.download_button("download", open(os.path.join(d, f), "rb").read(),
+                st.download_button("download", Path(os.path.join(d, f)).read_bytes(),
                                    file_name=f"{slug}-{f}", key=f"dl-{slug}-{f}")
 
         up = st.file_uploader("Import photos (added as the next photo-N, or "
@@ -513,10 +525,10 @@ with tab_edit:
                 im.thumbnail((1600, 1600))
                 m = re.fullmatch(r"photo-(\d+)\.\w+", uf.name)
                 if m:
-                    out = "photo-%s.jpg" % m.group(1)
+                    out = f"photo-{m.group(1)}.jpg"
                 else:
                     nums = [int(re.findall(r"\d+", x)[0]) for x in files_of(slug, "photos")] or [0]
-                    out = "photo-%d.jpg" % (max(nums) + 1)
+                    out = f"photo-{max(nums) + 1}.jpg"
                 im.save(os.path.join(d, out), quality=88, optimize=True)
             st.success("imported -- press R to refresh the page")
 
@@ -530,12 +542,12 @@ with tab_edit:
                 z.write(os.path.join(d, f), f)
         c6.download_button("\U0001F4E6 Export whole folder (zip)", buf.getvalue(),
                            file_name=f"{slug}.zip")
-        if hasattr(os, "startfile"):
-            # Desktop only: inside the container there is no Explorer to open.
-            if c7.button("Open work folder for this person"):
-                wd = os.path.join(WORK, slug)
-                os.makedirs(wd, exist_ok=True)
-                os.startfile(wd)
+        # Desktop only: inside the container there is no Explorer to open
+        # (and no button is drawn there: `and` stops before c7.button).
+        if hasattr(os, "startfile") and c7.button("Open work folder for this person"):
+            wd = os.path.join(WORK, slug)
+            os.makedirs(wd, exist_ok=True)
+            os.startfile(wd)
 
 # ---------------------------------------------------------------------------
 with tab_new:
@@ -570,7 +582,7 @@ with tab_new:
         for i, u in enumerate(urls):
             try:
                 sources.append((u, fetch_text(u)))
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001  one unreadable page is shown as a warning
                 st.warning(f"could not read {u}: {e}")
             prog.progress((i + 1) / (len(urls) + 1), f"read {i+1}/{len(urls)}")
         # the same pages carry photographs -- keep them for review
@@ -596,7 +608,7 @@ with tab_new:
                                    + ", ".join(u for u, _ in extra))
                     sources = sources + extra
                 tellings = draft_tellings(name.strip(), sources, n_var)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001  model call: any failure is shown to the user
                 tellings = []
                 st.error(f"the model call failed: {e}")
             if tellings:
@@ -608,7 +620,7 @@ with tab_new:
                                 "sources": [u for u, _ in sources]})
                 start = len(files_of(slug, "stories"))
                 for i, t in enumerate(tellings, start + 1):
-                    with open(os.path.join(d, "story-%d.txt" % i), "w",
+                    with open(os.path.join(d, f"story-{i}.txt"), "w",
                               encoding="utf-8", newline="\n") as f:
                         f.write(t)
                 prog.progress(1.0, "done")
@@ -626,8 +638,7 @@ with tab_new:
             save(slug, {"name": name.strip(), "freq": freq, "era": era,
                         "relation": relation, "bridges": [], "draft": True,
                         "enabled": True})
-            open(os.path.join(d, "story-1.txt"), "w", encoding="utf-8",
-                 newline="\n").write(first or "Write the first telling here.")
+            Path(os.path.join(d, "story-1.txt")).write_text(first or "Write the first telling here.", encoding="utf-8", newline="\n")
             st.success(f"created people/{slug}/ -- find them on the Work tab")
 
 # ---------------------------------------------------------------------------
@@ -703,7 +714,7 @@ with tab_legacy:
                 if seen != bool(clicked.get(keyp)):
                     clicked[keyp] = seen
                     clicked_save(clicked)
-                c2.download_button("⬇", open(os.path.join(fdir, f), "rb").read(),
+                c2.download_button("⬇", Path(os.path.join(fdir, f)).read_bytes(),
                                    file_name=f, key="dl-" + keyp)
         if imgs:
             buf = io.BytesIO()
@@ -720,11 +731,11 @@ with tab_publish:
     if st.button("\U0001F399 Narrate anything new or changed (needs the voice "
                  "service; takes ~a minute per story)"):
         r = subprocess.run([sys.executable, os.path.join(ROOT, "narrate.py")],
-                           capture_output=True, text=True)
+                           capture_output=True, text=True, check=False)
         st.code((r.stdout + r.stderr)[-2000:])
     if st.button("\U0001F4E1 Publish to the site (build.py)", type="primary"):
         r = subprocess.run([sys.executable, os.path.join(ROOT, "build.py")],
-                           capture_output=True, text=True)
+                           capture_output=True, text=True, check=False)
         st.code((r.stdout + r.stderr)[-2000:])
         if r.returncode == 0:
             st.success("live at https://peewee.home.example.net")
@@ -748,7 +759,7 @@ with tab_publish:
             with st.spinner(f"running {tool}..."):
                 r = subprocess.run(
                     [sys.executable, os.path.join(ROOT, tool)],
-                    capture_output=True, text=True)
+                    capture_output=True, text=True, check=False)
             st.code((r.stdout + r.stderr)[-1500:])
         st.success("crate onboarded -- new records have facts and a voice")
 
@@ -778,12 +789,12 @@ with tab_voice:
     def lab_voices():
         try:
             base = VOICE_FAST.split("/v1/")[0]
-            with _ur.urlopen(base + "/voices", timeout=10) as r:
+            with _ur.urlopen(_http_only(base + "/voices"), timeout=10) as r:  # nosec B310
                 got = _json.load(r)
             names = got.get("voices") if isinstance(got, dict) else got
             return [n for n in names if not n.endswith("-old-30s")
                     and not n.endswith("-full-90s")] or ["Randy", "Jason"]
-        except Exception:
+        except Exception:  # noqa: BLE001  voice list is optional; fall back to the two known voices
             return ["Randy", "Jason"]
 
     def lab_render(text, voice, url, opts=None):
@@ -795,7 +806,7 @@ with tab_voice:
         body = _json.dumps(payload).encode("utf-8")
         req = _ur.Request(url, data=body,
                           headers={"Content-Type": "application/json"})
-        with _ur.urlopen(req, timeout=600) as r:
+        with _ur.urlopen(_http_only(req), timeout=600) as r:  # nosec B310
             return r.read()
 
     st.caption("Punctuation is stage direction here: commas breathe, an "
@@ -883,8 +894,7 @@ with tab_voice:
         which = st.selectbox("Telling", lab_stories, key="lab-story")
         tpath = os.path.join(PEOPLE, who, which)
         spath = tpath.replace(".txt", ".speak.txt")
-        spoken0 = open(spath if os.path.exists(spath) else tpath,
-                       encoding="utf-8").read()
+        spoken0 = Path(spath if os.path.exists(spath) else tpath).read_text(encoding="utf-8")
         if os.path.exists(spath):
             st.caption("This telling already has a spoken version -- you "
                        "are editing that, not the display text.")
@@ -898,7 +908,7 @@ with tab_voice:
         try:
             with open(sfile, encoding="utf-8") as fh:
                 tune = _json.load(fh)
-        except Exception:
+        except (OSError, ValueError):
             tune = {}
         st.markdown("**Fine-tune this artist's sound** -- sliders apply to "
                     "takes below; *Save tuning* keeps them with the artist "
@@ -935,7 +945,7 @@ with tab_voice:
                        "of this artist uses it")
 
         with st.expander("Edit the display text (what the site shows)"):
-            disp0 = open(tpath, encoding="utf-8").read()
+            disp0 = Path(tpath).read_text(encoding="utf-8")
             disp = st.text_area("story text", disp0, height=160,
                                 key=f"lab-disp-{who}-{which}")
             if disp != disp0 and st.button("Save display text",
@@ -948,8 +958,8 @@ with tab_voice:
         with st.expander("Edit person.json"):
             jpath = os.path.join(PEOPLE, who, "person.json")
             try:
-                j0 = open(jpath, encoding="utf-8").read()
-            except Exception:
+                j0 = Path(jpath).read_text(encoding="utf-8")
+            except (OSError, ValueError):
                 j0 = "{}"
             jraw = st.text_area("person.json", j0, height=200,
                                 key=f"lab-json-{who}")
@@ -1006,7 +1016,7 @@ with tab_who:
         try:
             with open(IDENTS, encoding="utf-8") as f:
                 return _json.load(f)
-        except Exception:
+        except (OSError, ValueError):
             return {}
 
     def idents_save(d):
@@ -1018,7 +1028,7 @@ with tab_who:
         it genuinely recognises a public figure -- a name. Suggestions,
         clearly labelled; Jason's click is what makes anything true."""
         import base64
-        b64 = base64.b64encode(open(path, "rb").read()).decode()
+        b64 = base64.b64encode(Path(path).read_bytes()).decode()
         body = _json.dumps({
             "model": os.environ.get("VISION_MODEL", "gemma4:12b"),
             "stream": False,
@@ -1035,7 +1045,7 @@ with tab_who:
         }).encode()
         req = _ur.Request(OLLAMA + "/api/chat", data=body,
                           headers={"Content-Type": "application/json"})
-        with _ur.urlopen(req, timeout=600) as r:
+        with _ur.urlopen(_http_only(req), timeout=600) as r:  # nosec B310
             return _json.loads(r.read())["message"]["content"]
 
     ids = idents_load()
@@ -1134,8 +1144,8 @@ with tab_roster:
             if not os.path.isfile(pj):
                 continue
             try:
-                p = _json.load(open(pj, encoding="utf-8"))
-            except Exception:
+                p = _json.loads(Path(pj).read_text(encoding="utf-8"))
+            except (OSError, ValueError):
                 p = {}
             files = os.listdir(d)
             photos = [f for f in files
@@ -1147,15 +1157,15 @@ with tab_roster:
             text = ""
             for f in stories:
                 try:
-                    text += open(os.path.join(d, f), encoding="utf-8").read()
-                except Exception:
+                    text += Path(os.path.join(d, f)).read_text(encoding="utf-8")
+                except (OSError, ValueError):
                     pass
             notes = ""
             np = os.path.join(d, "notes.md")
             if os.path.exists(np):
                 try:
-                    notes = open(np, encoding="utf-8").read()
-                except Exception:
+                    notes = Path(np).read_text(encoding="utf-8")
+                except (OSError, ValueError):
                     pass
             out.append({
                 "slug": slug, "name": p.get("name", slug), "era": p.get("era", ""),
@@ -1261,8 +1271,8 @@ with tab_roster:
                           format_func=lambda k: names[k], key="ros-b")
         cpath = os.path.join(SITE, "data", "connections.json")
         try:
-            doc = _json.load(open(cpath, encoding="utf-8"))
-        except Exception:
+            doc = _json.loads(Path(cpath).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
             doc = {"links": []}
         existing = next((l for l in doc.get("links", [])
                          if {l.get("a"), l.get("b")} == {a, b}), None)

@@ -34,8 +34,13 @@ import os
 import re
 import shutil
 import subprocess
+import tempfile
 import time
 from pathlib import Path
+
+# ipptool reads its request from a file. These lived at fixed /tmp names (Bandit B108); a private
+# directory per process (mode 0700) means nothing else in /tmp can swap them. 2026-11-19.
+_IPP_DIR = Path(tempfile.mkdtemp(prefix="printq-ipp-"))
 
 CUPS_HOST = os.environ.get("CUPS_HOST", "cups:631")
 PRINTER_IP = (os.environ.get("PRINTER_IP") or "").strip()
@@ -116,6 +121,7 @@ def run(args: list[str], timeout: int = 60) -> tuple[int, str]:
             # a message we can read, report and act on, in a second rather
             # than after a two-minute timeout.
             stdin=subprocess.DEVNULL,
+            check=False,
         )
         return r.returncode, ((r.stdout or "") + (r.stderr or "")).strip()
     except Exception as e:  # noqa: BLE001
@@ -259,7 +265,7 @@ def job_attrs(job_id: str) -> dict:
     if not shutil.which("ipptool"):
         return {}
     num = job_id.rsplit("-", 1)[-1]
-    q = Path("/tmp/job.test")
+    q = _IPP_DIR / "job.test"
     q.write_text('{ OPERATION Get-Job-Attributes\n'
                  '  GROUP operation-attributes-tag\n'
                  '  ATTR charset attributes-charset utf-8\n'
@@ -515,7 +521,7 @@ def read_status() -> dict:
 
 def printer_attrs() -> dict:
     """Ask the printer about itself over IPP. Returns {} if it won't answer."""
-    q = Path("/tmp/attrs.test")
+    q = _IPP_DIR / "attrs.test"
     q.write_text('{ OPERATION Get-Printer-Attributes\n'
                  '  GROUP operation-attributes-tag\n'
                  '  ATTR charset attributes-charset utf-8\n'

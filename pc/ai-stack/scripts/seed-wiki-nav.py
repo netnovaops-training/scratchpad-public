@@ -17,7 +17,6 @@ permission model that could drift from the real one.
 """
 from __future__ import annotations
 
-import io
 import os
 import sys
 
@@ -30,15 +29,16 @@ def load_env():
                  "/seed/wiki.env", "/app/wiki.env"):
         if not os.path.exists(name):
             continue
-        for line in io.open(name, encoding="utf-8"):
-            line = line.strip()
-            if line.startswith("WIKIJS_") and "=" in line:
-                k, _, v = line.partition("=")
-                os.environ.setdefault(k, v.strip().strip('"').strip("'"))
+        with open(name, encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if line.startswith("WIKIJS_") and "=" in line:
+                    k, _, v = line.partition("=")
+                    os.environ.setdefault(k, v.strip().strip('"').strip("'"))
 
 
 load_env()
-import wikijs  # noqa: E402
+import wikijs
 
 SITE = "https://garden.example.org"
 

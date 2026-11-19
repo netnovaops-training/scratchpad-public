@@ -22,6 +22,19 @@ import os
 import urllib.error
 import urllib.request
 
+
+def _http_only(target):
+    """Return target (a URL string or urllib Request) if its scheme is http or https, else raise ValueError.
+
+    urlopen also follows file:// and custom schemes (Bandit B310). Every caller here talks to an
+    http(s) service, so anything else is a mistake or a planted URL. Added 2026-11-19.
+    """
+    url = str(getattr(target, "full_url", target))
+    if not url.lower().startswith(("http://", "https://")):
+        raise ValueError(f"refusing a non-http(s) URL: {url[:80]}")
+    return target
+
+
 # THE ENV VAR ALREADY ENDS IN /graphql, so the suffix is stripped here
 # rather than assumed away. Wiki.js happens to answer /graphql/graphql
 # too, which is exactly the kind of accident that works until it does
@@ -58,7 +71,7 @@ def gql(query, variables=None):
         headers={"Content-Type": "application/json",
                  "Authorization": "Bearer " + API_KEY})
     try:
-        with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
+        with urllib.request.urlopen(_http_only(req), timeout=TIMEOUT) as r:  # nosec B310
             out = json.loads(r.read())
     except urllib.error.HTTPError as e:
         detail = e.read().decode("utf-8", "replace")[:300]
@@ -163,9 +176,7 @@ def put_page(path, title, content, description="", tags=None,
     # hundred full listings to write a few hundred pages. A caller that has
     # already listed them once passes what it knows; everyone else pays for
     # one cheap single-page query rather than a listing.
-    if existing is None:
-        pid, err = page_id(path, locale)
-    elif existing:
+    if existing is None or existing:
         pid, err = page_id(path, locale)
     else:
         pid, err = None, ""

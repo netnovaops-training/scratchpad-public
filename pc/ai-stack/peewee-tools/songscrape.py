@@ -17,10 +17,23 @@
 #  Source URLs land in data/songfacts-sources.json for the audit trail.
 # =============================================================================
 import json
-import io
 import os
 import urllib.parse
 import urllib.request
+from pathlib import Path
+
+
+def _http_only(target):
+    """Return target (a URL string or urllib Request) if its scheme is http or https, else raise ValueError.
+
+    urlopen also follows file:// and custom schemes (Bandit B310). Every caller here talks to an
+    http(s) service, so anything else is a mistake or a planted URL. Added 2026-11-19.
+    """
+    url = str(getattr(target, "full_url", target))
+    if not url.lower().startswith(("http://", "https://")):
+        raise ValueError(f"refusing a non-http(s) URL: {url[:80]}")
+    return target
+
 
 OLLAMA = os.environ.get("OLLAMA_URL", "http://localhost:11434")
 MODEL = os.environ.get("DRAFT_MODEL", "gemma4:12b")
@@ -41,7 +54,7 @@ def wiki(query, limit=6000):
                                 "srsearch": query, "srlimit": 1,
                                 "format": "json"})
     req = urllib.request.Request(api + q, headers=UA)
-    with urllib.request.urlopen(req, timeout=20) as r:
+    with urllib.request.urlopen(_http_only(req), timeout=20) as r:  # nosec B310
         hits = json.loads(r.read()).get("query", {}).get("search", [])
     if not hits:
         return None, None
@@ -50,7 +63,7 @@ def wiki(query, limit=6000):
                                 "explaintext": 1, "titles": title,
                                 "format": "json", "exchars": limit})
     req = urllib.request.Request(api + q, headers=UA)
-    with urllib.request.urlopen(req, timeout=25) as r:
+    with urllib.request.urlopen(_http_only(req), timeout=25) as r:  # nosec B310
         pages = json.loads(r.read()).get("query", {}).get("pages", {})
     text = next(iter(pages.values()), {}).get("extract", "")
     url = "https://en.wikipedia.org/wiki/" + urllib.parse.quote(
@@ -73,17 +86,16 @@ def extract(title_hint, source_text):
                                      "content": prompt}]}).encode()
     req = urllib.request.Request(OLLAMA + "/api/chat", data=body,
                                  headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=600) as r:
+    with urllib.request.urlopen(_http_only(req), timeout=600) as r:  # nosec B310
         return json.loads(json.loads(r.read())["message"]["content"])
 
 
 def main():
     os.chdir(SITE)
-    music = json.load(io.open("data/music.json", encoding="utf-8"))
-    facts = json.load(io.open("data/songfacts.json", encoding="utf-8"))
+    music = json.loads(Path("data/music.json").read_text(encoding="utf-8"))
+    facts = json.loads(Path("data/songfacts.json").read_text(encoding="utf-8"))
     try:
-        sources = json.load(io.open("data/songfacts-sources.json",
-                                    encoding="utf-8"))
+        sources = json.loads(Path("data/songfacts-sources.json").read_text(encoding="utf-8"))
     except Exception:  # noqa: BLE001
         sources = {}
 
@@ -133,11 +145,9 @@ def main():
         changed += 1
 
     if changed:
-        io.open("data/songfacts.json", "w", encoding="utf-8",
-                newline="\n").write(json.dumps(facts, indent=2,
-                                               ensure_ascii=False))
-        io.open("data/songfacts-sources.json", "w", encoding="utf-8",
-                newline="\n").write(json.dumps(sources, indent=2))
+        Path("data/songfacts.json").write_text(json.dumps(facts, indent=2,
+                                               ensure_ascii=False), encoding="utf-8", newline="\n")
+        Path("data/songfacts-sources.json").write_text(json.dumps(sources, indent=2), encoding="utf-8", newline="\n")
     print(f"enriched {changed} records")
 
 

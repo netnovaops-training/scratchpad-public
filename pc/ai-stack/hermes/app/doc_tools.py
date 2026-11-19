@@ -26,6 +26,19 @@ import urllib.request
 
 from .plant_tools import _pass_key
 
+
+def _http_only(target):
+    """Return target (a URL string or urllib Request) if its scheme is http or https, else raise ValueError.
+
+    urlopen also follows file:// and custom schemes (Bandit B310). Every caller here talks to an
+    http(s) service, so anything else is a mistake or a planted URL. Added 2026-11-19.
+    """
+    url = str(getattr(target, "full_url", target))
+    if not url.lower().startswith(("http://", "https://")):
+        raise ValueError(f"refusing a non-http(s) URL: {url[:80]}")
+    return target
+
+
 _BASE = os.environ.get("PAPERLESS_BASE", "http://192.168.1.86:8000")
 _ITEM = "Paperless Hermes token (hermes-docs)"
 _TIMEOUT = 20
@@ -42,7 +55,7 @@ def _get(path: str) -> dict:
         headers={"Authorization": f"Token {tok}", "Accept": "application/json"}  # a pinned "; version=5" got HTTP 406 here 2026-10-31,
     )
     try:
-        with urllib.request.urlopen(req, timeout=_TIMEOUT) as resp:
+        with urllib.request.urlopen(_http_only(req), timeout=_TIMEOUT) as resp:  # nosec B310
             return json.loads(resp.read().decode())
     except urllib.error.HTTPError as e:
         raise RuntimeError(f"Paperless answered HTTP {e.code} for {path.split('?')[0]}") from e

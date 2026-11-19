@@ -13,6 +13,7 @@ import hashlib
 import json
 import os
 import random
+from pathlib import Path
 
 T = os.path.expanduser("~/t1014/")
 HOLD = "/volume1/Computer backup/_T1014-hold"
@@ -28,9 +29,10 @@ def sha(p):
 
 def last(journal):
     out = {}
-    for l in open(T + journal, encoding="utf-8"):
-        d = json.loads(l)
-        out[d["n"]] = d
+    with open(T + journal, encoding="utf-8") as fh:
+        for l in fh:
+            d = json.loads(l)
+            out[d["n"]] = d
     return out
 
 
@@ -48,7 +50,8 @@ def main():
     place = last("journal-1-place.jsonl")
     gone = [d["dst"] for d in place.values() if d.get("ok") and not os.path.exists(d["dst"])]
     print("place: ok", sum(1 for d in place.values() if d.get("ok")), "missing at dst:", len(gone))
-    ops = {o["n"]: o for o in map(json.loads, open(T + "ops-2-hold.jsonl", encoding="utf-8"))}
+    with open(T + "ops-2-hold.jsonl", encoding="utf-8") as fh_:
+        ops = {o["n"]: o for o in map(json.loads, fh_)}
     hold = last("journal-2-hold.jsonl")
     dups = [d for d in hold.values() if d.get("ok") and d["act"] == "duplicate"]
     random.seed(1014)
@@ -67,7 +70,7 @@ def main():
     out = random.sample(picks[0], 4) + picks[1][:2] + random.sample(picks[2], 11)
     lines = [f"{d['dst']}   (was {d['src']})" for d in out]
     lines += [f"{o['need']}   (made from RAW {o['src']})" for o in random.sample(conv, 3)]
-    open(T + "spot-check-20.txt", "w", encoding="utf-8").write("\n".join(lines) + "\n")
+    Path(T + "spot-check-20.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
     print("spot check list:", len(lines), "->", T + "spot-check-20.txt")
 
 

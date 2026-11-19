@@ -19,6 +19,20 @@ import os
 import sys
 import time
 import urllib.request
+from pathlib import Path
+
+
+def _http_only(target):
+    """Return target (a URL string or urllib Request) if its scheme is http or https, else raise ValueError.
+
+    urlopen also follows file:// and custom schemes (Bandit B310). Every caller here talks to an
+    http(s) service, so anything else is a mistake or a planted URL. Added 2026-11-19.
+    """
+    url = str(getattr(target, "full_url", target))
+    if not url.lower().startswith(("http://", "https://")):
+        raise ValueError(f"refusing a non-http(s) URL: {url[:80]}")
+    return target
+
 
 BASE = os.environ.get("OLLAMA_BASE", "http://ollama:11434")
 MODELS = os.environ.get("BENCH_MODELS", "gemma4:12b,qwen3:8b,qwen3-vl:8b").split(",")
@@ -28,7 +42,7 @@ def post(path, payload, timeout=600):
     req = urllib.request.Request(
         BASE + path, data=json.dumps(payload).encode(),
         headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=timeout) as r:
+    with urllib.request.urlopen(_http_only(req), timeout=timeout) as r:  # nosec B310
         return json.loads(r.read())
 
 
@@ -75,7 +89,7 @@ def t_tools(m):
     if isinstance(args, str):
         try:
             args = json.loads(args)
-        except Exception:
+        except (TypeError, ValueError):
             args = {}
     ok = fn.get("name") == "get_power_state" and "tor" in str(
         args.get("hostname", "")).lower()
@@ -92,14 +106,14 @@ def t_vision(m, img):
                           "content": "Describe this image in one short sentence."}]})
         txt = strip_think(r["message"]["content"]).strip().replace("\n", " ")
         return (len(txt) > 15), txt[:46]
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  benchmark: any model error scores as a fail
         return False, f"error: {str(e)[:38]}"
 
 
 def main():
     img = ""
     if len(sys.argv) > 1 and os.path.exists(sys.argv[1]):
-        img = base64.b64encode(open(sys.argv[1], "rb").read()).decode()
+        img = base64.b64encode(Path(sys.argv[1]).read_bytes()).decode()
 
     print(f"{'MODEL':<15}{'INSTR':<7}{'REASON':<8}{'TOOLS':<7}{'VISION':<8}{'SECS':<7}")
     print("-" * 60)
@@ -108,7 +122,7 @@ def main():
         t0 = time.time()
         try:
             oi, di = t_instr(m)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  benchmark: a model that errors is skipped
             print(f"{m:<15}SKIP  {str(e)[:40]}")
             continue
         orr, dr = t_reason(m)

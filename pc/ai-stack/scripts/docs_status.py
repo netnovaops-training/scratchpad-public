@@ -17,15 +17,18 @@ import subprocess
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import doc_backfill as B  # noqa: E402  (same eligibility rules, same paths, one source of truth)
+from pathlib import Path
+
+import doc_backfill as B
 
 
 def front(docpath):
     try:
-        head = open(docpath, encoding="utf-8").read(700)
+        with open(docpath, encoding="utf-8") as fh:
+            head = fh.read(700)
     except OSError:
         return None
-    get = lambda k: (re.search(r"^%s:\s*(.*)$" % k, head, re.M) or [None, ""])[1].strip()
+    get = lambda k: (re.search(rf"^{k}:\s*(.*)$", head, re.MULTILINE) or [None, ""])[1].strip()
     return {"source": get("source"), "reviewed": get("reviewed"), "needs": get("needs-review")}
 
 
@@ -33,7 +36,7 @@ def main():
     files = [l for l in B.git("ls-files").splitlines() if B.eligible(l)]
     # one git call for every hash, instead of one process per file
     hashes = subprocess.run(["git", "-C", B.REPO, "hash-object", "--stdin-paths"], input="\n".join(files),
-                            capture_output=True, text=True, encoding="utf-8").stdout.split()
+                            capture_output=True, text=True, encoding="utf-8", check=False).stdout.split()
     cur = stale = missing = too_long = reviewed = flagged = 0
     flagged_files, stale_files = [], []
     for rel, h in zip(files, hashes):
@@ -41,7 +44,7 @@ def main():
         if fm is None:
             missing += 1
             try:
-                if len(open(os.path.join(B.REPO, rel), encoding="utf-8", errors="replace").read()) > B.MAX_CHARS:
+                if len(Path(os.path.join(B.REPO, rel)).read_text(encoding="utf-8", errors="replace")) > B.MAX_CHARS:
                     too_long += 1
             except OSError:
                 pass
@@ -57,27 +60,27 @@ def main():
             flagged += 1
             flagged_files.append(rel)
     try:
-        tail = open(B.LOG, encoding="utf-8").read().splitlines()[-5:]
+        tail = Path(B.LOG).read_text(encoding="utf-8").splitlines()[-5:]
     except OSError:
         tail = ["(no backfill log yet)"]
     now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
     lines = [
         "# Documentation status",
         "",
-        "Generated %s by `scripts/docs_status.py`. Do not edit by hand." % now,
+        f"Generated {now} by `scripts/docs_status.py`. Do not edit by hand.",
         "",
-        "- Files the backfill covers: **%d**" % len(files),
-        "- Documented and current: **%d**" % cur,
-        "- Documented, but the file changed since (stale): **%d**" % stale,
-        "- Not documented yet: **%d** (of these, too long for one pass: %d)" % (missing, too_long),
-        "- Reviewed by a person (`reviewed: yes`): **%d**" % reviewed,
-        "- Flagged for names not in the file (`needs-review: yes`): **%d**" % flagged,
+        f"- Files the backfill covers: **{len(files)}**",
+        f"- Documented and current: **{cur}**",
+        f"- Documented, but the file changed since (stale): **{stale}**",
+        f"- Not documented yet: **{missing}** (of these, too long for one pass: {too_long})",
+        f"- Reviewed by a person (`reviewed: yes`): **{reviewed}**",
+        f"- Flagged for names not in the file (`needs-review: yes`): **{flagged}**",
         "",
         "## To resume",
         "`python scripts/doc_backfill.py --all` skips every current doc, so it is safe to stop and start again.",
-        "Files over %d characters are skipped and need a chunked pass (not built yet)." % B.MAX_CHARS,
+        f"Files over {B.MAX_CHARS} characters are skipped and need a chunked pass (not built yet).",
         "",
-        "## Last lines of the backfill log (`%s`)" % B.LOG,
+        f"## Last lines of the backfill log (`{B.LOG}`)",
         "```",
     ] + tail + ["```", ""]
     if flagged_files:
@@ -87,8 +90,7 @@ def main():
     os.makedirs(os.path.join(B.REPO, "docs"), exist_ok=True)
     with open(os.path.join(B.REPO, "docs", "STATUS.md"), "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
-    print("docs: %d of %d current, %d stale, %d missing (%d too long), %d flagged, %d reviewed" %
-          (cur, len(files), stale, missing, too_long, flagged, reviewed))
+    print(f"docs: {cur} of {len(files)} current, {stale} stale, {missing} missing ({too_long} too long), {flagged} flagged, {reviewed} reviewed")
     return 0
 
 

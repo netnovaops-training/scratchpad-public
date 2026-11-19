@@ -16,7 +16,24 @@
 #  will hear read aloud, and a wrong name spoken in a voice she trusts is
 #  worse than a blank one.
 # =============================================================================
-import base64, json, os, sys, time, urllib.request
+import base64
+import json
+import os
+import urllib.request
+from pathlib import Path
+
+
+def _http_only(target):
+    """Return target (a URL string or urllib Request) if its scheme is http or https, else raise ValueError.
+
+    urlopen also follows file:// and custom schemes (Bandit B310). Every caller here talks to an
+    http(s) service, so anything else is a mistake or a planted URL. Added 2026-11-19.
+    """
+    url = str(getattr(target, "full_url", target))
+    if not url.lower().startswith(("http://", "https://")):
+        raise ValueError(f"refusing a non-http(s) URL: {url[:80]}")
+    return target
+
 
 OLLAMA = "http://127.0.0.1:11434"
 # Consolidated onto the one generalist 2026-09-13. Hardcoded rather than
@@ -45,7 +62,7 @@ PROMPT = (
 
 
 def look(path):
-    img = base64.b64encode(open(path, "rb").read()).decode()
+    img = base64.b64encode(Path(path).read_bytes()).decode()
     body = json.dumps({
         "model": MODEL, "stream": False, "options": {"temperature": 0},
         "keep_alive": "2m",
@@ -53,7 +70,7 @@ def look(path):
     }).encode()
     req = urllib.request.Request(OLLAMA + "/api/chat", data=body,
                                  headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=300) as r:
+    with urllib.request.urlopen(_http_only(req), timeout=300) as r:  # nosec B310
         text = json.loads(r.read())["message"]["content"]
     s, e = text.find("{"), text.rfind("}")
     return json.loads(text[s:e + 1]) if s > -1 else {"description": text}
@@ -62,7 +79,7 @@ def look(path):
 def main():
     existing = {}
     if os.path.exists(OUT):
-        existing = {p["photo"]: p for p in json.load(open(OUT))}
+        existing = {p["photo"]: p for p in json.loads(Path(OUT).read_text())}
     out = []
     files = sorted(f for f in os.listdir(PHOTOS) if f.endswith(".jpg"))
     for i, f in enumerate(files, 1):
@@ -75,10 +92,10 @@ def main():
             out.append({"photo": f, "status": "unverified", **d,
                         "confirmed_people": [],   # <- the family fills this in
                         "note": ""})
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001  one failed photo is recorded as an error; batch goes on
             print(f"  failed: {e}", flush=True)
             out.append({"photo": f, "status": "error", "error": str(e)})
-        json.dump(out, open(OUT, "w"), indent=1)
+        Path(OUT).write_text(json.dumps(out, indent=1))
     print("wrote", OUT)
 
 

@@ -73,7 +73,7 @@ def type_of(path: str) -> tuple[str, str]:
 
 def zone_of(path: str) -> tuple[str, str]:
     for name, colour, rx in ZONES:
-        if re.search(rx, path, re.I):
+        if re.search(rx, path, re.IGNORECASE):
             return name, colour
     return ZONES[-1][:2]
 
@@ -110,7 +110,7 @@ def summary(row: dict) -> str:
     area, rel = row["scratchpad_path"].split("/", 2)[1:]
     doc = HOME / "docs" / "pc" / area / (rel + ".md")
     if doc.is_file():
-        m = re.search(r"## What it does\s+(.+?)(?:\n#|\Z)", doc.read_text("utf-8", "replace"), re.S)
+        m = re.search(r"## What it does\s+(.+?)(?:\n#|\Z)", doc.read_text("utf-8", "replace"), re.DOTALL)
         if m:
             text = " ".join(m.group(1).split())
             return " ".join(re.split(r"(?<=[.!?])\s", text)[:3])[:420]
@@ -146,7 +146,7 @@ def touches(row: dict) -> list[str]:
                       (r"smtp|imap|gmail", "Email"), (r"192\.168\.86\.86|ssh ", "the NUC"), (r"docker", "Docker"),
                       (r"All-Documents", "All-Documents"), (r"twilio", "Twilio"), (r"rclone|gdrive", "Google Drive"),
                       (r"postgres|sqlite|\.db\b", "a database"), (r"caddy", "Caddy")]:
-        if re.search(rx, text, re.I) and label not in found:
+        if re.search(rx, text, re.IGNORECASE) and label not in found:
             found.append(label)
     return found[:4] or ["files on this PC"]
 
@@ -219,12 +219,12 @@ def script_page(r: dict, n: int, zone: str, colour: str, pages: dict) -> str:
 
 
 def render(html_doc: str) -> bytes:
-    r = subprocess.run(["ssh", NUC, "docker exec -i paperless-ngx curl -s -f -F 'files=@-;filename=index.html' "
+    r = subprocess.run(["ssh", NUC, ("docker exec -i paperless-ngx curl -s -f -F 'files=@-;filename=index.html' "
                         "-F paperWidth=5.83 -F paperHeight=8.27 -F marginTop=0 -F marginBottom=0 -F marginLeft=0 "
-                        "-F marginRight=0 -F printBackground=true http://gotenberg:3000/forms/chromium/convert/html"],
-                       input=html_doc.encode("utf-8"), capture_output=True, timeout=600)
+                        "-F marginRight=0 -F printBackground=true http://gotenberg:3000/forms/chromium/convert/html")],
+                       input=html_doc.encode("utf-8"), capture_output=True, timeout=600, check=False)
     if r.returncode != 0 or not r.stdout.startswith(b"%PDF"):
-        raise RuntimeError("Gotenberg did not return a PDF (exit %d)" % r.returncode)
+        raise RuntimeError(f"Gotenberg did not return a PDF (exit {r.returncode})")
     return r.stdout
 
 

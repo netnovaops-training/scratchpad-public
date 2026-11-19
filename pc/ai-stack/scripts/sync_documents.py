@@ -52,7 +52,7 @@ NEVER_SEND = re.compile(r"(?i)bitlocker|recovery[ _-]?(key|code)|wpa_supplicant|
 
 
 def log(msg: str) -> None:
-    line = "%s %s" % (datetime.datetime.now().isoformat(timespec="seconds"), msg)
+    line = "{} {}".format(datetime.datetime.now().isoformat(timespec="seconds"), msg)
     with open(LOG, "a", encoding="utf-8") as f:
         f.write(line + "\n")
     print(line)
@@ -70,8 +70,8 @@ def main() -> int:
     since = last_sync()
     # Also send anything the NUC does not have yet. A file moved or renamed on the PC keeps its old
     # modified time, so the time stamp alone never sent it (20 such files found 2026-11-12).
-    ls = subprocess.run(["ssh", NUC, "find %s -type f -printf '%%P\\n'" % REMOTE],
-                        capture_output=True, text=True, encoding="utf-8", errors="replace")
+    ls = subprocess.run(["ssh", NUC, f"find {REMOTE} -type f -printf '%P\\n'"],
+                        capture_output=True, text=True, encoding="utf-8", errors="replace", check=False)
     remote = set(ls.stdout.splitlines()) if ls.returncode == 0 else None
     changed = []
     for dp, _dns, fns in os.walk(DOCS):
@@ -82,10 +82,10 @@ def main() -> int:
             rel = os.path.relpath(p, DOCS).replace("\\", "/")
             if os.path.getmtime(p) > since or (remote is not None and rel not in remote):
                 changed.append(p)
-    log("changed since last sync: %d" % len(changed))
+    log(f"changed since last sync: {len(changed)}")
     if changed:
         ssh = subprocess.Popen(
-            ["ssh", NUC, "mkdir -p %s && tar -xf - -C %s" % (REMOTE, REMOTE)],
+            ["ssh", NUC, f"mkdir -p {REMOTE} && tar -xf - -C {REMOTE}"],
             stdin=subprocess.PIPE,
         )
         with tarfile.open(fileobj=ssh.stdin, mode="w|") as tar:
@@ -99,17 +99,17 @@ def main() -> int:
     # failure there is logged and never stops the documents sync).
     try:
         sp = subprocess.run([sys.executable, "-I", os.path.join(HERE, "sync_scratchpad.py")],
-                            capture_output=True, text=True, timeout=600)
-        log("scratchpad sync exit %d: %s" % (sp.returncode, sp.stdout.strip().splitlines()[-1:] or ""))
+                            capture_output=True, text=True, timeout=600, check=False)
+        log("scratchpad sync exit {}: {}".format(sp.returncode, sp.stdout.strip().splitlines()[-1:] or ""))
     except (OSError, subprocess.TimeoutExpired) as e:
-        log("scratchpad sync skipped: %s" % type(e).__name__)
+        log(f"scratchpad sync skipped: {type(e).__name__}")
     if "--no-paperless" in sys.argv:  # file sync only (used for the 2026-11-12 first run/test)
         with open(STAMP, "w") as f:
             f.write(str(started))
         return 0
-    r = subprocess.run(["ssh", NUC, "bash ~/load_all.sh"], capture_output=True, text=True)
+    r = subprocess.run(["ssh", NUC, "bash ~/load_all.sh"], capture_output=True, text=True, check=False)
     summary = [ln for ln in r.stdout.splitlines() if "files," in ln or "FAIL" in ln][-12:]
-    log("loader exit %d; %s" % (r.returncode, " | ".join(summary) or "no output"))
+    log("loader exit {}; {}".format(r.returncode, " | ".join(summary) or "no output"))
     if r.returncode == 0:
         with open(STAMP, "w") as f:
             f.write(str(started))

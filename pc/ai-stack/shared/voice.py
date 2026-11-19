@@ -34,7 +34,7 @@ class Voice:
             root = self.base_url.rsplit("/v1", 1)[0]
             r = httpx.get(f"{root}/health", timeout=5.0)
             return r.status_code == 200
-        except Exception:
+        except Exception:  # noqa: BLE001  health probe: any failure means not available
             return False
 
     def list_voices(self) -> list[str]:
@@ -43,7 +43,7 @@ class Voice:
             r = httpx.get(f"{root}/voices", timeout=10.0)
             r.raise_for_status()
             return [v["name"] for v in r.json().get("voices", [])]
-        except Exception:
+        except Exception:  # noqa: BLE001  voice list is optional; empty on any failure
             return []
 
     def speak(

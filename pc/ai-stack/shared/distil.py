@@ -61,11 +61,11 @@ def _parse_array(text: str) -> list[dict[str, Any]]:
     """Get a JSON array out of a model reply that may be wrapped in prose."""
     text = (text or "").strip()
     if text.startswith("```"):
-        text = re.sub(r"^```[a-z]*\n?|```$", "", text, flags=re.M).strip()
+        text = re.sub(r"^```[a-z]*\n?|```$", "", text, flags=re.MULTILINE).strip()
     try:
         data = json.loads(text)
     except ValueError:
-        m = re.search(r"\[.*\]", text, re.S)
+        m = re.search(r"\[.*\]", text, re.DOTALL)
         if not m:
             return []
         try:
@@ -96,7 +96,7 @@ def distil(store: MemoryStore, router, *, job: str = "chat",
 
     try:
         reply = router.complete_text(prompt, job=job)
-    except Exception:
+    except Exception:  # noqa: BLE001  distilling is optional; nothing saved on any model failure
         return []
 
     written = []

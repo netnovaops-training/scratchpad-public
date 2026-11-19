@@ -31,18 +31,21 @@ import socket
 import subprocess
 import sys
 import time
+from pathlib import Path
 
 HOME = os.path.expanduser("~")
 # Paths inside scripts: absolute paths under $HOME, or ~/..., or $HOME/... (stop at quotes, spaces, ; ) etc.)
-SCRIPT_PATH = re.compile(r"""(?:(?<![\w/])~|\$HOME|\$\{HOME\}|%s)(/[\w.@+-]+(?:/[\w.@+-]+)*)""" % re.escape(HOME))
+SCRIPT_PATH = re.compile(rf"""(?:(?<![\w/])~|\$HOME|\$\{{HOME\}}|{re.escape(HOME)})(/[\w.@+-]+(?:/[\w.@+-]+)*)""")
 REDIRECT = re.compile(r"^\d*>>?&?$")  # >, >>, 2>, 2>>, &> forms as their own token
-SKIP_SUFFIX = (".log", ".err", ".out", ".lock", ".pid", ".tmp")  # made on first write
+# .alert added 2026-11-19: ~/kopia-nuc.alert etc. exist only after a failure (nuc_alert_mail.py mails and
+# deletes them), so a missing .alert is the healthy state; the daily run flagged kopia-nuc.alert as MISSING.
+SKIP_SUFFIX = (".log", ".err", ".out", ".lock", ".pid", ".tmp", ".alert")  # made on first write
 
 
 def run(cmd):
     """Run a read-only command; return stdout ('' if the tool is missing or fails)."""
     try:
-        return subprocess.run(cmd, capture_output=True, text=True, timeout=60).stdout
+        return subprocess.run(cmd, capture_output=True, text=True, timeout=60, check=False).stdout
     except (OSError, subprocess.TimeoutExpired):
         return ""
 
@@ -115,7 +118,7 @@ def paths_in_command(cmd):
         for part in re.split(r"[;&|()]", t):
             if re.match(r"^(/|~/|\$HOME/|\$\{HOME\}/)", part) and "*" not in part and "$(" not in part:
                 p = expand(part)
-                if p.startswith("/dev/") or p.startswith("/proc/") or p.endswith(SKIP_SUFFIX):
+                if p.startswith(("/dev/", "/proc/")) or p.endswith(SKIP_SUFFIX):
                     continue
                 if p in ("/usr/bin/env", "/bin/bash", "/bin/sh", "/usr/bin/python3", "/usr/bin/flock"):
                     continue
@@ -132,7 +135,7 @@ def from_cron():
             continue
         cmd = s.split(None, 1)[1] if s.startswith("@") else " ".join(s.split()[5:])
         for p in paths_in_command(cmd):
-            rows.append(("cron", "crontab line %d" % n, p))
+            rows.append(("cron", f"crontab line {n}", p))
     return rows
 
 
@@ -184,23 +187,37 @@ def from_scripts(rows):
                 continue
             seen.add(p)
             try:
-                text = open(p, encoding="utf-8", errors="replace").read()
+                text = Path(p).read_text(encoding="utf-8", errors="replace")
             except OSError:
                 continue
             # A path glued to a variable or glob (learning_${x}, learning_*) is only half a name: skip it, it would be a fake miss.
             found = {m.group(1) for m in SCRIPT_PATH.finditer(text) if text[m.end():m.end() + 1] not in ("$", "{", "*")}
             for m in found:
                 q = HOME + m.rstrip("._-")
-                if not q.endswith(SKIP_SUFFIX):
+                if not q.endswith(SKIP_SUFFIX) and not made_by_script(text, m.rstrip("._-")):
                     out.append(("script(maybe)", os.path.basename(p), q))
     return out
+
+
+def made_by_script(text, rel):
+    """True if the script makes this $HOME path itself with `mkdir` (directly, or through a VAR=path it set).
+
+    OUTCOME 2026-11-18 (T0003 autopilot): ~/backups/homebox was reported MISSING on every run, but
+    homebox-update.sh line 10 does `BK=/home/user/backups/homebox; mkdir -p "$BK"`, so it is made on first
+    run: a false alarm. Shell `mkdir` only; Python Path.mkdir()/os.makedirs is not checked (none seen yet).
+    """
+    forms = [re.escape(f + rel) for f in ("~", "$HOME", "${HOME}", HOME)]
+    path_re = "(?:{})".format("|".join(forms))
+    names = re.findall(rf"\b([A-Za-z_][A-Za-z0-9_]*)=[\"']?{path_re}[\"']?(?=[\s;]|$)", text, re.MULTILINE)
+    targets = [path_re] + [rf"\$\{{?{re.escape(n)}\}}?" for n in names]
+    return any(re.search(rf"\bmkdir\b[^\n;]*[\"']?{t}[\"']?(?=[\s;\"']|$)", text, re.MULTILINE) for t in targets)
 
 
 def main(argv):
     """Collect rows from every source, check each path once per (source, from), write the CSV, print MISSING."""
     host = socket.gethostname()
     base = "nuc-homelab/audit/break-finder" if os.path.isdir(os.path.join(HOME, "nuc-homelab")) else "audit/break-finder"
-    out = os.path.join(HOME, base, "%s-%s.csv" % (host, time.strftime("%Y-%m-%d")))
+    out = os.path.join(HOME, base, "{}-{}.csv".format(host, time.strftime("%Y-%m-%d")))
     if "--out" in argv:
         out = argv[argv.index("--out") + 1]
     rows = from_cron() + from_systemd() + from_docker()
@@ -217,9 +234,9 @@ def main(argv):
             w.writerow([src, frm, p, st, git_repo(p) if p.startswith(HOME) else "-"])
             if st == "MISSING":
                 missing.append((src, frm, p))
-    print("%s: %d paths checked, %d MISSING -> %s" % (host, len(rows), len(missing), out))
+    print(f"{host}: {len(rows)} paths checked, {len(missing)} MISSING -> {out}")
     for src, frm, p in missing:
-        print("  MISSING  %-14s %-40s %s" % (src, frm[:40], p))
+        print(f"  MISSING  {src!s:<14} {frm[:40]!s:<40} {p}")
     return 0
 
 

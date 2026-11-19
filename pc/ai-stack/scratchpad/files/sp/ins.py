@@ -1,12 +1,16 @@
-import sys, re, textwrap
+import re
+import sys
+import textwrap
+from pathlib import Path
+
 # usage: ins.py SRC SPEC
 src, spec = sys.argv[1], sys.argv[2]
-lines = open(src, encoding='utf-8', newline='').read().split('\n')
+lines = Path(src).read_bytes().decode('utf-8').split('\n')
 crlf = any(l.endswith('\r') for l in lines[:5])
 orig = [l.rstrip('\r') for l in lines]
 items = []
 cur = None
-for raw in open(spec, encoding='utf-8').read().split('\n'):
+for raw in Path(spec).read_text(encoding='utf-8').split('\n'):
     raw = raw.rstrip('\r')
     m = re.match(r'^@(\d+) ([dch]) ~~ ?(.*)$', raw)
     if m:
@@ -48,6 +52,6 @@ for i, l in enumerate(orig, 1):
     res.append(l)
 add = sum(len(v) for v in out.values())
 nl = '\r\n' if crlf else '\n'
-open(src, 'w', encoding='utf-8', newline='').write(nl.join(res))
+Path(src).write_text(nl.join(res), encoding='utf-8', newline='')
 bad = [l for l in res if len(l) > 100 and l.lstrip().startswith('//') and l not in orig]
 print(src.split('/')[-1], 'added', add, 'toolong', len(bad))

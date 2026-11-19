@@ -19,8 +19,8 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app import audio as A  # noqa: E402
-from app.conversation import Conversation, Tuning  # noqa: E402
+from app import audio as A
+from app.conversation import Conversation, Tuning
 
 PASS: list[str] = []
 FAIL: list[str] = []
@@ -232,7 +232,7 @@ async def test_phone_number_injected():
     h.conv.state.caller = "+17025550123"
     await h.feed([speech_frame()] * 40 + [silence_frame()] * 25)
     await h.settle()
-    name, args = h.tool_calls[0]
+    _name, args = h.tool_calls[0]
     ck("caller id filled in automatically", args.get("client_phone") == "+17025550123", str(args))
     ck("booking flagged on the call", h.conv.state.booked)
 

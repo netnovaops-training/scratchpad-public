@@ -21,8 +21,8 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import threading
 import os
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 
@@ -94,7 +94,7 @@ def _release_model():
             gc.collect()
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
-        except Exception:  # noqa: BLE001
+        except Exception:  # noqa: BLE001, S110  freeing GPU memory is best-effort
             pass
         log.info("idle %.0f min -- released whisper and freed the GPU", IDLE_MINUTES)
 
@@ -232,7 +232,7 @@ def transcribe_array(req: ArrayIn):
 
 @app.post("/v1/audio/transcriptions")
 async def openai_transcriptions(
-    file: UploadFile = File(...),
+    file: UploadFile = File(...),  # noqa: B008  FastAPI parameter marker, read once by design
     model: str = Form("whisper-1"),
     response_format: str = Form("json"),
     language: str = Form(None),
@@ -267,16 +267,21 @@ async def openai_transcriptions(
     # ffmpeg, not soundfile: clients send whatever the platform recorded --
     # Telegram sends OGG/Opus, phones send m4a, browsers send webm. ffmpeg is
     # already in this image for exactly this reason and reads all of them.
-    import subprocess, tempfile, os as _os
+    import os as _os
+    import subprocess
+    import tempfile
     with tempfile.NamedTemporaryFile(suffix=_os.path.splitext(file.filename or "a.ogg")[1] or ".ogg",
                                      delete=False) as tf:
         tf.write(raw)
         src = tf.name
     try:
-        proc = subprocess.run(
+        # In a thread so a long decode does not stall every other request (ASYNC221).
+        proc = await asyncio.to_thread(
+            subprocess.run,
             ["ffmpeg", "-nostdin", "-loglevel", "error", "-i", src,
              "-f", "f32le", "-ac", "1", "-ar", "16000", "-"],
             capture_output=True, timeout=120,
+            check=False,
         )
         if proc.returncode != 0:
             log.warning("ffmpeg could not decode %s: %s",
@@ -415,7 +420,7 @@ async def stt(ws: WebSocket):
 
     except WebSocketDisconnect:
         pass
-    except Exception:  # noqa: BLE001
+    except Exception:
         log.exception("transcriber error")
     finally:
         # Flush anything still buffered when they hang up mid-sentence.
@@ -424,7 +429,7 @@ async def stt(ws: WebSocket):
                 text = transcribe(np.concatenate(buf), sample_rate)
                 if text:
                     log.info("flushed on disconnect: %s", text[:90])
-            except Exception:  # noqa: BLE001
+            except Exception:  # noqa: BLE001, S110  last flush on disconnect is best-effort
                 pass
         log.info("transcriber disconnected")
 
@@ -432,4 +437,5 @@ async def stt(ws: WebSocket):
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", "8092")))
+    # Listens on every interface inside its own container; only the docker network and Caddy reach it (no published port).
+    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", "8092")))  # nosec B104

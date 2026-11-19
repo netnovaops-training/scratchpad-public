@@ -26,7 +26,8 @@ import time
 
 CONTAINER = "nuc-homelab-uptime-kuma-1"
 DB_IN_CTR = "/app/data/kuma.db"
-WORK = "/tmp/kumafix"
+# Fixed work path on a machine Jason controls; the script's own scratch file, overridable where it reads an env var.
+WORK = "/tmp/kumafix"  # nosec B108
 
 # monitor name -> the address it SHOULD ping (verified on the wire)
 ADDRESS_FIX = {
@@ -42,7 +43,7 @@ FALLBACK_URL = "https://watch.home.example.net/dashboard"
 
 
 def sh(*args, check=True):
-    r = subprocess.run(args, capture_output=True, text=True)
+    r = subprocess.run(args, capture_output=True, text=True, check=False)
     if check and r.returncode:
         sys.exit(f"FAILED: {' '.join(args)}\n{r.stderr}")
     return r.stdout.strip()
@@ -60,7 +61,7 @@ def main():
     local = os.path.join(WORK, "kuma.db")
     for suffix in ("", "-wal", "-shm"):
         subprocess.run(["docker", "cp", f"{CONTAINER}:{DB_IN_CTR}{suffix}",
-                        local + suffix], capture_output=True)
+                        local + suffix], capture_output=True, check=False)
     sh("cp", local, f"{local}.bak-{stamp}")
     print(f"    backup: {local}.bak-{stamp}")
 
@@ -114,8 +115,9 @@ def main():
             "upside_down": 0,
         }
         use = {k: v for k, v in vals.items() if k in cols}
-        cur.execute("INSERT INTO monitor (%s) VALUES (%s)" % (
-            ",".join('"%s"' % k for k in use), ",".join("?" * len(use))),
+        # Column names are this script's own dict keys, kept only if they are real columns of the table; every value is a ? parameter.
+        cur.execute("INSERT INTO monitor ({}) VALUES ({})".format(  # nosec B608
+            ",".join(f'"{k}"' for k in use), ",".join("?" * len(use))),
             list(use.values()))
         mid = cur.lastrowid
         if nid:
@@ -132,7 +134,7 @@ def main():
     # Stale WAL/SHM against a replaced main DB is a corruption risk.
     for suffix in ("-wal", "-shm"):
         subprocess.run(["docker", "exec", CONTAINER, "rm", "-f",
-                        DB_IN_CTR + suffix], capture_output=True)
+                        DB_IN_CTR + suffix], capture_output=True, check=False)
     sh("docker", "start", CONTAINER)
     print("    started")
 

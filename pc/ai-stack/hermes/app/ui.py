@@ -133,7 +133,7 @@ def tool_done(name: str, args: dict, result: str, seconds: float) -> None:
     if not target:                        # a tool we don't have a spec for
         target = ", ".join(f"{k}={_clip(v, 20)}" for k, v in args.items())
 
-    refused = result.startswith("refused:") or result.startswith("error:")
+    refused = result.startswith(("refused:", "error:"))
 
     # Fit the line to the terminal instead of letting it wrap. A wrapped tool
     # line breaks the column that makes these scannable in the first place --

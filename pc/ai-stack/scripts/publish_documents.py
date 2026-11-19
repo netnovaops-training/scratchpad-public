@@ -23,6 +23,7 @@ import os
 import re
 import subprocess
 import sys
+from pathlib import Path
 
 import markdown
 
@@ -69,12 +70,12 @@ def clean(body_html):
 
 def page(title, crumbs, body, prev_next=""):
     return ('<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
-            '<meta name="robots" content="noindex, nofollow"><title>%s</title><style>%s</style></head><body><main>'
-            '<nav class="top">%s</nav>%s%s</main></body></html>' % (html.escape(title), CSS, crumbs, body, prev_next))
+            f'<meta name="robots" content="noindex, nofollow"><title>{html.escape(title)}</title><style>{CSS}</style></head><body><main>'
+            f'<nav class="top">{crumbs}</nav>{body}{prev_next}</main></body></html>')
 
 
 def title_of(md_text, fallback):
-    m = re.search(r"^#\s+(.+)$", md_text, re.M)
+    m = re.search(r"^#\s+(.+)$", md_text, re.MULTILINE)
     return (m.group(1).strip() if m else fallback.replace("-", " ").replace("_", " "))[:120]
 
 
@@ -118,46 +119,45 @@ def main():
         for fn in sorted(os.listdir(tdir)):
             if not fn.lower().endswith(".md") or fn.upper() == "INDEX.MD":
                 continue
-            text = open(os.path.join(tdir, fn), encoding="utf-8", errors="replace").read()
+            text = Path(os.path.join(tdir, fn)).read_text(encoding="utf-8", errors="replace")
             base = slug(os.path.splitext(fn)[0])
             ttl = title_of(text, os.path.splitext(fn)[0])
             chunks = split_parts(text)
             for i, chunk in enumerate(chunks, 1):
-                name = base if len(chunks) == 1 else "%s-part-%d" % (base, i)
-                label = ttl if len(chunks) == 1 else "%s (part %d of %d)" % (ttl, i, len(chunks))
+                name = base if len(chunks) == 1 else f"{base}-part-{i}"
+                label = ttl if len(chunks) == 1 else f"{ttl} (part {i} of {len(chunks)})"
                 body = clean(markdown.markdown(chunk, extensions=["tables", "fenced_code", "sane_lists"]))
                 pn = ""
                 if len(chunks) > 1:
-                    prev = '<a href="../%s-part-%d/">&larr; Part %d</a>' % (base, i - 1, i - 1) if i > 1 else "<span></span>"
-                    nxt = '<a href="../%s-part-%d/">Part %d &rarr;</a>' % (base, i + 1, i + 1) if i < len(chunks) else "<span></span>"
-                    pn = '<div class="pn">%s%s</div>' % (prev, nxt)
-                crumbs = '<a href="/documents/">Documents</a><a href="/documents/%s/">%s</a><a href="/todo/">To Do</a>' % (slug(topic), html.escape(topic.replace("-", " ")))
+                    prev = f'<a href="../{base}-part-{i - 1}/">&larr; Part {i - 1}</a>' if i > 1 else "<span></span>"
+                    nxt = f'<a href="../{base}-part-{i + 1}/">Part {i + 1} &rarr;</a>' if i < len(chunks) else "<span></span>"
+                    pn = f'<div class="pn">{prev}{nxt}</div>'
+                crumbs = '<a href="/documents/">Documents</a><a href="/documents/{}/">{}</a><a href="/todo/">To Do</a>'.format(slug(topic), html.escape(topic.replace("-", " ")))
                 d = os.path.join(out_root, slug(topic), name)
                 os.makedirs(d, exist_ok=True)
                 with open(os.path.join(d, "index.html"), "w", encoding="utf-8") as f:
                     f.write(page(label, crumbs, body, pn))
-                pages.append((label, "/documents/%s/%s/" % (slug(topic), name)))
+                pages.append((label, f"/documents/{slug(topic)}/{name}/"))
         if pages:
             topics.append((topic, pages))
-            items = "".join('<li><a href="%s">%s</a></li>' % (u, html.escape(t)) for t, u in pages)
+            items = "".join(f'<li><a href="{u}">{html.escape(t)}</a></li>' for t, u in pages)
             d = os.path.join(out_root, slug(topic))
             with open(os.path.join(d, "index.html"), "w", encoding="utf-8") as f:
-                f.write(page(topic, '<a href="/documents/">Documents</a>', "<h1>%s</h1><ul class='idx'>%s</ul>" % (html.escape(topic.replace("-", " ")), items)))
+                f.write(page(topic, '<a href="/documents/">Documents</a>', "<h1>{}</h1><ul class='idx'>{}</ul>".format(html.escape(topic.replace("-", " ")), items)))
     sections = "".join(
-        "<h2><a href='/documents/%s/'>%s</a> <span class='muted'>%d pages</span></h2><ul class='idx'>%s</ul>"
-        % (slug(t), html.escape(t.replace("-", " ")), len(p), "".join('<li><a href="%s">%s</a></li>' % (u, html.escape(x)) for x, u in p))
+        "<h2><a href='/documents/{}/'>{}</a> <span class='muted'>{} pages</span></h2><ul class='idx'>{}</ul>".format(slug(t), html.escape(t.replace("-", " ")), len(p), "".join(f'<li><a href="{u}">{html.escape(x)}</a></li>' for x, u in p))
         for t, p in topics)
     with open(os.path.join(out_root, "index.html"), "w", encoding="utf-8") as f:
         f.write(page("Documents", '<a href="/todo/">To Do</a><a href="/projects/">Projects</a>',
                      "<h1>Documents</h1><p class='muted'>Offline copies of the docs this setup depends on, plus our own notes. Owner only.</p>" + sections))
     total = sum(len(p) for _, p in topics)
-    print("built %d pages in %d topics -> %s" % (total, len(topics), out_root))
+    print(f"built {total} pages in {len(topics)} topics -> {out_root}")
 
     note = ["=== DOCUMENTS (auto-generated by scripts/publish_documents.py; do not edit by hand) ===",
-            "All pages are owner-only. Index: %s/documents/" % SITE, ""]
+            f"All pages are owner-only. Index: {SITE}/documents/", ""]
     for t, p in topics:
-        note.append("--- %s ---" % t.replace("-", " "))
-        note += ["%s  %s%s" % (x.replace('"', "'"), SITE, u) for x, u in p]
+        note.append("--- {} ---".format(t.replace("-", " ")))
+        note += ["{}  {}{}".format(x.replace('"', "'"), SITE, u) for x, u in p]
         note.append("")
     note_text = "\n".join(note)
 
@@ -165,7 +165,7 @@ def main():
         return 0
     # tar on this side streams into ssh on the other; two processes joined by a pipe, no shell.
     tar = subprocess.Popen(["tar", "-C", BUILD, "-cf", "-", "documents"], stdout=subprocess.PIPE)
-    ssh = subprocess.run(["ssh", NUC, "mkdir -p ~/nuc-homelab/web/public && tar -C ~/nuc-homelab/web/public -xf -"], stdin=tar.stdout)
+    ssh = subprocess.run(["ssh", NUC, "mkdir -p ~/nuc-homelab/web/public && tar -C ~/nuc-homelab/web/public -xf -"], stdin=tar.stdout, check=False)
     tar.stdout.close()
     if tar.wait() != 0 or ssh.returncode != 0:
         print("FAIL upload")
@@ -173,11 +173,11 @@ def main():
     print("PASS uploaded to the NUC")
     env = dict(os.environ, PROTON_PASS_KEY_PROVIDER="fs")
     have = subprocess.run(["pass-cli", "item", "view", "--vault-name", "Notes", "--item-title", "Documents", "--field", "note"],
-                          env=env, capture_output=True).returncode == 0
+                          env=env, capture_output=True, check=False).returncode == 0
     args = (["item", "update", "--vault-name", "Notes", "--item-title", "Documents", "--field", "note=" + note_text] if have else
             ["item", "create", "note", "--vault-name", "Notes", "--title", "Documents", "--note", note_text])
-    ok = subprocess.run(["pass-cli"] + args, env=env, capture_output=True).returncode == 0
-    print("%s Proton note Documents (%d chars)" % ("PASS" if ok else "FAIL", len(note_text)))
+    ok = subprocess.run(["pass-cli"] + args, env=env, capture_output=True, check=False).returncode == 0
+    print("{} Proton note Documents ({} chars)".format("PASS" if ok else "FAIL", len(note_text)))
     return 0
 
 

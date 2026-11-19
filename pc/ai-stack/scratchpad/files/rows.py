@@ -1,5 +1,8 @@
-import re, collections
-sql=open(r"C:\Users\USER\AppData\Local\Temp\claude\C--Jasons-New-Site-www-ai-stack\08938579-6dcf-4698-abca-ba2836a833f5\scratchpad\db.sql",encoding="utf-8").read()
+import collections
+import re
+from pathlib import Path
+
+sql=Path(r"C:\Users\USER\AppData\Local\Temp\claude\C--Jasons-New-Site-www-ai-stack\08938579-6dcf-4698-abca-ba2836a833f5\scratchpad\db.sql").read_text(encoding="utf-8")
 # split into statements roughly by lines starting with INSERT INTO
 cnt=collections.Counter(); lines=collections.Counter()
 for line in sql.split('\n'):

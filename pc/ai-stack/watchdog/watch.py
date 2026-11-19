@@ -40,6 +40,19 @@ import time
 import urllib.parse
 import urllib.request
 
+
+def _http_only(target):
+    """Return target (a URL string or urllib Request) if its scheme is http or https, else raise ValueError.
+
+    urlopen also follows file:// and custom schemes (Bandit B310). Every caller here talks to an
+    http(s) service, so anything else is a mistake or a planted URL. Added 2026-11-19.
+    """
+    url = str(getattr(target, "full_url", target))
+    if not url.lower().startswith(("http://", "https://")):
+        raise ValueError(f"refusing a non-http(s) URL: {url[:80]}")
+    return target
+
+
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
 CHAT_IDS = [c.strip() for c in os.environ.get("TELEGRAM_ALLOWED_USER_IDS", "").split(",") if c.strip()]
 INTERVAL = int(os.environ.get("WATCHDOG_INTERVAL_SECONDS", "60"))
@@ -114,7 +127,7 @@ def tell(text: str) -> None:
             req = urllib.request.Request(
                 f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", data=data
             )
-            with urllib.request.urlopen(req, timeout=15) as r:
+            with urllib.request.urlopen(_http_only(req), timeout=15) as r:  # nosec B310
                 r.read()
         except Exception as e:  # noqa: BLE001 -- see the docstring
             print(f"watchdog: could not reach Telegram: {e}", flush=True)
@@ -127,7 +140,7 @@ def beat() -> None:
     if not HEARTBEAT_URL:
         return
     try:
-        with urllib.request.urlopen(HEARTBEAT_URL, timeout=10) as r:
+        with urllib.request.urlopen(_http_only(HEARTBEAT_URL), timeout=10) as r:  # nosec B310
             r.read()
     except Exception as e:  # noqa: BLE001
         # Never fatal. A heartbeat that cannot get out is exactly the
@@ -164,7 +177,7 @@ TRANSIENT = {c.strip() for c in
 def _get_json(url, headers=None, timeout=None):
     """urllib, not httpx -- see this file's Dockerfile for why."""
     req = urllib.request.Request(url, headers=headers or {})
-    with urllib.request.urlopen(req, timeout=timeout or TIMEOUT * 4) as r:
+    with urllib.request.urlopen(_http_only(req), timeout=timeout or TIMEOUT * 4) as r:  # nosec B310
         return json.loads(r.read().decode("utf-8", "replace"))
 
 
@@ -228,15 +241,15 @@ def spend():
     except Exception as e:  # noqa: BLE001
         out["error"] = e.__class__.__name__
         return out
-    now = datetime.datetime.now(datetime.timezone.utc)
+    now = datetime.datetime.now(datetime.UTC)
     day0 = now.replace(hour=0, minute=0, second=0, microsecond=0)
     mon0 = day0.replace(day=1)
     for row in rows if isinstance(rows, list) else []:
         try:
             when = datetime.datetime.fromisoformat(
                 str(row.get("startTime") or "")[:19]).replace(
-                    tzinfo=datetime.timezone.utc)
-        except Exception:  # noqa: BLE001
+                    tzinfo=datetime.UTC)
+        except ValueError:
             continue
         v = float(row.get("spend") or 0)
         if when >= mon0:
@@ -254,27 +267,26 @@ def digest(problems: dict) -> str:
     power = ((PC_WATTS + NUC_WATTS) / 1000.0) * 24 * KWH_PRICE
     lines = ["Daily digest", ""]
     if problems:
-        lines.append("Still wrong (%d):" % len(problems))
-        lines += ["  - %s %s" % (k, v) for k, v in sorted(problems.items())]
+        lines.append(f"Still wrong ({len(problems)}):")
+        lines += [f"  - {k} {v}" for k, v in sorted(problems.items())]
     else:
         lines.append("Everything is up.")
     lines += ["",
-              "Models billed today: $%.4f (%d calls)" % (s["today"], s["calls"]),
-              "This month so far:   $%.2f" % s["month"]]
+              "Models billed today: ${:.4f} ({} calls)".format(s["today"], s["calls"]),
+              "This month so far:   ${:.2f}".format(s["month"])]
     for m, v in sorted(s.get("by_model", {}).items(), key=lambda kv: -kv[1])[:4]:
-        lines.append("   %s: $%.4f" % (m, v))
+        lines.append(f"   {m}: ${v:.4f}")
     if s.get("error"):
-        lines.append("   (could not read LiteLLM: %s)" % s["error"])
+        lines.append("   (could not read LiteLLM: {})".format(s["error"]))
     lines += ["",
-              "Electricity, ESTIMATED: ~$%.2f/day. There is no meter -- this "
-              "assumes %.0fW + %.0fW at $%.2f/kWh, so treat it as a rough "
-              "figure. Local models cost this rather than tokens."
-              % (power, PC_WATTS, NUC_WATTS, KWH_PRICE)]
+              (f"Electricity, ESTIMATED: ~${power:.2f}/day. There is no meter -- this "
+              f"assumes {PC_WATTS:.0f}W + {NUC_WATTS:.0f}W at ${KWH_PRICE:.2f}/kWh, so treat it as a rough "
+              "figure. Local models cost this rather than tokens.")]
     try:
         with open(BACKUP_MANIFEST, encoding="utf-8") as fh:
             m = json.load(fh)
         hours = (time.time() - float(m.get("finished_at") or 0)) / 3600
-        lines.append("Backup: %.0fh ago, %s" % (
+        lines.append("Backup: {:.0f}h ago, {}".format(
             hours, "encrypted drive verified" if m.get("vault_verified")
             else "NOT VERIFIED"))
     except Exception:  # noqa: BLE001
@@ -334,7 +346,7 @@ def main() -> None:
         cleared = extra_state - now_bad
         if started:
             tell("\U0001f534 Something broke:\n"
-                 + "\n".join("  - %s %s" % (k, found[k]) for k in sorted(started)))
+                 + "\n".join(f"  - {k} {found[k]}" for k in sorted(started)))
         if cleared:
             tell("\u2705 Back to normal:\n"
                  + "\n".join("  - " + k for k in sorted(cleared)))

@@ -81,7 +81,7 @@ def run_job(job: dict) -> tuple:
         log(f"  {' '.join(cmd[1:])}")
         try:
             p = subprocess.run(cmd, capture_output=True, text=True,
-                               timeout=60 * 60 * 8)
+                               timeout=60 * 60 * 8, check=False)
         except subprocess.TimeoutExpired:
             return False, "gave up after eight hours", 0
 

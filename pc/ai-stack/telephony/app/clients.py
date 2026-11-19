@@ -23,14 +23,14 @@ badly aloud. They go on a card Dee leaves at the house and on the booking form.
 
 from __future__ import annotations
 
-import json
 import random
 import sqlite3
 import threading
+from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 
 from .callers import normalise
 
@@ -72,7 +72,7 @@ _REST = "0123456789"
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return datetime.now(UTC).isoformat(timespec="seconds")
 
 
 def spoken_code(code: str) -> str:
@@ -191,7 +191,8 @@ class ClientStore:
             return
         vals.append(code)
         with self._lock, self._connect() as c:
-            c.execute(f"UPDATE clients SET {', '.join(sets)} WHERE code = ?", vals)
+            # The SET list only takes names from the `allowed` set above; every value is a ? parameter.
+            c.execute(f"UPDATE clients SET {', '.join(sets)} WHERE code = ?", vals)  # nosec B608
 
     # -- notes ---------------------------------------------------------------
 

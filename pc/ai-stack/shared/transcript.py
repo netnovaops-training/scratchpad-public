@@ -19,7 +19,7 @@ import json
 import os
 import threading
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -27,7 +27,7 @@ _LOCK = threading.Lock()
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return datetime.now(UTC).isoformat(timespec="seconds")
 
 
 class Transcript:
@@ -41,7 +41,7 @@ class Transcript:
         self.surface = surface
         self.session_id = session_id or uuid.uuid4().hex[:12]
         self.root = Path(root or os.environ.get("TRANSCRIPT_DIR", "/transcripts"))
-        day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        day = datetime.now(UTC).strftime("%Y-%m-%d")
         self.dir = self.root / surface / day
         self.dir.mkdir(parents=True, exist_ok=True)
         self.path = self.dir / f"{self.session_id}.jsonl"
@@ -62,9 +62,8 @@ class Transcript:
 
     def _write(self, record: dict[str, Any]) -> None:
         line = json.dumps(record, ensure_ascii=False)
-        with _LOCK:
-            with self.path.open("a", encoding="utf-8") as fh:
-                fh.write(line + "\n")
+        with _LOCK, self.path.open("a", encoding="utf-8") as fh:
+            fh.write(line + "\n")
 
     # -- public ---------------------------------------------------------------
 

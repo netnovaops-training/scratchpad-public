@@ -14,7 +14,6 @@ import subprocess
 import sys
 import tempfile
 import time
-from pathlib import Path
 
 NAS, NUC = "jay@100.64.0.12", "server@100.64.0.10"
 SSH = ["ssh", "-o", "BatchMode=yes"]
@@ -26,7 +25,7 @@ def spurt(ops, journal):
            f"grep 'spurt end' move-spurts.log | tail -1; "
            f"python3 -c \"import json,collections as C; c=C.Counter(json.loads(l).get('err','ok')[:40] "
            f"for l in open('{journal}')); print(dict(c))\"")
-    out = subprocess.run(SSH + [NAS, cmd], capture_output=True, text=True, timeout=3600).stdout.strip()
+    out = subprocess.run(SSH + [NAS, cmd], capture_output=True, text=True, timeout=3600, check=False).stdout.strip()
     return out
 
 

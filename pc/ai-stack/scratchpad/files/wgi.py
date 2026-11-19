@@ -1,12 +1,14 @@
-import io
+from pathlib import Path
+
+
 def edit(p, pairs):
-    s = io.open(p, encoding="utf-8", newline="").read()
+    s = Path(p).read_bytes().decode("utf-8")
     nl = "\r\n" if "\r\n" in s else "\n"
     for a, b in pairs:
         a2, b2 = a.replace("\n", nl), b.replace("\n", nl)
         assert s.count(a2) == 1, (p, a[:80], s.count(a2))
         s = s.replace(a2, b2)
-    io.open(p, "w", encoding="utf-8", newline="").write(s)
+    Path(p).write_text(s, encoding="utf-8", newline="")
 
 ADM_EN = "| Adminer | A one-page web viewer for the database | Look inside the tables without typing SQL | Docker, `127.0.0.1:8082`, only while you use it | <https://www.adminer.org> |\n"
 edit("WHAT-GETS-INSTALLED.md", [
@@ -17,8 +19,8 @@ edit("WHAT-GETS-INSTALLED.md", [
 ("| 8030, 8025, 3000, 9091, 5678, 8082 | website, garden tools, wiki, sign-in page, n8n, Adminer |",
  "| 8030, 8025, 3000, 9091, 5678, 8082, 4000 | website, garden tools, wiki, sign-in page, n8n, Adminer, LiteLLM |"),
 ])
-s = io.open("WHAT-GETS-INSTALLED.ko.md", encoding="utf-8").read()
-adm_ko = [l for l in s.split("\n") if l.startswith("| Adminer |")][0].rstrip("\r") + "\n"
+s = Path("WHAT-GETS-INSTALLED.ko.md").read_text(encoding="utf-8")
+adm_ko = next(l for l in s.split("\n") if l.startswith("| Adminer |")).rstrip("\r") + "\n"
 edit("WHAT-GETS-INSTALLED.ko.md", [
 (adm_ko, adm_ko +
  "| LiteLLM(메뉴 `M`, `15`) | 월 지출 한도가 있는, AI를 위한 개인 주소 하나 | 유료 AI 키가 내가 정한 것보다 더 쓰지 못하게 | Docker, `127.0.0.1:4000` | <https://docs.litellm.ai> |\n"

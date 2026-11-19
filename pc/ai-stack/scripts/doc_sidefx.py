@@ -27,7 +27,9 @@ import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import doc_backfill as db  # noqa: E402  (ask(), clean(), MAX_CHARS, SECRETY, DOCS folder)
+from pathlib import Path
+
+import doc_backfill as db
 
 LOG = r"D:\ai-doc-trial\sidefx.log"
 RISK = re.compile(
@@ -36,7 +38,7 @@ RISK = re.compile(
     r"requests\.(post|put|delete)|httpx\.(post|put|delete)|pip\s+install|apt(-get)?\s+install|npm\s+install|"
     r"systemctl\s+(restart|stop)|Restart-Service|Stop-Service|Stop-Process|taskkill|Register-ScheduledTask|schtasks|"
     r"Set-Content|Out-File|Add-Content|\.write\(|write_text|open\([^)]*[\"'][wa]|shutil\.(copy|move)|Copy-Item|Move-Item|"
-    r"smtplib|sendmail|send_message|Send-MailMessage|webhook)", re.I)
+    r"smtplib|sendmail|send_message|Send-MailMessage|webhook)", re.IGNORECASE)
 
 PROMPT = """List the SIDE EFFECTS of the source file below. A side effect is anything the file does outside
 itself when it runs: writes, creates, overwrites or deletes a file or folder; sends a network request
@@ -59,7 +61,7 @@ FILE: {name}
 def log(line):
     os.makedirs(os.path.dirname(LOG), exist_ok=True)
     with open(LOG, "a", encoding="utf-8") as f:
-        f.write("%s %s\n" % (datetime.datetime.now().isoformat(timespec="seconds"), line))
+        f.write("{} {}\n".format(datetime.datetime.now().isoformat(timespec="seconds"), line))
     print(line)
 
 
@@ -75,10 +77,10 @@ def targets():
             if not f.endswith(".md"):
                 continue
             dp = os.path.join(root, f)
-            d = open(dp, encoding="utf-8", errors="replace").read()
-            m = re.search(r"^file:\s*(.+)$", d, re.M)
-            s = re.search(r"## Side effects\n(.*?)(?=\n## )", d, re.S)
-            if not (m and s) or not says_none(s.group(1)) or re.search(r"^corrected:", d, re.M):
+            d = Path(dp).read_text(encoding="utf-8", errors="replace")
+            m = re.search(r"^file:\s*(.+)$", d, re.MULTILINE)
+            s = re.search(r"## Side effects\n(.*?)(?=\n## )", d, re.DOTALL)
+            if not (m and s) or not says_none(s.group(1)) or re.search(r"^corrected:", d, re.MULTILINE):
                 continue
             if "side-effects-pass:" in d or "side-effects: unverified" in d:
                 continue   # already redone: a rerun picks up where it stopped
@@ -88,30 +90,29 @@ def targets():
 
 def process(rel, dp):
     src = os.path.join(db.REPO, rel.replace("/", os.sep))
-    body = open(src, encoding="utf-8", errors="replace").read()
+    body = Path(src).read_text(encoding="utf-8", errors="replace")
     if not body.strip():
         return "skip"
     if len(body) > db.MAX_CHARS:
-        log("SKIP too-long %s" % rel)
+        log(f"SKIP too-long {rel}")
         return "skip"
     ans = db.clean(db.ask(PROMPT.format(name=rel, body=body)))
     ans = "\n".join(l for l in ans.splitlines() if l.strip())
     if not ans or db.SECRETY.search(ans) or not ans.lstrip().startswith(("-", "*")):
-        log("FAIL no-usable-answer %s" % rel)
+        log(f"FAIL no-usable-answer {rel}")
         return "fail"
-    doc = open(dp, encoding="utf-8").read()
+    doc = Path(dp).read_text(encoding="utf-8")
     stamp = datetime.date.today().isoformat()
     if says_none(ans) and RISK.search(body):
         # The model repeated "none" but the file has a risky command: do not trust either text.
-        doc = doc.replace("\n---\n\n", "\nside-effects: unverified (model said none; source has %s)\n---\n\n"
-                          % RISK.search(body).group(1).strip()[:30].replace("\n", " "), 1)
-        open(dp, "w", encoding="utf-8").write(doc)
-        log("UNVERIFIED %s" % rel)
+        doc = doc.replace("\n---\n\n", "\nside-effects: unverified (model said none; source has {})\n---\n\n".format(RISK.search(body).group(1).strip()[:30].replace("\n", " ")), 1)
+        Path(dp).write_text(doc, encoding="utf-8")
+        log(f"UNVERIFIED {rel}")
         return "unverified"
-    doc = re.sub(r"(## Side effects\n).*?(?=\n## )", lambda m: m.group(1) + ans + "\n", doc, count=1, flags=re.S)
-    doc = doc.replace("\n---\n\n", "\nside-effects-pass: %s\n---\n\n" % stamp, 1)
-    open(dp, "w", encoding="utf-8").write(doc)
-    log("PASS %s (%d bullets)" % (rel, ans.count("\n") + 1))
+    doc = re.sub(r"(## Side effects\n).*?(?=\n## )", lambda m: m.group(1) + ans + "\n", doc, count=1, flags=re.DOTALL)
+    doc = doc.replace("\n---\n\n", f"\nside-effects-pass: {stamp}\n---\n\n", 1)
+    Path(dp).write_text(doc, encoding="utf-8")
+    log("PASS {} ({} bullets)".format(rel, ans.count("\n") + 1))
     return "done"
 
 
@@ -124,13 +125,13 @@ def main():
     if "--list" in sys.argv:
         for rel, _ in todo:
             print(rel)
-        print("%d docs" % len(todo))
+        print(f"{len(todo)} docs")
         return 0
     counts = {}
     for rel, dp in todo:
         r = process(rel, dp)
         counts[r] = counts.get(r, 0) + 1
-    log("DONE %s of %d docs" % (", ".join("%s=%d" % kv for kv in sorted(counts.items())), len(todo)))
+    log("DONE {} of {} docs".format(", ".join("{}={}".format(*(kv)) for kv in sorted(counts.items())), len(todo)))
     return 0
 
 

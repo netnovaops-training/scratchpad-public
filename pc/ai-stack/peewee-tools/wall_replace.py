@@ -45,7 +45,7 @@ def main():
         sys.exit("usage: wall_replace.py <folder-of-photographs> [--keep]")
     src = pathlib.Path(sys.argv[1])
     if not src.is_dir():
-        sys.exit("%s is not a folder" % src)
+        sys.exit(f"{src} is not a folder")
     replace = "--keep" not in sys.argv
 
     incoming = sorted(p for p in src.iterdir()
@@ -53,17 +53,17 @@ def main():
                       and p.suffix.lower() in (".jpg", ".jpeg", ".png", ".webp")
                       and not p.name.startswith("."))
     if not incoming:
-        sys.exit("no photographs in %s" % src)
-    print("  %d photograph(s) to put on the wall" % len(incoming))
+        sys.exit(f"no photographs in {src}")
+    print(f"  {len(incoming)} photograph(s) to put on the wall")
 
     if replace and PHOTOS.exists() and any(PHOTOS.iterdir()):
         stamp = date.today().isoformat()
         for folder in (PHOTOS, THUMBS):
-            keep = folder.parent / ("%s-replaced-%s" % (folder.name, stamp))
+            keep = folder.parent / (f"{folder.name}-replaced-{stamp}")
             if keep.exists():
                 shutil.rmtree(keep)
             shutil.move(str(folder), str(keep))
-            print("  kept the old %s as %s" % (folder.name, keep.name))
+            print(f"  kept the old {folder.name} as {keep.name}")
     PHOTOS.mkdir(exist_ok=True)
     THUMBS.mkdir(exist_ok=True)
 
@@ -72,7 +72,7 @@ def main():
         # A flat, sortable name. The wall is sorted by filename, so the
         # order on screen is the order here -- which beats whatever the
         # camera or the exporter happened to call them.
-        name = "wall-%03d.jpg" % i
+        name = f"wall-{i:03d}.jpg"
         try:
             with Image.open(p) as im:
                 im = ImageOps.exif_transpose(im).convert("RGB")
@@ -84,9 +84,9 @@ def main():
                 th.save(THUMBS / name, "JPEG", quality=82, optimize=True)
             made += 1
         except Exception as e:  # noqa: BLE001
-            print("  SKIP %-30s %s" % (p.name[:30], e))
+            print(f"  SKIP {p.name[:30]!s:<30} {e}")
 
-    print("  %d on the wall, full + thumb" % made)
+    print(f"  {made} on the wall, full + thumb")
     print("  now run build.py so stations.json lists them")
 
 

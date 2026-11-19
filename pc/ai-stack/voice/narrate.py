@@ -80,10 +80,10 @@ def read_epub(p: pathlib.Path) -> str:
                         if x.lower().endswith((".xhtml", ".html", ".htm"))):
             raw = z.read(n).decode("utf-8", "replace")
             raw = re.sub(r"<(script|style)[^>]*>.*?</\1>", " ", raw,
-                         flags=re.S | re.I)
+                         flags=re.DOTALL | re.IGNORECASE)
             # Paragraph tags become blank lines, which the service turns into
             # real silence. Losing them would produce one breathless block.
-            raw = re.sub(r"</(p|div|h[1-6]|li)>", "\n\n", raw, flags=re.I)
+            raw = re.sub(r"</(p|div|h[1-6]|li)>", "\n\n", raw, flags=re.IGNORECASE)
             out.append(html.unescape(re.sub(r"<[^>]+>", " ", raw)))
     return "\n\n".join(out)
 

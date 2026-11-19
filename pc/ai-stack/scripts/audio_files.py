@@ -24,12 +24,12 @@ How the old paths keep working:
   Re-run `apply` after the studio records new clips into people/<name>: they are moved and
   linked like the rest. URLs never change, so no page, JSON or Caddy edit is needed.
 """
-import json
 import os
 import re
 import shutil
 import subprocess
 import sys
+from pathlib import Path
 
 AUDIO = re.compile(r"(?i)\.(mp3|m4a|wav|ogg|opus|flac|aac)$")
 AUDIO_DIRS = ["library/audio", "peewee/music", "peewee/static-sounds", "peewee/audio",
@@ -93,7 +93,7 @@ def todo(root):
 
 def link_dir(src, dst):
     if WIN:
-        r = subprocess.run(["cmd", "/c", "mklink", "/J", src, dst], capture_output=True, text=True)
+        r = subprocess.run(["cmd", "/c", "mklink", "/J", src, dst], capture_output=True, text=True, check=False)
         return r.returncode == 0
     os.symlink(os.path.relpath(dst, os.path.dirname(src)), src, target_is_directory=True)
     return True
@@ -131,14 +131,14 @@ def apply(root):
         except OSError as e:
             fail += 1
             print("FAIL", kind, ascii(rel), e)
-    print("APPLY %d linked, %d failed" % (ok, fail))
+    print(f"APPLY {ok} linked, {fail} failed")
     return 1 if fail else 0
 
 
 def references(root):
     """Audio paths the pages and JSON point at, as filesystem paths under root."""
     refs = set()
-    pat = re.compile(r"""["'(]([^"'()<>\s]+\.(?:mp3|m4a|wav|ogg|opus))["')]""", re.I)
+    pat = re.compile(r"""["'(]([^"'()<>\s]+\.(?:mp3|m4a|wav|ogg|opus))["')]""", re.IGNORECASE)
 
     def scan(page_dir, text, prefixes=("",)):
         for m in pat.finditer(text):
@@ -157,7 +157,7 @@ def references(root):
                 continue
             fp = os.path.join(dp, f)
             try:
-                text = open(fp, encoding="utf-8", errors="replace").read()
+                text = Path(fp).read_text(encoding="utf-8", errors="replace")
             except OSError:
                 continue
             rel = os.path.relpath(fp, root).replace(os.sep, "/")
@@ -182,8 +182,7 @@ def check(root):
     dest = p(root, "Audio-Files")
     n_af = sum(len([f for f in fns if AUDIO.search(f)]) for _d, _n, fns in os.walk(dest)) if os.path.isdir(dest) else 0
     left = [r for k, r in todo(root)]
-    print("CHECK references %d, unresolved %d, files in Audio-Files %d, not yet moved %d"
-          % (len(refs), len(bad), n_af, len(left)))
+    print(f"CHECK references {len(refs)}, unresolved {len(bad)}, files in Audio-Files {n_af}, not yet moved {len(left)}")
     for path, _pre, u in sorted(bad)[:15]:
         print("  unresolved:", ascii(u))
     return 1 if bad else 0
@@ -191,7 +190,7 @@ def check(root):
 
 def plan(root):
     t = todo(root)
-    print("PLAN dirs %d, files %d" % (sum(1 for k, _ in t if k == "dir"), sum(1 for k, _ in t if k == "file")))
+    print("PLAN dirs {}, files {}".format(sum(1 for k, _ in t if k == "dir"), sum(1 for k, _ in t if k == "file")))
     for k, r in t:
         if k == "dir":
             print("  dir", r)

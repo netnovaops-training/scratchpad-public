@@ -67,8 +67,9 @@ def main() -> int:
                 "interval": 60, "maxretries": 2, "timeout": 10,
                 "weight": 1000, "upside_down": 0}
         use = {k: v for k, v in vals.items() if k in cols}
-        cur.execute("INSERT INTO monitor (%s) VALUES (%s)" % (
-            ",".join('"%s"' % k for k in use), ",".join("?" * len(use))),
+        # Column names are this script's own dict keys, kept only if they are real columns of the table; every value is a ? parameter.
+        cur.execute("INSERT INTO monitor ({}) VALUES ({})".format(  # nosec B608
+            ",".join(f'"{k}"' for k in use), ",".join("?" * len(use))),
             list(use.values()))
         mid = cur.lastrowid
         if nid:

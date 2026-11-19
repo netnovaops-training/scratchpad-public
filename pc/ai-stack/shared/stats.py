@@ -24,7 +24,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from .history import METRICS, bucket, outages, sparkline, stats as col_stats, trend
+from .history import METRICS, bucket, outages, sparkline, trend
+from .history import stats as col_stats
 
 # Telegram's hard limit is 4096. 3500 leaves room for the <pre> wrapper and
 # the page header without ever getting close.
@@ -34,7 +35,7 @@ PAGE_CHARS = 3500
 def _bar(pct: float | None, width: int = 12) -> str:
     if pct is None:
         return " " * width
-    n = max(0, min(width, int(round(pct / 100 * width))))
+    n = max(0, min(width, round(pct / 100 * width)))
     return "#" * n + "." * (width - n)
 
 

@@ -1,12 +1,14 @@
-import io
+from pathlib import Path
+
+
 def edit(p, pairs):
-    s = io.open(p, encoding="utf-8", newline="").read()
+    s = Path(p).read_bytes().decode("utf-8")
     nl = "\r\n" if "\r\n" in s else "\n"
     for a, b in pairs:
         a2, b2 = a.replace("\n", nl), b.replace("\n", nl)
         assert s.count(a2) == 1, (p, a[:80], s.count(a2))
         s = s.replace(a2, b2)
-    io.open(p, "w", encoding="utf-8", newline="").write(s)
+    Path(p).write_text(s, encoding="utf-8", newline="")
 
 TABLE = """| Router | Address or app | User name and password | The maker's own steps |
 |---|---|---|---|
@@ -22,16 +24,16 @@ TABLE = """| Router | Address or app | User name and password | The maker's own 
 | AT&T | `192.168.1.254` | {att} | <https://www.att.com/support/article/u-verse-high-speed-internet/KM1206322/> |
 | Verizon | `mynetworksettings.com` or `192.168.1.1` | `admin`, and the password on the label | <https://www.verizon.com/support/knowledge-base-308501/> |
 """
-EN_CELLS = dict(tp="the first time you make one; some older ones use `admin` and `admin`",
-                deco="your TP-Link account", asus="on the router's label (some use `admin`)",
-                linksys="the router password (`admin` until you change it)", eero="your eero account",
-                google="your Google account", xfinity="`admin`, and the password you make when you allow the Admin Tool in the app",
-                spectrum="your Spectrum account", att="the Device Access Code on the gateway's label")
-KO_CELLS = dict(tp="처음에 직접 만들어요. 오래된 것은 `admin`과 `admin`을 쓰기도 해요",
-                deco="내 TP-Link 계정", asus="공유기 라벨에 있어요(`admin`을 쓰는 것도 있어요)",
-                linksys="공유기 비밀번호(바꾸기 전에는 `admin`)", eero="내 eero 계정",
-                google="내 Google 계정", xfinity="`admin`, 그리고 앱에서 Admin Tool을 허용할 때 만드는 비밀번호",
-                spectrum="내 Spectrum 계정", att="게이트웨이 라벨의 Device Access Code")
+EN_CELLS = {"tp": "the first time you make one; some older ones use `admin` and `admin`",
+                "deco": "your TP-Link account", "asus": "on the router's label (some use `admin`)",
+                "linksys": "the router password (`admin` until you change it)", "eero": "your eero account",
+                "google": "your Google account", "xfinity": "`admin`, and the password you make when you allow the Admin Tool in the app",
+                "spectrum": "your Spectrum account", "att": "the Device Access Code on the gateway's label"}
+KO_CELLS = {"tp": "처음에 직접 만들어요. 오래된 것은 `admin`과 `admin`을 쓰기도 해요",
+                "deco": "내 TP-Link 계정", "asus": "공유기 라벨에 있어요(`admin`을 쓰는 것도 있어요)",
+                "linksys": "공유기 비밀번호(바꾸기 전에는 `admin`)", "eero": "내 eero 계정",
+                "google": "내 Google 계정", "xfinity": "`admin`, 그리고 앱에서 Admin Tool을 허용할 때 만드는 비밀번호",
+                "spectrum": "내 Spectrum 계정", "att": "게이트웨이 라벨의 Device Access Code"}
 
 EN = """## Before step 2: log in to your router (a walkthrough)
 The router is the box your internet company gave you (or one you bought). Its
@@ -103,7 +105,7 @@ Wi-Fi(또는 케이블)에 연결된 기기만 열 수 있어요.
 edit("START-HERE/14-reserve-your-ip.md", [("## Step 2. Reserve it in the router", EN + "## Step 2. Reserve it in the router"),
     ("- Step 2: on the router's page, add a reservation with those two.",
      "- Step 2: on the router's page (how to log in: \"Before step 2\", with the common routers), add a reservation with those two.")])
-s = io.open("START-HERE/ko/14-reserve-your-ip.md", encoding="utf-8").read()
-step2 = [l for l in s.split("\n") if l.startswith("## 2단계")][0].rstrip("\r")
+s = Path("START-HERE/ko/14-reserve-your-ip.md").read_text(encoding="utf-8")
+step2 = next(l for l in s.split("\n") if l.startswith("## 2단계")).rstrip("\r")
 edit("START-HERE/ko/14-reserve-your-ip.md", [(step2, KO + step2)])
 print("ok")

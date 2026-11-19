@@ -24,11 +24,11 @@ from pathlib import Path
 PDFTOTEXT = r"C:\Users\USER\poppler\poppler-24.08.0\Library\bin\pdftotext.exe"
 MONEY = r"-?[\d,]+\.\d{2}"
 PERIOD = re.compile(r"Statement Period:\s*(\d{2})/(\d{2})/(\d{4})\s+through\s+(\d{2})/(\d{2})/(\d{4})")
-SUMMARY_ROW = re.compile(r"^x(\d{4})\s+(%s)\s+(%s)\s+(%s)\s+(%s)" % (MONEY, MONEY, MONEY, MONEY))
+SUMMARY_ROW = re.compile(rf"^x(\d{{4}})\s+({MONEY})\s+({MONEY})\s+({MONEY})\s+({MONEY})")
 # 2025-11 on: "FREE CHECKING - ******0163"; before that the full account number is printed: take its last 4 only.
 SECTION = re.compile(r"^\s*([A-Z][A-Z ]+?)\s+-\s+[\*\d]*?(\d{4})\b")
-TXN = re.compile(r"^(\d{2})/(\d{2})\s+(.*?)\s+(%s)(?:\s+(%s))?\s*$" % (MONEY, MONEY))
-SKIP = re.compile(r"Previous Balance|Ending Balance|Beginning Balance|Member Number|Statement Period|Page:", re.I)
+TXN = re.compile(rf"^(\d{{2}})/(\d{{2}})\s+(.*?)\s+({MONEY})(?:\s+({MONEY}))?\s*$")
+SKIP = re.compile(r"Previous Balance|Ending Balance|Beginning Balance|Member Number|Statement Period|Page:", re.IGNORECASE)
 
 
 def num(s):
@@ -39,12 +39,12 @@ def num(s):
 def parse(pdf):
     """One statement PDF -> dict with period, accounts and their transactions."""
     text = subprocess.run([PDFTOTEXT, "-layout", str(pdf), "-"], capture_output=True, text=True,
-                          encoding="utf-8", errors="replace").stdout
+                          encoding="utf-8", errors="replace", check=False).stdout
     m = PERIOD.search(text)
     if not m:
         return None
-    start = "%s-%s-%s" % (m.group(3), m.group(1), m.group(2))
-    end = "%s-%s-%s" % (m.group(6), m.group(4), m.group(5))
+    start = f"{m.group(3)}-{m.group(1)}-{m.group(2)}"
+    end = f"{m.group(6)}-{m.group(4)}-{m.group(5)}"
     year_of = {m.group(1): m.group(3), m.group(4): m.group(6)}
     accts, cur, last = {}, None, None
     for line in text.split("\n"):
@@ -65,7 +65,7 @@ def parse(pdf):
         t = TXN.match(line.strip()) if re.match(r"^\s*\d{2}/\d{2}\s", line) else None
         if t:
             mm, dd = t.group(1), t.group(2)
-            last = {"date": "%s-%s-%s" % (year_of.get(mm, m.group(6)), mm, dd), "amount": num(t.group(4)),
+            last = {"date": f"{year_of.get(mm, m.group(6))}-{mm}-{dd}", "amount": num(t.group(4)),
                     "desc": re.sub(r"\s+", " ", t.group(3)).strip()}
             accts[cur]["txns"].append(last)
         elif last is not None and line.startswith("   ") and line.strip() and not re.search(MONEY + r"\s*$", line):
@@ -82,7 +82,7 @@ def parse(pdf):
         for x in a["txns"]:
             key = (x["date"], round(x["amount"] * 100))
             seen[key] = seen.get(key, 0) + 1
-            x["imported_id"] = "bvfcu-%s-%s-%d-%d" % (sfx, x["date"], seen[key], round(x["amount"] * 100))
+            x["imported_id"] = "bvfcu-{}-{}-{}-{}".format(sfx, x["date"], seen[key], round(x["amount"] * 100))
     return {"file": Path(pdf).name, "start": start, "end": end, "accounts": accts}
 
 
@@ -99,10 +99,10 @@ def main(argv):
     for st in sorted(by_period.values(), key=lambda s: s["start"]):
         for sfx, a in st["accounts"].items():
             flag = "ok" if a["ok"] else "MISMATCH"
-            print("%s %s x%s %-16s txns %3d begin %9.2f end %9.2f sum %9.2f %s" % (
+            print("{} {} x{} {!s:<16} txns {:3d} begin {:9.2f} end {:9.2f} sum {:9.2f} {}".format(
                 st["start"], st["end"], sfx, a["name"][:16], len(a["txns"]), a["begin"], a["end"], a["sum"], flag))
             if not a["ok"]:
-                problems.append("%s x%s sum %.2f != %.2f" % (st["start"], sfx, a["sum"], a["end"] - a["begin"]))
+                problems.append("{} x{} sum {:.2f} != {:.2f}".format(st["start"], sfx, a["sum"], a["end"] - a["begin"]))
     Path(out).write_text(json.dumps({"statements": sorted(by_period.values(), key=lambda s: s["start"]),
                                      "problems": problems}, indent=1), encoding="utf-8")
     print("problems:", problems or "none")

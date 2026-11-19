@@ -26,9 +26,8 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import datetime, timezone
 
-from .clients import ClientStore, spoken_code
+from .clients import ClientStore
 from .outbound import thanks_text
 
 log = logging.getLogger("telephony.sms")
@@ -106,7 +105,7 @@ def handle(
     # SHOUTING, and "she was lovely" arrives in Dee's inbox as "SHE WAS LOVELY".
     score: int | None = None
     comment = ""
-    m = re.match(r"^\s*RATE\s*([1-5])\b[\s.,:;-]*(.*)$", text, re.I | re.S)
+    m = re.match(r"^\s*RATE\s*([1-5])\b[\s.,:;-]*(.*)$", text, re.IGNORECASE | re.DOTALL)
     if m:
         score = int(m.group(1))
         comment = (m.group(2) or "").strip()
@@ -126,7 +125,7 @@ def handle(
         return _reply(thanks_text(score, review_link=review_link, tip_link=tip_link))
 
     # --- leave a note --------------------------------------------------------
-    m = re.match(r"^\s*NOTE\b[\s:,-]*(.+)$", text, re.I | re.S)
+    m = re.match(r"^\s*NOTE\b[\s:,-]*(.+)$", text, re.IGNORECASE | re.DOTALL)
     if m:
         note = m.group(1).strip()
         if not client:

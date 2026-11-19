@@ -11,7 +11,7 @@ import os
 import sys
 
 sys.path.insert(0, "/app")
-from shared.memory import MemoryStore  # noqa: E402
+from shared.memory import MemoryStore
 
 store = MemoryStore(os.environ.get("HERMES_MEMORY_ROOT", "/memory"), sys.argv[1], "Jason")
 facts = json.load(sys.stdin)

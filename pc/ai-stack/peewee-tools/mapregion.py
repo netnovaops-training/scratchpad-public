@@ -17,10 +17,23 @@
 #  projected coordinates the tour flies between).
 # =============================================================================
 import json
-import io
 import os
 import urllib.parse
 import urllib.request
+from pathlib import Path
+
+
+def _http_only(target):
+    """Return target (a URL string or urllib Request) if its scheme is http or https, else raise ValueError.
+
+    urlopen also follows file:// and custom schemes (Bandit B310). Every caller here talks to an
+    http(s) service, so anything else is a mistake or a planted URL. Added 2026-11-19.
+    """
+    url = str(getattr(target, "full_url", target))
+    if not url.lower().startswith(("http://", "https://")):
+        raise ValueError(f"refusing a non-http(s) URL: {url[:80]}")
+    return target
+
 
 SITE = os.environ.get("PEEWEE_SITE") or os.path.normpath(
     os.path.join(os.path.dirname(os.path.abspath(__file__)),
@@ -65,7 +78,7 @@ PLACES = [
 def q(body):
     data = urllib.parse.urlencode({"data": body}).encode()
     req = urllib.request.Request(OVERPASS, data=data, headers=UA)
-    with urllib.request.urlopen(req, timeout=240) as r:
+    with urllib.request.urlopen(_http_only(req), timeout=240) as r:  # nosec B310
         return json.loads(r.read())
 
 
@@ -120,8 +133,8 @@ def main():
             (majors if tags.get("highway") in BIG else streets).append(pts)
 
     svg = ['<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 700">',
-           '<g fill="#9c7a3c" fill-opacity=".15" stroke="#9c7a3c" '
-           'stroke-width=".5" opacity=".6">',
+           ('<g fill="#9c7a3c" fill-opacity=".15" stroke="#9c7a3c" '
+           'stroke-width=".5" opacity=".6">'),
            ''.join(f'<path d="{path(p, True)}"/>' for p in buildings),
            '</g><g stroke="#9c7a3c" stroke-width=".7" opacity=".4" fill="none">',
            ''.join(f'<path d="{path(p)}"/>' for p in streets),
@@ -129,19 +142,17 @@ def main():
            ''.join(f'<path d="{path(p)}"/>' for p in majors),
            '</g></svg>']
     out = os.path.join(SITE, "intro", "albany-region.svg")
-    io.open(out, "w", encoding="utf-8", newline="\n").write(''.join(svg))
+    Path(out).write_text(''.join(svg), encoding="utf-8", newline="\n")
 
     places = []
     for p in PLACES:
         x, y = project(p["lat"], p["lon"])
         places.append({**{k: p[k] for k in ("key", "name", "where", "line")},
                        "x": round(x, 1), "y": round(y, 1)})
-    io.open(os.path.join(SITE, "data", "places.json"), "w",
-            encoding="utf-8", newline="\n").write(
-        json.dumps({"_note": "projected to the 1000x700 map; every address "
+    Path(os.path.join(SITE, "data", "places.json")).write_text(json.dumps({"_note": "projected to the 1000x700 map; every address "
                              "is documented -- see mapregion.py for the "
                              "source behind each one",
-                    "places": places}, indent=1))
+                    "places": places}, indent=1), encoding="utf-8", newline="\n")
     print(f"{len(majors)} through-roads, {len(streets)} streets, "
           f"{len(buildings)} buildings -> {os.path.getsize(out)//1024} KB")
     for p in places:

@@ -152,7 +152,7 @@ def main():
     folder = pathlib.Path(a.folder)
     files = sorted(p for p in folder.iterdir()
                    if p.suffix.lower() in SUFFIXES and p.is_file())
-    print("  %d image(s) in %s" % (len(files), folder))
+    print(f"  {len(files)} image(s) in {folder}")
     print("  %s" % ("WRITING" if a.apply else
                     "dry run -- nothing will be changed. Add --apply."))
     print()
@@ -165,18 +165,16 @@ def main():
         mask, cut, cover = star_mask(im, box)
 
         if mask is None:
-            print("  none  %-42s no glyph at the fixed box (otsu cut %d)"
-                  % (p.name, cut))
+            print(f"  none  {p.name!s:<42} no glyph at the fixed box (otsu cut {int(cut)})")  # float on this path; int() keeps the old %d text
             skipped += 1
             continue
         if not (MIN_COVER <= cover <= MAX_COVER):
             why = "too big" if cover > MAX_COVER else "too small -- noise, not a glyph"
-            print("  skip  %-42s trace covers %.0f%% of the box, %s"
-                  % (p.name, 100 * cover, why))
+            print(f"  skip  {p.name!s:<42} trace covers {100 * cover:.0f}% of the box, {why}")
             skipped += 1
             continue
 
-        print("  clean %-42s otsu %2d, star %.0f%% of box" % (p.name, cut, 100 * cover))
+        print(f"  clean {p.name!s:<42} otsu {cut:2d}, star {100 * cover:.0f}% of box")
         done += 1
         if a.apply:
             originals.mkdir(exist_ok=True)
@@ -185,8 +183,7 @@ def main():
             fill(im, mask, a.radius).save(p)
 
     print()
-    print("  %d cleaned, %d left alone%s"
-          % (done, skipped, " (originals in .originals/)" if a.apply else ""))
+    print("  {} cleaned, {} left alone{}".format(done, skipped, " (originals in .originals/)" if a.apply else ""))
 
 
 if __name__ == "__main__":

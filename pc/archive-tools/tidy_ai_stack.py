@@ -54,17 +54,18 @@ def plan_rows():
 def main():
     mode = sys.argv[1]
     if mode == "undo":
-        for kind, src, dst in reversed(list(csv.reader(open(LOG, encoding="utf-8")))):
-            if os.path.exists(dst) and not os.path.exists(src):
-                os.makedirs(os.path.dirname(src), exist_ok=True)
-                shutil.move(dst, src)
+        with open(LOG, encoding="utf-8") as fh:
+            for kind, src, dst in reversed(list(csv.reader(fh))):
+                if os.path.exists(dst) and not os.path.exists(src):
+                    os.makedirs(os.path.dirname(src), exist_ok=True)
+                    shutil.move(dst, src)
         os.rename(LOG, LOG + ".undone")
         print("UNDO done")
         return 0
     rows = plan_rows()
     for kind, src, dst in rows:
-        print("%-4s %s" % (kind, os.path.relpath(src, REPO)))
-    print("PLAN %d items" % len(rows))
+        print(f"{kind!s:<4} {os.path.relpath(src, REPO)}")
+    print(f"PLAN {len(rows)} items")
     if mode != "apply":
         return 0
     ok = 0
@@ -78,7 +79,7 @@ def main():
             shutil.move(src, dst)  # across drives: copy, then the original is removed
             w.writerow([kind, src, dst])
             ok += 1
-    print("APPLY moved %d of %d" % (ok, len(rows)))
+    print(f"APPLY moved {ok} of {len(rows)}")
     return 0
 
 

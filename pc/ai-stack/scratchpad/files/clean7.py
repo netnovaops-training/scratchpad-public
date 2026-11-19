@@ -1,12 +1,14 @@
-import io
+from pathlib import Path
+
+
 def edit(p, pairs):
-    s = io.open(p, encoding="utf-8", newline="").read()
+    s = Path(p).read_bytes().decode("utf-8")
     nl = "\r\n" if "\r\n" in s else "\n"
     for a, b in pairs:
         a2, b2 = a.replace("\n", nl), b.replace("\n", nl)
         assert s.count(a2) == 1, (p, a[:80], s.count(a2))
         s = s.replace(a2, b2)
-    io.open(p, "w", encoding="utf-8", newline="").write(s)
+    Path(p).write_text(s, encoding="utf-8", newline="")
 
 OLD_WHAT = "Removes old versions of the garden's programs (left behind each time one is rebuilt or updated) and Docker's build notes older than 30 days. It keeps every image the garden uses, also those of parts that are off right now. Images of your other Docker projects are left alone."
 NEW_WHAT = "Removes old versions of the garden's programs (left behind each time one is rebuilt or updated) that are older than 7 days, and Docker's build notes older than 30 days. It keeps every image the garden uses, also those of parts that are off right now, and anything newer than 7 days (after you edited files and rebuilt, the old version stays in case you need to go back). Images of your other Docker projects are left alone. Use it with care: it shows the list and asks first, and Enter means no."
@@ -36,7 +38,7 @@ edit("lang/ko.tsv", [
 ("No unused images.\t쓰지 않는 이미지가 없어요.", "No unused images older than 7 days.\t7일이 넘은, 쓰지 않는 이미지가 없어요."),
 ])
 # The Korean of the new "What" text.
-s = io.open("lang/ko.tsv", encoding="utf-8", newline="").read()
+s = Path("lang/ko.tsv").read_bytes().decode("utf-8")
 nl = "\r\n" if "\r\n" in s else "\n"
 lines = s.split(nl)
 for i, l in enumerate(lines):
@@ -45,5 +47,5 @@ for i, l in enumerate(lines):
                                       "정원이 쓰는 이미지는 지금 꺼져 있는 부분 것까지 모두 남기고, 7일이 안 된 것도 남겨요(파일을 고치고 다시 만든 뒤, 되돌아가야 할 때를 위해 옛 버전이 남아 있어요). "
                                       "다른 Docker 프로젝트의 이미지는 건드리지 않아요. 조심해서 쓰세요: 먼저 목록을 보여 주고 물어보며, Enter는 '아니요'예요.")
 lines.append("Kept $young newer than 7 days (they go in a later clean-up).\t7일이 안 된 $young개는 남겼어요(나중 정리 때 지워요).")
-io.open("lang/ko.tsv", "w", encoding="utf-8", newline="").write(nl.join(l for l in lines if l is not None))
+Path("lang/ko.tsv").write_text(nl.join(l for l in lines if l is not None), encoding="utf-8", newline="")
 print("ok")

@@ -28,7 +28,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import todo_reorder as tr  # noqa: E402
+import todo_reorder as tr
 
 HOME = Path.home()
 NH = HOME / "nuc-homelab"
@@ -68,7 +68,7 @@ def order(comps):
 
 
 def main(write):
-    lk = open(LOCK, "a")
+    lk = open(LOCK, "a")  # noqa: SIM115  flock held for the whole run; the OS frees it at exit
     fcntl.flock(lk, fcntl.LOCK_EX)
     ap = HOME / ".todo-autopilot.lock"
     if write and ap.exists() and time.time() - ap.stat().st_mtime < 110 * 60:
@@ -79,7 +79,7 @@ def main(write):
     blocks = [b for c in comps for p in c[2] for s in p[2] for b in s[2]]
     old_ids = [ID.match(b[0]).group(2) for b in blocks]
     if len(set(old_ids)) != len(old_ids):
-        sys.exit("STOP: duplicate ids in TODO-ALL.md: %s" % sorted({i for i in old_ids if old_ids.count(i) > 1}))
+        sys.exit(f"STOP: duplicate ids in TODO-ALL.md: {sorted({i for i in old_ids if old_ids.count(i) > 1})}")
     # Numbers follow work order, not file position: tier first ([first] pins, then P1, P2, P3, PARKED), and
     # inside a tier grouped by project (projects ranked across ALL computers by their best item), then section,
     # then the item order above. Why: grouping by computer first numbered the PC's [first] item after ~500
@@ -96,7 +96,7 @@ def main(write):
     done_text = DONE.read_text(encoding="utf-8") if DONE.exists() else ""
     done_ids = [m.group(2) for m in (ID.match(l) for l in done_text.split("\n")) if m]
     seq = [ID.match(b[0]).group(2) for b in open_b + done_b] + [i for i in done_ids if i not in old_ids]
-    mapping = {old: "T%04d" % n for n, old in enumerate(seq, 1)}
+    mapping = {old: f"T{n:04d}" for n, old in enumerate(seq, 1)}
     if len(set(mapping.values())) != len(mapping):
         sys.exit("STOP: new ids collide")
 
@@ -108,7 +108,7 @@ def main(write):
         old = ID.match(b[0]).group(2)
         titles[old] = re.sub(r"^- \[.\] \*\*T\d+\*\*\s*", "", b[0])[:100]
         b[:] = [sub(l) for l in b]
-        b.append("  Was: %s (renumbered %s)" % (old, TAG))
+        b.append(f"  Was: {old} (renumbered {TAG})")
     pre = [sub(l) for l in pre]
     for c in comps:
         c[1][:] = [sub(l) for l in c[1]]
@@ -119,10 +119,10 @@ def main(write):
     new_text = tr.render(pre, comps)
     new_ids = [m.group(2) for m in (ID.match(l) for l in new_text.split("\n")) if m]
     assert len(new_ids) == len(old_ids) and len(set(new_ids)) == len(new_ids), "item count changed"
-    print("open items %d, ticked in list %d, in TODO-DONE %d; computers in order: %s" % (
+    print("open items {}, ticked in list {}, in TODO-DONE {}; computers in order: {}".format(
         len(open_b), len(done_b), len(done_ids), ", ".join(c[0][3:] for c in comps)))
     for b in open_b[:40]:
-        print("  %s  (was %s)" % (b[0][:110], b[-1].split()[1]))
+        print(f"  {b[0][:110]}  (was {b[-1].split()[1]})")
     if not write:
         print("dry run: nothing written (add --write)")
         return
@@ -154,7 +154,7 @@ def main(write):
             moves.append((tmp, CODE / ((new or f.stem) + ".md")))
         for tmp, dst in moves:
             tmp.rename(dst)
-    with open(NH / ("TODO-RENUMBER-%s.csv" % TAG), "w", newline="", encoding="utf-8") as fh:
+    with open(NH / (f"TODO-RENUMBER-{TAG}.csv"), "w", newline="", encoding="utf-8") as fh:
         w = csv.writer(fh)
         w.writerow(["old", "new", "title"])
         for old in seq:

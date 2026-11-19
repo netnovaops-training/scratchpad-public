@@ -41,9 +41,10 @@ import json
 import os
 import re
 import time
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 # One fact per file, and the filename is derived from the fact, so two
 # recordings of the same thing overwrite rather than accumulate.
@@ -68,7 +69,7 @@ def _slug(text: str, limit: int = 60) -> str:
 # not traverse -- but it means a string that should never have reached this
 # function is silently accepted and given a folder. Refuse it at the door.
 _EMAIL_OK = re.compile(
-    r"^[^@\s/\\]{1,64}@[^@\s/\\]{1,190}\.[a-z]{2,}$", re.I)
+    r"^[^@\s/\\]{1,64}@[^@\s/\\]{1,190}\.[a-z]{2,}$", re.IGNORECASE)
 
 # Characters that must never appear in an identity, checked separately so the
 # reason for each is visible: a path separator, a traversal, a NUL (which
@@ -137,7 +138,7 @@ class Fact:
         )
 
     @classmethod
-    def from_markdown(cls, path: Path) -> "Fact | None":
+    def from_markdown(cls, path: Path) -> Fact | None:
         try:
             raw = path.read_text(encoding="utf-8", errors="replace")
         except OSError:
@@ -233,8 +234,8 @@ class MemoryStore:
         lines = [
             f"# What Hermes knows about {self.name}\n",
             f"<!-- {self.email} -->\n",
-            "One line per fact. Detail lives in `facts/`. Delete a line and\n"
-            "its file to make Hermes forget something.\n",
+            ("One line per fact. Detail lives in `facts/`. Delete a line and\n"
+            "its file to make Hermes forget something.\n"),
         ]
         for f in self.facts():
             mark = "" if f.source == "explicit" else " _(inferred)_"
@@ -326,7 +327,7 @@ class MemoryStore:
         try:
             vecs = self._embeddings(embed)
             qv = embed([query])[0]
-        except Exception:
+        except Exception:  # noqa: BLE001  falls back to substring search, see below
             # Retrieval is a nicety; never let it take the conversation down.
             # Fall back to substring matching, which is better than nothing
             # and costs no model call.

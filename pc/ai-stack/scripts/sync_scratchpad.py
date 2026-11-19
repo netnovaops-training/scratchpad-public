@@ -23,6 +23,7 @@ import re
 import subprocess
 import sys
 import tarfile
+from pathlib import Path
 
 AI = r"C:\Jasons New Site\www\ai-stack"
 DOCS = os.path.join(AI, "docs", "code")
@@ -59,7 +60,7 @@ def files():
                 if os.path.getsize(p) > MAX:
                     continue
                 try:
-                    text = open(p, encoding="utf-8", errors="replace").read()
+                    text = Path(p).read_text(encoding="utf-8", errors="replace")
                 except OSError:
                     continue
                 if GARDEN.search(text):
@@ -74,22 +75,22 @@ def main() -> int:
         for label, rel, p, docs in files():
             if "--list" in sys.argv:
                 print(label, rel)
-            tar.add(p, arcname="%s/%s" % (label, rel))
+            tar.add(p, arcname=f"{label}/{rel}")
             n += 1
             if docs is not None:
                 md = os.path.join(DOCS, docs, *rel.split("/")) + ".md"
-                if os.path.isfile(md) and not GARDEN.search(open(md, encoding="utf-8", errors="replace").read()):
-                    tar.add(md, arcname="_docs/%s/%s.md" % (label, rel))
+                if os.path.isfile(md) and not GARDEN.search(Path(md).read_text(encoding="utf-8", errors="replace")):
+                    tar.add(md, arcname=f"_docs/{label}/{rel}.md")
                     d += 1
-    print("scripts %d, docs %d" % (n, d))
+    print(f"scripts {n}, docs {d}")
     if "--list" in sys.argv:
         return 0
     cmd = ("set -e; cd ~ && mkdir -p scratchpad-src && rm -rf scratchpad-src/pc.new && mkdir scratchpad-src/pc.new "
            "&& tar -xzf - -C scratchpad-src/pc.new && rm -rf scratchpad-src/pc.old "
            "&& { [ -d scratchpad-src/pc ] && mv scratchpad-src/pc scratchpad-src/pc.old || true; } "
            "&& mv scratchpad-src/pc.new scratchpad-src/pc && rm -rf scratchpad-src/pc.old")
-    r = subprocess.run(["ssh", NUC, cmd], input=buf.getvalue(), capture_output=True)
-    print("PASS sent to NUC" if r.returncode == 0 else "FAIL ssh/tar exit %d" % r.returncode)
+    r = subprocess.run(["ssh", NUC, cmd], input=buf.getvalue(), capture_output=True, check=False)
+    print("PASS sent to NUC" if r.returncode == 0 else f"FAIL ssh/tar exit {r.returncode}")
     return r.returncode
 
 

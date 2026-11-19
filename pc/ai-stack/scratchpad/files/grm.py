@@ -1,6 +1,7 @@
-import io
+from pathlib import Path
+
 p = "tools/release/README.md"
-s = io.open(p, encoding="utf-8", newline="").read()
+s = Path(p).read_bytes().decode("utf-8")
 nl = "\r\n" if "\r\n" in s else "\n"
 def rep(a, b):
     global s
@@ -27,5 +28,5 @@ rep("""| `test-webname.sh` | The Website name swap on a throwaway copy |
 | `test-rename-and-switch.sh` | The rename / move tool and the on / off switch (menu M, 18 and 19): a photo folder, a plant photo named in the database, a page, the redo after a restore, refusals, a big folder, the whole garden folder and back, the clean-up, the check-up, off and on |
 | `test-windows-functions.ps1` | The new parts of the Windows menu on their own: the WSL path, Docker Desktop's checks, line endings, the copy that follows a rename, and finding the garden computer again after its address changed |
 """),
-io.open(p, "w", encoding="utf-8", newline="").write(s)
+Path(p).write_text(s, encoding="utf-8", newline="")
 print("ok")

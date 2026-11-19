@@ -8,8 +8,9 @@ from __future__ import annotations
 import json
 import re
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any, ClassVar
 
 from shared.memory import MemoryStore
 from shared.router import Router, pick_job
@@ -209,7 +210,7 @@ class Agent:
     # Memory, the pending list and the summariser are never filtered out.
     # They apply to any subject, and each is the kind of thing a person
     # asks for in the middle of talking about something else.
-    AREAS = {
+    AREAS: ClassVar[dict[str, tuple[str, ...]]] = {
         "garden": ("plant", "garden", "bed", "bloom", "flower", "seed",
                    "soil", "prune", "leaf", "leaves", "shrub", "perennial",
                    "bees", "pollinator", "hosta", "rose", "watering",
@@ -332,7 +333,7 @@ class Agent:
             return
         try:
             block = self.memory.context_block(query, self.router.embed, k=4)
-        except Exception:
+        except Exception:  # noqa: BLE001  memory is optional; never let it end the conversation
             block = ""            # never let memory take the conversation down
         base = self.system_prompt
         if block:
@@ -441,7 +442,7 @@ class Agent:
                         self.memory.log_turn(
                             self.transcript.surface, user_text, final,
                             self._tools_used)
-                    except Exception:
+                    except Exception:  # noqa: BLE001, S110  turn logging is best-effort; the reply already went out
                         pass
                 # NOT CLEARED HERE. server.py reads _tools_used off the agent
                 # AFTER run() returns, to tell the app which tools produced the
@@ -675,7 +676,7 @@ class Agent:
     #: it is the wrong answer no matter how correct it is. Salvaging it
     #: turned two broken answers into two confidently wrong ones on the
     #: first attempt at this, which is worse than the greeting it replaced.
-    GENERIC_TOOLS = {"garden_overview", "house_status", "garden_words"}
+    GENERIC_TOOLS: ClassVar[set[str]] = {"garden_overview", "house_status", "garden_words"}
 
     def _last_useful_tool_result(self) -> str:
         """The most recent tool output that could actually be an answer."""

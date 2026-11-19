@@ -49,7 +49,7 @@ def _by_label(text: str, metric: str) -> dict[str, float]:
     # Escape the name so a metric containing regex characters can't misbehave.
     esc = re.escape(metric)
 
-    for m in re.finditer(rf"^{esc}\{{([^}}]*)\}}\s+([\d.eE+-]+)\s*$", text, re.M):
+    for m in re.finditer(rf"^{esc}\{{([^}}]*)\}}\s+([\d.eE+-]+)\s*$", text, re.MULTILINE):
         labels, value = m.group(1), m.group(2)
         lm = re.search(r'\b(?:model|model_group|job)="([^"]*)"', labels)
         key = (lm.group(1) if lm and lm.group(1) else "all")
@@ -58,7 +58,7 @@ def _by_label(text: str, metric: str) -> dict[str, float]:
         except ValueError:
             continue
 
-    for m in re.finditer(rf"^{esc}\s+([\d.eE+-]+)\s*$", text, re.M):
+    for m in re.finditer(rf"^{esc}\s+([\d.eE+-]+)\s*$", text, re.MULTILINE):
         try:
             out["all"] = out.get("all", 0.0) + float(m.group(1))
         except ValueError:
@@ -101,7 +101,8 @@ def summarise_llm(metrics_text: str) -> dict[str, dict[str, Any]]:
             avg = lat_sum.get(r, 0.0) / lat_cnt[r]
 
         result[r] = {
-            "requests": requests.get(r),
+            # False positive: `requests` here is a local dict of counts, not the requests library.
+            "requests": requests.get(r),  # nosec B113
             "tokens_in": tok_in.get(r),
             "tokens_out": tok_out.get(r),
             "tokens_total": total,
@@ -248,7 +249,7 @@ def _fmt_int(n: Any) -> str:
     if n is None:
         return "-"
     try:
-        return f"{int(round(float(n))):,}"
+        return f"{round(float(n)):,}"
     except (TypeError, ValueError):
         return "-"
 

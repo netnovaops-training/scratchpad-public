@@ -25,7 +25,6 @@ from __future__ import annotations
 
 import ast
 import datetime
-import importlib.util
 import json
 import re
 import subprocess
@@ -44,7 +43,7 @@ THREADS = re.compile(r"\b(threading|ThreadPoolExecutor|concurrent\.futures)\b")
 
 def run(cmd: list[str], timeout: int = 60) -> str:
     try:
-        return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout).stdout
+        return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, check=False).stdout
     except (OSError, subprocess.TimeoutExpired):
         return ""
 
@@ -56,8 +55,8 @@ def interpreters() -> list[dict]:
         m = re.search(r"-V?:?(\d+\.\d+t?)\S*\s+\*?\s*(\S.*\.exe)", line)
         if m:
             exe = m.group(2).strip()
-            info = run([exe, "-c", "import sys,sysconfig;print(sys.version.split()[0],"
-                        "bool(sysconfig.get_config_var('Py_GIL_DISABLED')))"]).split()
+            info = run([exe, "-c", ("import sys,sysconfig;print(sys.version.split()[0],"
+                        "bool(sysconfig.get_config_var('Py_GIL_DISABLED')))")]).split()
             if info:
                 out.append({"tag": m.group(1), "exe": exe, "version": info[0], "free_threaded": info[1] == "True"})
     return out
@@ -80,7 +79,7 @@ def docker_bases() -> list[tuple[str, str]]:
         if SKIP_DIRS & set(f.relative_to(AI).parts):
             continue
         for line in f.read_text(encoding="utf-8", errors="replace").splitlines():
-            m = re.match(r"\s*FROM\s+(\S*python:(\d+\.\d+)\S*)", line, re.I)
+            m = re.match(r"\s*FROM\s+(\S*python:(\d+\.\d+)\S*)", line, re.IGNORECASE)
             if m:
                 rows.append((str(f.relative_to(AI)), m.group(2)))
     for f in AI.glob("*.ps1"):  # one-off `docker run python:X` calls in launchers
@@ -133,7 +132,7 @@ def in_docker(p: Path) -> str:
         if d == HOME / "pc":
             break
         for f in d.glob("Dockerfile*"):
-            m = re.search(r"^\s*FROM\s+\S*python:(\d+\.\d+)", f.read_text(encoding="utf-8", errors="replace"), re.M | re.I)
+            m = re.search(r"^\s*FROM\s+\S*python:(\d+\.\d+)", f.read_text(encoding="utf-8", errors="replace"), re.MULTILINE | re.IGNORECASE)
             return m.group(1) if m else "image"
     return ""
 
@@ -195,8 +194,8 @@ def main() -> int:
     L += [f"- Python {v}: {len(ps)} scripts" for v, ps in sorted(dk.items())] or ["None."]
     ft = [r["path"] for r in rows if r["threads"] and not r["docker"] and r["syntax"] == "ok" and not r["missing"]]
     L += ["", "## Free-threaded candidates", "",
-          "Scripts that use threads. They only gain from the no-GIL build if the threads do CPU work "
-          "(network or disk waits already overlap with the GIL). Test one on `python3.14t` before moving it.", ""]
+          ("Scripts that use threads. They only gain from the no-GIL build if the threads do CPU work "
+          "(network or disk waits already overlap with the GIL). Test one on `python3.14t` before moving it."), ""]
     L += [f"- `{p}`" for p in ft] or ["None."]
     if "--nuc" in sys.argv:
         L += ["", "## NUC", "", "```", nuc_pythons().strip() or "(no answer over ssh)", "```"]

@@ -15,8 +15,8 @@
 #  Delete the folder and the window closes.
 # =============================================================================
 import html
-import io
 import os
+from pathlib import Path
 
 ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 OUT = os.path.join(ROOT, "web", "public", "code")
@@ -25,35 +25,35 @@ OUT = os.path.join(ROOT, "web", "public", "code")
 # and the front-end that drives the memorial.
 FILES = [
     ("rust/auth/src/bridge.rs", "Rust",
-     "The cross-domain session bridge. Single-use sixty-second codes, "
-     "host-bound, with the trust rules written as unit tests underneath."),
+     ("The cross-domain session bridge. Single-use sixty-second codes, "
+     "host-bound, with the trust rules written as unit tests underneath.")),
     ("rust/common/src/people.rs", "Rust",
-     "Identity and permission levels shared by every service -- one "
-     "definition of who may do what, so the sites cannot drift apart."),
+     ("Identity and permission levels shared by every service -- one "
+     "definition of who may do what, so the sites cannot drift apart.")),
     ("voice/server.py", "Python",
-     "The voice service: two engines behind one OpenAI-shaped API, and the "
-     "normalizer that turns page punctuation into speech."),
+     ("The voice service: two engines behind one OpenAI-shaped API, and the "
+     "normalizer that turns page punctuation into speech.")),
     ("hermes/app/house.py", "Python",
-     "Read-only tools that let a local language model answer questions "
-     "about the house -- logs, uptime, git -- without holding any write."),
+     ("Read-only tools that let a local language model answer questions "
+     "about the house -- logs, uptime, git -- without holding any write.")),
     ("peewee-tools/mapregion.py", "Python",
-     "Pulls two cities from OpenStreetMap, projects them into one vector "
-     "map, and records the documented address behind every marker."),
+     ("Pulls two cities from OpenStreetMap, projects them into one vector "
+     "map, and records the documented address behind every marker.")),
     ("metrics/app.py", "Python",
-     "Collection and history for both machines, with the honesty that a "
-     "stale sample is reported as stale rather than drawn as fresh."),
+     ("Collection and history for both machines, with the honesty that a "
+     "stale sample is reported as stale rather than drawn as fresh.")),
     ("telephony/app/conversation.py", "Python",
-     "The telephone assistant's turn-taking: barge-in, partial results, "
-     "and what to say when a model is slow."),
+     ("The telephone assistant's turn-taking: barge-in, partial results, "
+     "and what to say when a model is slow.")),
     ("docker-compose.yml", "YAML",
-     "The application host, declared. Every service, its limits, its "
-     "volumes, and a comment for every decision that cost something."),
+     ("The application host, declared. Every service, its limits, its "
+     "volumes, and a comment for every decision that cost something.")),
     ("web/Caddyfile", "Caddy",
-     "Every route into the house: which are public, which are gated, and "
-     "which carry their own keys."),
+     ("Every route into the house: which are public, which are gated, and "
+     "which carry their own keys.")),
     ("web/public/peewee/index.html", "HTML / JS",
-     "The memorial itself -- the dial, the broadcast, and the narrated "
-     "journey across the map of the two cities he worked in."),
+     ("The memorial itself -- the dial, the broadcast, and the narrated "
+     "journey across the map of the two cities he worked in.")),
 ]
 
 PAGE = """<!doctype html>
@@ -143,24 +143,22 @@ def main():
         if not os.path.exists(src):
             print("missing, skipped:", rel)
             continue
-        text = io.open(src, encoding="utf-8", errors="replace").read()
+        text = Path(src).read_text(encoding="utf-8", errors="replace")
         lines = text.count("\n") + 1
         slug = rel.replace("/", "__").replace(".", "_") + ".html"
         body = "\n".join(
             f'<span class="ln">{i:5}</span>  {html.escape(l)}'
             for i, l in enumerate(text.split("\n"), 1))
-        io.open(os.path.join(OUT, slug), "w", encoding="utf-8",
-                newline="\n").write(PAGE.format(
+        Path(os.path.join(OUT, slug)).write_text(PAGE.format(
                     title=html.escape(rel), path=html.escape(rel),
                     note=html.escape(note), lang=html.escape(lang),
-                    lines=f"{lines:,}", body=body))
+                    lines=f"{lines:,}", body=body), encoding="utf-8", newline="\n")
         items.append(
             f'<li><a href="{slug}">{html.escape(rel)}</a>'
             f'<div class="d">{html.escape(note)}</div>'
             f'<div class="t">{html.escape(lang)} &middot; {lines:,} lines</div></li>')
         print(f"published {rel} ({lines:,} lines)")
-    io.open(os.path.join(OUT, "index.html"), "w", encoding="utf-8",
-            newline="\n").write(INDEX.format(items="".join(items)))
+    Path(os.path.join(OUT, "index.html")).write_text(INDEX.format(items="".join(items)), encoding="utf-8", newline="\n")
     print(f"\n{len(items)} files at /code/")
 
 

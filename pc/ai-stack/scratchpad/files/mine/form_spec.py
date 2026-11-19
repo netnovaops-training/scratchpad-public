@@ -1,5 +1,8 @@
-import sys; sys.path.insert(0,".")
+import sys
+
+sys.path.insert(0, ".")
 from cins import apply
+
 S = [
 (14, """//! Used by: tabs 1 to 10 (via `tabs.rs`). The form posts to /streamlit/ with
 //! `act=save_plant`, which `action` in mod.rs sends to `save` below. The

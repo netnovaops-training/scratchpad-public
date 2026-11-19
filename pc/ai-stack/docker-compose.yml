@@ -629,10 +629,22 @@ services:
     ports:
       - "127.0.0.1:5000:5000"
     volumes:
-      - "${COLIBRI_MODEL_DIR:-C:/Models/DeepSeek-V4.1-Flash}:/model:ro"
+      # Long syntax, not "C:/...:/model:ro": the short form's extra colon after the drive letter
+      # makes Linux compose (the CI check) reject the file with "too many colons". Same mounts;
+      # create_host_path keeps the short form's create-if-missing. 2026-11-19, checked with
+      # `docker compose config` on the PC (Docker Desktop) and in a Linux container.
+      - type: bind
+        source: "${COLIBRI_MODEL_DIR:-C:/Models/DeepSeek-V4.1-Flash}"
+        target: /model
+        read_only: true
+        bind: { create_host_path: true }
       # The second drive's copy, when it exists. Read-only like the primary.
       # Harmless while D:\Models is empty or absent.
-      - "${COLIBRI_MIRROR_DIR:-D:/Models/DeepSeek-V4.1-Flash}:/model-mirror:ro"
+      - type: bind
+        source: "${COLIBRI_MIRROR_DIR:-D:/Models/DeepSeek-V4.1-Flash}"
+        target: /model-mirror
+        read_only: true
+        bind: { create_host_path: true }
     environment:
       # Expert cache budget. Raising this is the single biggest speed lever
       # short of a faster disk -- a cached expert is served at RAM speed

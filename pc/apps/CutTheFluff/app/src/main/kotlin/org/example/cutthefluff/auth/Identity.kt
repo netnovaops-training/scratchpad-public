@@ -6,6 +6,9 @@ import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 
+/** How much of an unexpected userinfo reply goes into the error message. */
+private const val ERROR_BODY_CHARS = 120
+
 /** Who the signed-in person is, according to the server rather than the app. */
 data class Identity(
     val email: String,
@@ -57,7 +60,7 @@ object IdentityService {
                 }
                 if (code !in 200..299) {
                     val body = conn.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
-                    throw IllegalStateException("userinfo returned $code: ${body.take(120)}")
+                    throw IllegalStateException("userinfo returned $code: ${body.take(ERROR_BODY_CHARS)}")
                 }
 
                 val json = JSONObject(conn.inputStream.bufferedReader().use { it.readText() })

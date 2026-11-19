@@ -22,6 +22,7 @@ import collections
 import json
 import os
 import sys
+from pathlib import Path
 
 SEV = {"error": 0, "critical": 0, "high": 1, "warning": 2, "medium": 2, "moderate": 2, "low": 3, "note": 4,
        "help": 4, "none": 5}
@@ -30,30 +31,31 @@ SEV = {"error": 0, "critical": 0, "high": 1, "warning": 2, "medium": 2, "moderat
 def clippy(path, root):
     """cargo clippy --message-format=json -> rows (one per primary span; duplicates across crates dropped)."""
     rows, seen = [], set()
-    for line in open(path, encoding="utf-8"):
-        try:
-            m = json.loads(line)
-        except ValueError:
-            continue
-        if m.get("reason") != "compiler-message" or m["message"]["level"] not in ("warning", "error"):
-            continue
-        msg = m["message"]
-        span = next((s for s in msg.get("spans", []) if s.get("is_primary")), None)
-        if not span:
-            continue
-        p = os.path.normpath(os.path.join(root, span["file_name"])).replace("\\", "/")
-        key = (p, span["line_start"], msg["message"])
-        if key in seen:
-            continue
-        seen.add(key)
-        rows.append({"tool": "clippy", "rule": (msg.get("code") or {}).get("code") or "rustc",
-                     "severity": msg["level"], "path": p, "line": span["line_start"], "message": msg["message"]})
+    with open(path, encoding="utf-8") as fh:
+        for line in fh:
+            try:
+                m = json.loads(line)
+            except ValueError:
+                continue
+            if m.get("reason") != "compiler-message" or m["message"]["level"] not in ("warning", "error"):
+                continue
+            msg = m["message"]
+            span = next((s for s in msg.get("spans", []) if s.get("is_primary")), None)
+            if not span:
+                continue
+            p = os.path.normpath(os.path.join(root, span["file_name"])).replace("\\", "/")
+            key = (p, span["line_start"], msg["message"])
+            if key in seen:
+                continue
+            seen.add(key)
+            rows.append({"tool": "clippy", "rule": (msg.get("code") or {}).get("code") or "rustc",
+                         "severity": msg["level"], "path": p, "line": span["line_start"], "message": msg["message"]})
     return rows
 
 
 def cargo_audit(path, root):
     """cargo audit --json -> one row per vulnerable crate (warnings such as unmaintained count as 'low')."""
-    d = json.load(open(path, encoding="utf-8"))
+    d = json.loads(Path(path).read_text(encoding="utf-8"))
     lock = f"{root.rstrip('/')}/Cargo.lock"
     rows = []
     for v in d.get("vulnerabilities", {}).get("list", []):
@@ -71,7 +73,7 @@ def cargo_audit(path, root):
 
 def sarif(path, tool):
     """Any SARIF 2.1 file (detekt, swiftlint, ...) -> rows; absolute runner paths cut back to repo-relative."""
-    d = json.load(open(path, encoding="utf-8"))
+    d = json.loads(Path(path).read_text(encoding="utf-8"))
     ws = os.environ.get("GITHUB_WORKSPACE", os.getcwd()).replace("\\", "/").rstrip("/") + "/"
     rows = []
     for run in d.get("runs", []):
@@ -118,7 +120,7 @@ def main():
     else:
         rows = sarif(a.file, a.tool or "sarif")
     tool = a.tool or a.kind
-    json.dump(rows, open(a.out, "w", encoding="utf-8"), indent=1)
+    Path(a.out).write_text(json.dumps(rows, indent=1), encoding="utf-8")
     report(rows, tool)
 
 

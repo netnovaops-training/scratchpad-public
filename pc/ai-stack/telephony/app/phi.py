@@ -47,7 +47,7 @@ Collecting it requires affirmative consent. Not collecting it requires nothing.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, asdict, field
+from dataclasses import asdict, dataclass
 from typing import Any
 
 # =============================================================================
@@ -153,7 +153,7 @@ dnr|do\s+not\s+resuscitate|advance\s+directive|living\s+will
 
 _HEALTH = re.compile(
     "|".join(p.strip() for p in (_CONDITIONS, _MEDICATIONS, _TREATMENTS)),
-    re.I | re.X,
+    re.IGNORECASE | re.VERBOSE,
 )
 
 REDACTED = "[health info removed]"
@@ -212,14 +212,14 @@ _MEDICAL_PLACES = re.compile(
     r"clinic|hospital|medical\s+cent(?:er|re)|urgent\s+care|"
     r"pharmacy|drug\s?store|chemist"
     r")\b",
-    re.I,
+    re.IGNORECASE,
 )
 
 # Kept as-is: these are errands, not health.
 _ERRANDS = re.compile(
     r"\b(grocer\w+|market|walmart|target|costco|bank|church|library|park|"
     r"salon|barber|post\s+office|dmv|restaurant|lunch|dinner|coffee|mall)\b",
-    re.I,
+    re.IGNORECASE,
 )
 
 
@@ -238,7 +238,7 @@ def generalise_destination(text: str) -> str:
     if _MEDICAL_PLACES.search(text):
         # Pharmacy is worth keeping distinct: it's a routine errand and Dee
         # collecting a prescription is the actual service, not a diagnosis.
-        if re.search(r"\b(pharmacy|drug\s?store|chemist)\b", text, re.I):
+        if re.search(r"\b(pharmacy|drug\s?store|chemist)\b", text, re.IGNORECASE):
             out = _MEDICAL_PLACES.sub("pharmacy", text)
         else:
             out = _MEDICAL_PLACES.sub("medical appointment", text)
@@ -273,7 +273,7 @@ def clean_record(rec: CallRecord) -> CallRecord:
     # gets dropped rather than marked, because there's no useful remainder.
     if rec.mobility_aid and not re.fullmatch(
         r"\s*(walker|wheelchair|cane|walking\s+stick|rollator|scooter|none|)\s*",
-        rec.mobility_aid, re.I,
+        rec.mobility_aid, re.IGNORECASE,
     ):
         rec.mobility_aid = ""
 

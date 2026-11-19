@@ -191,8 +191,8 @@ def main():
         sys.exit(f"no open items in {label}")
     ids = ", ".join(i["id"] for i in chosen[:60]) + (" ..." if len(chosen) > 60 else "")
     lines = ["/caveman", "", f"Scope: {label} - {len(chosen)} open to-do items: {ids}.",
-             "Read those items in ~/nuc-homelab/TODO-ALL.md on the NUC first (Where/Found/Do/Review/Answer lines) "
-             "and their todo-code/ files. Stay inside this scope.", "", "Stage: " + STAGE[a[2]], "",
+             ("Read those items in ~/nuc-homelab/TODO-ALL.md on the NUC first (Where/Found/Do/Review/Answer lines) "
+             "and their todo-code/ files. Stay inside this scope."), "", "Stage: " + STAGE[a[2]], "",
              "Run these skills one at a time, in this order, on the files below only:"]
     for k, n in enumerate(nums, 1):
         lines.append(f"  {k}. {SKILLS[n][1]} - {SKILLS[n][2]} (cost: {SKILLS[n][4]})")
@@ -201,9 +201,9 @@ def main():
         for ln in i["text"].split("\n"):
             if ln.strip().startswith(("Where:", "Code:")):
                 lines.append(f"  {i['id']}: {ln.strip()}")
-    lines += ["", "Rules: guide, don't solve - each finding becomes a Review: line on its item (todo_note.py). Fix only "
+    lines += ["", ("Rules: guide, don't solve - each finding becomes a Review: line on its item (todo_note.py). Fix only "
               "what I ask. Tell me before any skill marked high. After each skill: two-line summary, then record it: "
-              f"python3 ~/learning-src/skills_prompt.py done <T-number> <skill number>."]
+              "python3 ~/learning-src/skills_prompt.py done <T-number> <skill number>.")]
     print("\n".join(lines))
 
 

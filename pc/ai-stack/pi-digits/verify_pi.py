@@ -17,6 +17,7 @@ import json
 import struct
 import sys
 import time
+from pathlib import Path
 
 
 def sha(b):
@@ -35,8 +36,8 @@ def root_of(d, n, block=1000):
 def main():
     if len(sys.argv) < 2:
         raise SystemExit(__doc__)
-    raw = open(sys.argv[1], "rb").read()
-    magic, ver, count, rl, ol = struct.unpack_from("<4sHHII", raw, 0)
+    raw = Path(sys.argv[1]).read_bytes()
+    magic, ver, count, rl, _ol = struct.unpack_from("<4sHHII", raw, 0)
     if magic != b"SNPI" or ver != 2:
         raise SystemExit("not a version-2 pi.snpi file")
     p = 16
@@ -60,7 +61,7 @@ def main():
         try:
             ed25519.Ed25519PublicKey.from_public_bytes(bytes.fromhex(eq["public_key_ed25519"])).verify(sig, msg)
             report("Ed25519 signature over the equation and every run", True)
-        except Exception:
+        except Exception:  # noqa: BLE001  a verifier: any error in the check is a failed check
             report("Ed25519 signature over the equation and every run", False)
     except ImportError:
         report("signature", None, "pip install cryptography")
@@ -76,7 +77,7 @@ def main():
             report(f"run {rn:,}: your digits land on the stored root", root_of(d, rn) == r, r[:16] + "…")
         if "--save" in sys.argv:
             out = sys.argv[sys.argv.index("--save") + 1]
-            open(out, "w").write(d)
+            Path(out).write_text(d)
             print(f"      digits saved to {out}")
     print("ALL CHECKS PASSED" if bad == 0 else f"{bad} CHECK(S) FAILED")
     sys.exit(1 if bad else 0)

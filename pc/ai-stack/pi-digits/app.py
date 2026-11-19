@@ -23,14 +23,12 @@ HTTP (behind Caddy at /pi/, household sign-in; prefix stripped)
   GET /api/file               pi.snpi itself
   GET /api/verifier.py        stand-alone checker
 """
-import hashlib
 import json
 import multiprocessing as mp
 import os
 import random
 import struct
 import subprocess
-import sys
 import tempfile
 import threading
 import time
@@ -113,9 +111,9 @@ def ots_bytes(message: bytes, old: bytes = b"") -> bytes:
         o = Path(d) / "pi.id.ots"
         if old:
             o.write_bytes(old)
-            subprocess.run(["ots", "upgrade", str(o)], capture_output=True, timeout=120)
+            subprocess.run(["ots", "upgrade", str(o)], capture_output=True, timeout=120, check=False)
         else:
-            subprocess.run(["ots", "stamp", str(f)], capture_output=True, timeout=120)
+            subprocess.run(["ots", "stamp", str(f)], capture_output=True, timeout=120, check=False)
         return o.read_bytes() if o.exists() else old
 
 
@@ -124,14 +122,14 @@ def ots_status(ots: bytes) -> str:
         return "not stamped yet"
     with tempfile.TemporaryDirectory() as d:
         o = Path(d) / "x.ots"; o.write_bytes(ots)
-        txt = subprocess.run(["ots", "info", str(o)], capture_output=True, text=True, timeout=60).stdout
+        txt = subprocess.run(["ots", "info", str(o)], capture_output=True, text=True, timeout=60, check=False).stdout
     if "BitcoinBlockHeaderAttestation" in txt:
-        line = [l for l in txt.splitlines() if "BitcoinBlockHeaderAttestation" in l][0]
+        line = next(l for l in txt.splitlines() if "BitcoinBlockHeaderAttestation" in l)
         return "anchored in Bitcoin block " + line.split("(")[-1].rstrip(")")
     return "pending: waiting for a Bitcoin block (usually a few hours)" if "Pending" in txt else "unknown"
 
 
-def save(recipe: bytes, runs, ots: bytes = None):
+def save(recipe: bytes, runs, ots: bytes | None = None):
     msg = snpi.signed_message(recipe, runs)
     if ots is None:
         ots = ots_bytes(msg)
@@ -153,7 +151,6 @@ def child_regenerate(n, conn):
 
 def child_new_run(n, conn):
     import mpmath
-    t = time.time()
     a = mpfr_digits(n)
     set_job(phase="computing again with mpmath (Chudnovsky) to check every digit")
     mpmath.mp.dps = n + 30
@@ -186,7 +183,7 @@ def migrate_v1():
     if raw[:4] != b"SNPI" or struct.unpack_from("<H", raw, 4)[0] != 1:
         return
     set_job(state="running", target=None, phase="turning pi.snpi into equation + answers", started=time.time())
-    magic, ver, flags, n, doff, dlen, coff, clen = struct.unpack_from("<4sHHQQQQQ", raw, 0)
+    _magic, _ver, _flags, n, doff, dlen, coff, clen = struct.unpack_from("<4sHHQQQQQ", raw, 0)
     words = struct.unpack_from(f"<{dlen // 8}Q", raw, doff)
     digits = "".join(str(v).zfill(19 if (i + 1) * 19 <= n else n - i * 19) for i, v in enumerate(words))
     c, p, runs = raw[coff:coff + clen], 4, []
@@ -235,7 +232,7 @@ def worker():
             SAMPLE_CACHE.clear()
             have.append(n)
         set_job(state="done", phase=None, target=None)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001  background job: any failure is stored as the job state
         traceback.print_exc()
         set_job(state="error", error=f"{type(e).__name__}: {e}"[:300])
 
@@ -250,7 +247,7 @@ def stamper():
                 if new != f["ots"]:
                     snpi.write(FILE, f["recipe_bytes"], f["runs"], f["sig"], new)
                     OTS_CACHE.clear()
-        except Exception:
+        except Exception:  # noqa: BLE001  background re-stamp: printed, retried next round
             traceback.print_exc()
 
 
@@ -277,7 +274,7 @@ def verify():
     try:
         ed25519.Ed25519PublicKey.from_public_bytes(bytes.fromhex(f["recipe"]["public_key_ed25519"])).verify(f["sig"], msg)
         add("Ed25519 signature over the equation and every run", True, f"ID {f['id'][:16]}…")
-    except Exception:
+    except Exception:  # noqa: BLE001  a verifier: any error in the check is a failed check
         add("Ed25519 signature over the equation and every run", False)
     if not MEM["ready"]:
         add("digits rebuilt from the equation", False, "still rebuilding; try again in a few minutes")
@@ -370,4 +367,5 @@ if __name__ == "__main__":
     set_job(state="starting", phase=None, target=None, started=None, error=None)
     threading.Thread(target=worker, daemon=True).start()
     threading.Thread(target=stamper, daemon=True).start()
-    ThreadingHTTPServer(("0.0.0.0", PORT), H).serve_forever()
+    # Listens on every interface inside its own container; only the docker network and Caddy reach it (no published port).
+    ThreadingHTTPServer(("0.0.0.0", PORT), H).serve_forever()  # nosec B104

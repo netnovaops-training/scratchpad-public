@@ -21,8 +21,9 @@ import asyncio
 import json
 import logging
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any
 
 import numpy as np
 
@@ -275,7 +276,7 @@ class Conversation:
             })
         except asyncio.CancelledError:
             raise
-        except Exception:  # noqa: BLE001
+        except Exception:
             log.exception("speak failed")
             self.state.speaking = False
 
@@ -416,7 +417,7 @@ class Conversation:
                              "Let me have Miss Dee call you back.")
         except asyncio.CancelledError:
             raise
-        except Exception:  # noqa: BLE001
+        except Exception:
             log.exception("respond failed")
             await self.speak("I'm sorry, something went wrong on my end. "
                              "Please call back in a moment.")

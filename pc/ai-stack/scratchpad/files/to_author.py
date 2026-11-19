@@ -1,10 +1,13 @@
 """'the previous owner' -> 'the author' (Korean 이전 주인 -> 제작자, with the right particles)."""
-import io, re, subprocess, sys
+import re
+import subprocess
+import sys
+from pathlib import Path
 
 ROOT = sys.argv[1]
 files = subprocess.run(["git", "-c", "core.quotepath=off", "ls-files"], cwd=ROOT, capture_output=True,
-                       text=True, encoding="utf-8").stdout.splitlines()
-BINARY = re.compile(r"\.(pdf|png|jpg|jpeg|webp|gif|ico|svg|apk|jar|gz|zip|tar|mp3|woff2?|ttf|keystore)$", re.I)
+                       text=True, encoding="utf-8", check=False).stdout.splitlines()
+BINARY = re.compile(r"\.(pdf|png|jpg|jpeg|webp|gif|ico|svg|apk|jar|gz|zip|tar|mp3|woff2?|ttf|keystore)$", re.IGNORECASE)
 PAIRS = [
     ("FILES-FROM-PREVIOUS-OWNER", "FILES-FROM-AUTHOR"),
     ("from-the-previous-owner", "from-the-author"),
@@ -24,13 +27,13 @@ for f in files:
         continue
     p = f"{ROOT}/{f}"
     try:
-        raw = io.open(p, encoding="utf-8", newline="").read()
+        raw = Path(p).read_bytes().decode("utf-8")
     except (UnicodeDecodeError, FileNotFoundError, IsADirectoryError):
         continue
     s = raw
     for a, b in PAIRS + KO:
         s = s.replace(a, b)
     if s != raw:
-        io.open(p, "w", encoding="utf-8", newline="").write(s)
+        Path(p).write_text(s, encoding="utf-8", newline="")
         changed.append(f)
 print(len(changed), "files changed")

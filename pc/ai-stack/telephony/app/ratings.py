@@ -19,10 +19,11 @@ from __future__ import annotations
 import logging
 import sqlite3
 import threading
+from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 
 from .callers import normalise
 
@@ -53,7 +54,7 @@ REQUEST_VALID_HOURS = 48
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return datetime.now(UTC).isoformat(timespec="seconds")
 
 
 class RatingStore:
@@ -104,7 +105,7 @@ class RatingStore:
             asked = datetime.fromisoformat(row["asked_at"])
         except ValueError:
             return None
-        if datetime.now(timezone.utc) - asked > timedelta(hours=REQUEST_VALID_HOURS):
+        if datetime.now(UTC) - asked > timedelta(hours=REQUEST_VALID_HOURS):
             return None
         return row["code"]
 

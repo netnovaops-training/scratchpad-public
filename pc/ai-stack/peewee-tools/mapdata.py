@@ -14,10 +14,22 @@
 #  is real even where the photographs are gone.
 # =============================================================================
 import json
-import io
 import os
 import urllib.parse
 import urllib.request
+
+
+def _http_only(target):
+    """Return target (a URL string or urllib Request) if its scheme is http or https, else raise ValueError.
+
+    urlopen also follows file:// and custom schemes (Bandit B310). Every caller here talks to an
+    http(s) service, so anything else is a mistake or a planted URL. Added 2026-11-19.
+    """
+    url = str(getattr(target, "full_url", target))
+    if not url.lower().startswith(("http://", "https://")):
+        raise ValueError(f"refusing a non-http(s) URL: {url[:80]}")
+    return target
+
 
 SITE = os.environ.get("PEEWEE_SITE") or os.path.normpath(
     os.path.join(os.path.dirname(os.path.abspath(__file__)),
@@ -35,7 +47,7 @@ VW, VH = 1000.0, 700.0
 def q(body):
     data = urllib.parse.urlencode({"data": body}).encode()
     req = urllib.request.Request(OVERPASS, data=data, headers=UA)
-    with urllib.request.urlopen(req, timeout=180) as r:
+    with urllib.request.urlopen(_http_only(req), timeout=180) as r:  # nosec B310
         return json.loads(r.read())
 
 
@@ -81,7 +93,7 @@ def main():
         "majors": majors, "streets": streets, "buildings": buildings,
     }
     out = os.path.join(SITE, "data", "albany.json")
-    with io.open(out, "w", encoding="utf-8", newline="\n") as f:
+    with open(out, "w", encoding="utf-8", newline="\n") as f:
         json.dump(doc, f, separators=(",", ":"))
     print(f"{len(majors)} major roads, {len(streets)} streets, "
           f"{len(buildings)} buildings -> data/albany.json "

@@ -92,7 +92,7 @@ def is_code(p: Path) -> bool:
 def describe(rel: str, p: Path) -> str:
     doc = ROOT / "docs" / "code" / (rel + ".md")
     if doc.is_file():
-        m = re.search(r"## What it does\s+(.+?)(?:\n\n|\n#)", doc.read_text("utf-8", "replace"), re.S)
+        m = re.search(r"## What it does\s+(.+?)(?:\n\n|\n#)", doc.read_text("utf-8", "replace"), re.DOTALL)
         if m:
             return re.split(r"(?<=[.!?])\s", " ".join(m.group(1).split()), maxsplit=1)[0][:160]
     try:
@@ -115,23 +115,24 @@ def archived_rows() -> list[tuple[str, str, str, str]]:
     out = []
     if not ARCHIVE_LOG.is_file():
         return out
-    for src, dst in csv.reader(open(ARCHIVE_LOG, encoding="utf-8")):
-        rel0 = os.path.relpath(src, ROOT).replace("\\", "/")
-        if rel0.startswith("docs/") or not os.path.exists(dst):
-            continue
-        status, why = DECISIONS.get(rel0.split("/")[0], ("outdated", "pi-digits backup copy"))
-        walk = [(dst, [], [""])] if os.path.isfile(dst) else os.walk(dst)
-        for dp, dns, fns in walk:
-            dns[:] = [d for d in dns if d not in SKIP_DIRS]
-            for f in fns:
-                p = Path(dp, f) if f else Path(dst)
-                rel = rel0 if not f else rel0 + "/" + os.path.relpath(p, dst).replace("\\", "/")
-                if GARDEN.search(rel) or not (is_code(p) or rel in DECISIONS):
-                    continue
-                what = describe(rel, p)
-                if GARDEN.search(what):
-                    continue
-                out.append((rel, status, why + " (now in %s)" % WHERE_TO.get(status, "D:"), what))
+    with open(ARCHIVE_LOG, encoding="utf-8") as fh:
+        for src, dst in csv.reader(fh):
+            rel0 = os.path.relpath(src, ROOT).replace("\\", "/")
+            if rel0.startswith("docs/") or not os.path.exists(dst):
+                continue
+            status, why = DECISIONS.get(rel0.split("/")[0], ("outdated", "pi-digits backup copy"))
+            walk = [(dst, [], [""])] if os.path.isfile(dst) else os.walk(dst)
+            for dp, dns, fns in walk:
+                dns[:] = [d for d in dns if d not in SKIP_DIRS]
+                for f in fns:
+                    p = Path(dp, f) if f else Path(dst)
+                    rel = rel0 if not f else rel0 + "/" + os.path.relpath(p, dst).replace("\\", "/")
+                    if GARDEN.search(rel) or not (is_code(p) or rel in DECISIONS):
+                        continue
+                    what = describe(rel, p)
+                    if GARDEN.search(what):
+                        continue
+                    out.append((rel, status, why + " (now in {})".format(WHERE_TO.get(status, "D:")), what))
     return out
 
 
@@ -171,12 +172,12 @@ def main() -> None:
         "",
         "Status words:",
         "- **used**: something runs it (compose service or mount, Caddy, a scheduled task, another script, or you start it by hand).",
-        "- **outdated**: nothing uses it any more, or it is a stale copy of something that lives elsewhere. Moved to `%s`." % WHERE_TO["outdated"],
-        "- **one time use**: a script that did one past job. Moved to `%s`." % WHERE_TO["one time use"],
+        "- **outdated**: nothing uses it any more, or it is a stale copy of something that lives elsewhere. Moved to `{}`.".format(WHERE_TO["outdated"]),
+        "- **one time use**: a script that did one past job. Moved to `{}`.".format(WHERE_TO["one time use"]),
         "",
-        "Counts: " + ", ".join("%s %d" % (k, v) for k, v in sorted(counts.items())),
+        "Counts: " + ", ".join(f"{k} {v}" for k, v in sorted(counts.items())),
         "",
-        "Garden for All and Robin's Garden material (%d files) is left exactly as it is and is not listed." % garden,
+        f"Garden for All and Robin's Garden material ({garden} files) is left exactly as it is and is not listed.",
         "",
         "The browsable version with search and share links is the Rust scratchpad page (`/scratchpad`).",
         "",
@@ -184,9 +185,9 @@ def main() -> None:
         "|---|---|---|---|",
     ]
     for rel, status, why, what in rows:
-        lines.append("| `%s` | %s | %s | %s |" % (rel, status, why.replace("|", "/"), what.replace("|", "/")))
+        lines.append("| `{}` | {} | {} | {} |".format(rel, status, why.replace("|", "/"), what.replace("|", "/")))
     OUT.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    print("PASS %s: %d files (%s)" % (OUT.name, len(rows), counts))
+    print(f"PASS {OUT.name}: {len(rows)} files ({counts})")
 
 
 if __name__ == "__main__":

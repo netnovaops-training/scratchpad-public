@@ -7,12 +7,15 @@ Two things are being protected here:
      worse than suggesting nothing
 """
 from __future__ import annotations
+
 import sys
 from datetime import datetime
 from pathlib import Path
+
 import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from app.places import Places, format_for_speech  # noqa: E402
+from app.places import Places, format_for_speech
 
 CONFIG = Path(__file__).resolve().parents[2] / "config" / "places.yaml"
 

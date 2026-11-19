@@ -24,7 +24,11 @@
 #  A folder with "enabled": false in its person.json is skipped entirely:
 #  present, editable, invisible. That is the family's veto, one key deep.
 # =============================================================================
-import io, json, os, re, sys
+import json
+import os
+import re
+import sys
+from pathlib import Path
 
 SITE = os.environ.get("PEEWEE_SITE") or os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "..", "web", "public", "peewee")
@@ -85,7 +89,7 @@ def main():
         pj = os.path.join(d, "person.json")
         if not os.path.isdir(d) or not os.path.exists(pj):
             continue
-        p = json.load(io.open(pj, encoding="utf-8"))
+        p = json.loads(Path(pj).read_text(encoding="utf-8"))
         if p.get("enabled") is False:
             print(f"  {slug}: disabled, skipped")
             continue
@@ -118,7 +122,7 @@ def main():
             # its three paragraphs and quietly drop the last one, which
             # sounds like the story simply stops. Unless the set matches
             # the paragraph count, fall back to the whole-file render.
-            body = io.open(os.path.join(d, s), encoding="utf-8").read().strip()
+            body = Path(os.path.join(d, s)).read_text(encoding="utf-8").strip()
             want = len([b for b in re.split(r"\n\s*\n", body) if b.strip()])
             story_parts.append([f"people/{slug}/{f}" for f in ps]
                                if len(ps) == want and want > 1 else [])
@@ -167,8 +171,7 @@ def main():
     hosts = hosts_available(PEOPLE)
     print("hosts ready: " + ", ".join(
         f"{h['name']} ({h['tellings']} tellings)" for h in hosts))
-    json.dump({"stations": stations, "wall": wall, "hosts": hosts},
-              io.open(out, "w", encoding="utf-8", newline="\n"), indent=1)
+    Path(out).write_text(json.dumps({"stations": stations, "wall": wall, "hosts": hosts}, indent=1), encoding="utf-8", newline="\n")
     print(f"{len(stations)} stations on the dial")
 
 

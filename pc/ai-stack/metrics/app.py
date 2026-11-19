@@ -47,15 +47,14 @@ from pathlib import Path
 
 import httpx
 import matplotlib
+
 matplotlib.use("Agg")           # no display in a container; must precede pyplot
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import JSONResponse, PlainTextResponse
-
 from shared.history import (
     METRICS,
-    bucket,
     format_history_text,
     format_overview_text,
     outages,
@@ -246,17 +245,17 @@ def from_netdata(am: dict, out: dict) -> list[tuple]:
     for cid in find_charts(am, "nvidia_smi.", "utilization"):
         d = dims(am, cid)
         if d and "memory" not in cid:
-            out["gpu_util"] = round(list(d.values())[0], 1)
+            out["gpu_util"] = round(next(iter(d.values())), 1)
             break
     for cid in find_charts(am, "nvidia_smi.", "temperature"):
         d = dims(am, cid)
         if d:
-            out["gpu_temp"] = round(list(d.values())[0], 1)
+            out["gpu_temp"] = round(next(iter(d.values())), 1)
             break
     for cid in find_charts(am, "nvidia_smi.", "power"):
         d = dims(am, cid)
         if d:
-            out["gpu_power"] = round(list(d.values())[0], 1)
+            out["gpu_power"] = round(next(iter(d.values())), 1)
             break
     for cid in find_charts(am, "nvidia_smi.", "frame_buffer_memory"):
         d = dims(am, cid)
@@ -589,9 +588,14 @@ async def engine_ingest(request: Request) -> dict:
     if not isinstance(body, dict):
         raise HTTPException(status_code=400, detail="want a JSON object")
     tmp = NUC_FILE + ".tmp"
-    with open(tmp, "w", encoding="utf-8", newline="\n") as f:
-        json.dump(body, f)
-    os.replace(tmp, NUC_FILE)
+
+    def write():
+        """Write the sample and swap it in (a thread: file I/O must not block the event loop, ASYNC230)."""
+        with open(tmp, "w", encoding="utf-8", newline="\n") as f:
+            json.dump(body, f)
+        os.replace(tmp, NUC_FILE)
+
+    await asyncio.to_thread(write)
     return {"ok": True}
 
 

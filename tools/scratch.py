@@ -81,7 +81,7 @@ MAX = 512 * 1024
 
 sys.path.insert(0, str(AI.parent / "ai-stack" / "scripts"))
 try:
-    import joblog  # noqa: E402  (NUC-style OK/ERROR log; optional on the PC)
+    import joblog
 except ImportError:
     joblog = None
 
@@ -146,7 +146,7 @@ def desktop_targets():
           " ForEach-Object { $l=$s.CreateShortcut($_.FullName); $_.BaseName + '|' + $l.TargetPath + '|' + $l.Arguments } } }")
     try:
         out = subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True, text=True,
-                             timeout=60).stdout
+                             timeout=60, check=False).stdout
     except (OSError, subprocess.TimeoutExpired):
         return
     seen = set()
@@ -278,7 +278,7 @@ def cmd_backup() -> int:
     shutil.copytree(HOME, dst, ignore=shutil.ignore_patterns(".git"))
     log("backup-d", True, str(dst))
     r = subprocess.run(["rclone", "copy", str(BACKUP), GDRIVE, "--exclude", "replaced/**"],
-                       capture_output=True, text=True)
+                       capture_output=True, text=True, check=False)
     log("backup-gdrive", r.returncode == 0, (r.stderr.strip().splitlines() or [""])[-1][:200])
     return r.returncode
 
@@ -299,7 +299,7 @@ done
 echo; echo '## Docker services (compose in ~/nuc-homelab)'
 docker ps --format '- {{.Names}} ({{.Image}})' | sort
 '''
-    r = subprocess.run(["ssh", NUC, script], capture_output=True, text=True, encoding="utf-8", errors="replace")
+    r = subprocess.run(["ssh", NUC, script], capture_output=True, text=True, encoding="utf-8", errors="replace", check=False)
     out = HOME / "nuc" / "NUC-SCRIPTS.md"
     out.parent.mkdir(parents=True, exist_ok=True)
     body = r.stdout

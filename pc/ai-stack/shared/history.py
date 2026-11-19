@@ -13,7 +13,8 @@ without a database, a network or a GPU.
 
 from __future__ import annotations
 
-from typing import Any, Iterable
+from collections.abc import Iterable
+from typing import Any
 
 # name -> (column, human label, unit, is_percentage)
 #

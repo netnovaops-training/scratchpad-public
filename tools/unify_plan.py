@@ -30,7 +30,17 @@ from datetime import datetime
 from pathlib import Path
 
 import photo_meta as pm
-from unify_photos import HASHES, META, OUT, ROOTS, collisions, in_layout, load_cache, log, nas_hashes
+from unify_photos import (
+    HASHES,
+    META,
+    OUT,
+    ROOTS,
+    collisions,
+    in_layout,
+    load_cache,
+    log,
+    nas_hashes,
+)
 
 PLAN, SUMMARY = OUT / "unify-plan.csv", OUT / "unify-summary.txt"
 STAGING = {"takeout-rawonly", "takeout-reconcile", "backups", "backup 2", "backup 3", "master backup 1",

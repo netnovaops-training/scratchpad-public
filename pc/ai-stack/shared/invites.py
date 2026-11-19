@@ -74,7 +74,7 @@ class Invite:
         return self.uses_left <= 0
 
     def link(self, bot_username: str) -> str:
-        return "https://t.me/%s?start=%s" % (bot_username.lstrip("@"), self.token)
+        return "https://t.me/{}?start={}".format(bot_username.lstrip("@"), self.token)
 
 
 def _read(path: Path) -> dict[str, Any]:
@@ -234,4 +234,4 @@ def guest_identity(telegram_id: int) -> str:
     it precisely so a synthetic address cannot collide with, or be mistaken
     for, a real mailbox. Nothing will ever try to deliver mail here.
     """
-    return "tg-%d@guest.invalid" % int(telegram_id)
+    return f"tg-{int(telegram_id)}@guest.invalid"

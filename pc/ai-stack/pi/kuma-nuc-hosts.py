@@ -32,7 +32,8 @@ import sqlite3
 import sys
 import time
 
-DB = os.environ.get("KUMA_DB", "/tmp/kuma-work/kuma.db")
+# Fixed work path on a machine Jason controls; the script's own scratch file, overridable where it reads an env var.
+DB = os.environ.get("KUMA_DB", "/tmp/kuma-work/kuma.db")  # nosec B108
 
 # name, hostname. Addresses verified on the wire 2026-09-12, not taken
 # from the router's reservation list -- the list and reality disagree.
@@ -105,8 +106,9 @@ def main() -> int:
         }
         use = {k: v for k, v in vals.items() if k in cols}
         cur.execute(
-            "INSERT INTO monitor (%s) VALUES (%s)" % (
-                ",".join('"%s"' % k for k in use), ",".join("?" * len(use))),
+            # Column names are this script's own dict keys, kept only if they are real columns of the table; every value is a ? parameter.
+            "INSERT INTO monitor ({}) VALUES ({})".format(  # nosec B608
+                ",".join(f'"{k}"' for k in use), ",".join("?" * len(use))),
             list(use.values()))
         mid = cur.lastrowid
         if nid:
