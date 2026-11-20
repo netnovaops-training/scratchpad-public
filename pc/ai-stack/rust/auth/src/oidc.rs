@@ -106,7 +106,7 @@ pub struct Client {
     /// DSM's SSO Client matches this claim against the name of an
     /// EXISTING DSM local account, and a DSM account name cannot be an
     /// email address. So DSM needs the local part -- `user` out of
-    /// `user@example.com` -- and needs a DSM user of exactly that name to
+    /// `user1@example.com` -- and needs a DSM user of exactly that name to
     /// already exist, or the login ends in "not privilege".
     ///
     /// Opt-in per client (`"username": "localpart"` in OIDC_CLIENTS)

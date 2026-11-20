@@ -24,6 +24,6 @@ sleep 6
 c() { docker run --rm --network nuc-homelab_default curlimages/curl:8.11.1 -s "$@"; }
 echo "== manifest icons"; c http://intake-sbx:8100/manifest.webmanifest | grep -o '"icons": \[[^]]*\]'
 for i in icon-192.png icon-512.png icon.svg; do echo "== $i: $(c -o /dev/null -w '%{http_code} %{content_type} %{size_download}' http://intake-sbx:8100/$i)"; done
-echo "== dead Gemini still refused"; c -H "X-Auth-Email: user@example.com" -H "Accept: application/json" -F "url=https://g.co/gemini/share/0a1b2c3d4e5f" http://intake-sbx:8100/share; echo
+echo "== dead Gemini still refused"; c -H "X-Auth-Email: user1@example.com" -H "Accept: application/json" -F "url=https://g.co/gemini/share/0a1b2c3d4e5f" http://intake-sbx:8100/share; echo
 docker logs intake-sbx 2>&1 | grep -iE "error|traceback" | tail -5
 docker rm -f intake-sbx >/dev/null

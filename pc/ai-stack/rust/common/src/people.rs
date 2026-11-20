@@ -197,7 +197,7 @@ pub const ALL_APPS: &[&str] = &[
 /// quietly started including that, for every unrestricted account, without
 /// anyone deciding it should.
 ///
-/// That is exactly what had happened: user@example.com is unrestricted,
+/// That is exactly what had happened: user8@example.com is unrestricted,
 /// has no name against it, and could watch the camera. Not through a bug --
 /// through the rule working as written.
 ///
@@ -449,7 +449,7 @@ pub fn now() -> u64 {
 }
 
 /// Lowercased and trimmed. Mail addresses are case-insensitive in practice, and
-/// "user@example.com" not matching "user@example.com" is the kind of bug
+/// "user5@example.com" not matching "user5@example.com" is the kind of bug
 /// that gets diagnosed as "the site is broken".
 pub fn normalise(email: &str) -> String {
     email.trim().to_lowercase()
@@ -708,9 +708,9 @@ mod tests {
 
     #[test]
     fn addresses_are_matched_without_case() {
-        let list = vec![Person::new("user@example.com")];
-        assert!(find(&list, "user@example.com").is_some());
-        assert!(find(&list, "  user@example.com  ").is_some());
+        let list = vec![Person::new("user5@example.com")];
+        assert!(find(&list, "user5@example.com").is_some());
+        assert!(find(&list, "  user5@example.com  ").is_some());
         assert!(find(&list, "someone@else.com").is_none());
     }
 

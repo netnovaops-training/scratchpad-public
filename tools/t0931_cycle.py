@@ -147,8 +147,8 @@ git push -q origin master; git log --oneline -1""")
     else:
         pr = run(["gh", "pr", "create", "-R", REPO, "--head", branch, "--base", "main",
                   "--title", f"Sync {stamp}: Atomic Drop code (T0931)",
-                  "--body", "Cleaned copy from the private Scratchpad, now including nuc/intake (Atomic Drop) "
-                            "so the cloud review can see it."]).stdout.strip()
+                  "--body", ("Cleaned copy from the private Scratchpad, now including nuc/intake (Atomic Drop) "
+                             "so the cloud review can see it.")]).stdout.strip()
         num = pr.rstrip("/").split("/")[-1]
     say(f"PR {pr}")
     if wait_checks(num):

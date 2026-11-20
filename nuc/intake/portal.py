@@ -48,19 +48,19 @@ import html
 # Jellyfin's own per-user grants and with `grab` in people.rs -- three
 # places is two too many, but the alternative is this page asking Jellyfin
 # at render time and failing open when Jellyfin is down.
-PRIVATE_OK = {"user@example.com", "user@example.com"}
+PRIVATE_OK = {"user1@example.com", "user2@example.com"}
 
 WHO = {
-    "user@example.com": "jason",
-    "user@example.com": "jason",
-    "user@example.com": "alex",
-    "user@example.com": "casey",
-    "user@example.com": "mom",
+    "user1@example.com": "jason",
+    "user3@example.com": "jason",
+    "user2@example.com": "alex",
+    "user4@example.com": "casey",
+    "user5@example.com": "mom",
     # Added 2026-09-26. Robin is a full SSO account with grants on
     # recipe, paperless and read -- and was unknown HERE, so every
     # file he sent was filed as "no person" and went to unsorted.
     # Two lists of who exists, and only one of them knew about him.
-    'user@example.com': 'robin',
+    'user6@example.com': 'robin',
 }
 
 # "robin" added 2026-11-19 (T0925 A12): he had a WHO entry but no name, so his page greeted nobody.

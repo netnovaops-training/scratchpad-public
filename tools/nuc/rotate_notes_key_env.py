@@ -75,7 +75,7 @@ def passes(key):
     """True when notes_api accepts the key (gets past the front-door check)."""
     req = urllib.request.Request("http://127.0.0.1:8781/api/notes",
                                  headers={"X-Notes-Key": key, "X-Notes-Person": "demo",
-                                          "X-Auth-Email": "user@example.com"})
+                                          "X-Auth-Email": "user1@example.com"})
     try:
         body = urllib.request.urlopen(_http_only(req), timeout=10).read().decode(errors="replace")  # nosec B310
     except urllib.error.HTTPError as e:

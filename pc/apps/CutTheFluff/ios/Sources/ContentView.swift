@@ -90,7 +90,7 @@ struct ContentView: View {
                 api: api,
                 // Shown by identity rather than by a setting, so it cannot be
                 // switched on for the wrong person.
-                isZee: (who?.email ?? "").lowercased() == "user@example.com",
+                isZee: (who?.email ?? "").lowercased() == "user4@example.com",
                 onBack: { showTools = false },
                 onNeedsSignIn: { auth.signOut() }
             )

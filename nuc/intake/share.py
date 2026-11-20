@@ -35,6 +35,7 @@ from __future__ import annotations
 import html
 import ipaddress
 import json
+import os
 import pathlib
 import re
 import socket
@@ -162,6 +163,20 @@ def _slug(s: str, fallback: str) -> str:
     return s or fallback
 
 
+def _in_tmp(tmp: pathlib.Path, name: str) -> pathlib.Path:
+    """tmp/name, refused (ValueError) unless it stays directly inside tmp.
+
+    OUTCOME 2026-11-20 (T0931, CodeQL py/path-injection on sync PR #27): every caller already passes a name
+    from safe_name() or _slug(), which drop separators, so nothing could escape. This is the second wall,
+    written as normpath + startswith so the scanner can see it.
+    """
+    base = os.path.normpath(str(tmp))
+    p = os.path.normpath(os.path.join(base, name))
+    if not p.startswith(base + os.sep) or os.sep in p[len(base) + 1:]:
+        raise ValueError("file name leaves the upload folder")
+    return pathlib.Path(p)
+
+
 async def _to_pdf(url: str | None, text: str | None, title: str) -> tuple[bytes, str]:
     """Gotenberg/Chromium: a public URL, or plain text wrapped in HTML, printed to PDF."""
     async with httpx.AsyncClient(timeout=120) as c:
@@ -229,7 +244,7 @@ async def _unzip_and_file(path: pathlib.Path, email: str, tmp: pathlib.Path) -> 
             if not raw or raw.startswith("."):
                 continue                       # hidden files (".DS_Store") were skipped before; still are
             name = safe_name(raw)              # T0931 item 9: and no control characters in the name
-            target = tmp / f"z{len(out)}-{name}"
+            target = _in_tmp(tmp, f"z{len(out)}-{name}")
             await run_in_threadpool(_extract, z, m, target)
             out.append(await _file(target, name, email))
     return out
@@ -268,7 +283,7 @@ async def share(request: Request, x_auth_email: str | None = Header(default=None
             # instead of PurePosixPath(...).name; A10's rule stays: "", "." and ".." are filed as "shared".
             raw = pathlib.PurePosixPath(f.filename).name
             name = safe_name("shared" if raw in ("", ".", "..") else raw)
-            p = tmp / name
+            p = _in_tmp(tmp, name)
             with p.open("wb") as out:
                 while chunk := await f.read(1 << 20):
                     out.write(chunk)
@@ -303,7 +318,7 @@ async def share(request: Request, x_auth_email: str | None = Header(default=None
                         import datetime
                         today = datetime.datetime.now().astimezone().date().isoformat()  # server-local date, as date.today() was
                         name = "Gemini chat - " + _slug(title, today) + ".pdf"
-                    p = tmp / name
+                    p = _in_tmp(tmp, name)
                     p.write_bytes(pdf)
                     results.append(await _file(p, name, email))
                 except _Skip:
@@ -322,8 +337,9 @@ async def share(request: Request, x_auth_email: str | None = Header(default=None
                 tmp, email, ", ".join(r.get("name", "?") for r in results), results):
             results.append({"name": "-", "status": "kept", "why": "not filed; kept safe on the server for Jason"})
         shutil.rmtree(tmp, ignore_errors=True)
-        for r in results:
-            r.pop("detail", None)
+        # Internals stay server-side (they are in WHY.txt). A new list, as resumable.finish does: CodeQL
+        # (py/stack-trace-exposure, sync PR #27, 2026-11-20) could not see that the old in-place pop removed them.
+        results = [{k: v for k, v in r.items() if k != "detail"} for r in results]
     if request.headers.get("accept", "").startswith("application/json"):
         return JSONResponse(results)
     return HTMLResponse(_page(results))

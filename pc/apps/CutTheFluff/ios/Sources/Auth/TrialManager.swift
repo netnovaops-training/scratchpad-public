@@ -34,7 +34,7 @@ final class TrialManager: ObservableObject {
     /// the route is /auth/app/trial/start. Getting this wrong produces a 404
     /// that looks exactly like a rejected code.
     private static let base = "https://example.org/auth/app"
-    private static let defaultContact = "user@example.com"
+    private static let defaultContact = "user3@example.com"
 
     init() {
         if let stored = Self.loadToken(), !stored.isEmpty {

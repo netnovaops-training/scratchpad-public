@@ -103,7 +103,7 @@ services:
       # entire LAN meant any device on the wifi could skip the household
       # sign-in completely:
       #
-      #     curl -H "X-Auth-Email: user@example.com" http://192.168.1.69:4533/
+      #     curl -H "X-Auth-Email: user3@example.com" http://192.168.1.69:4533/
       #
       # ...because 4533 is published on the Pi's LAN address below, so the
       # request never passes through Caddy at all. Navidrome creates the

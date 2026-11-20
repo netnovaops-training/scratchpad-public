@@ -455,7 +455,7 @@ FIND_URL = os.environ.get("FIND_URL", "http://192.168.1.86:8087").rstrip("/")
 # everybody -- so Casey or Robin asking Hermes to find a document searched his
 # tree and got his results. It survives only for the CLI, where there is no
 # signed-in person and the operator is whoever is at the keyboard.
-FIND_AS = os.environ.get("FIND_AS", "user@example.com")
+FIND_AS = os.environ.get("FIND_AS", "user1@example.com")
 
 _EM_TAG = re.compile(r"</?em>")
 

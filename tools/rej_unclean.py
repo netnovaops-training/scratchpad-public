@@ -50,7 +50,7 @@ def unclean(text, rel, m):
             import re
             rx = re.compile(r"(?<![A-Za-z0-9_])" + re.escape(ph) + r"(?![A-Za-z0-9_])")
             real = next(iter(reals))
-            text, k = rx.subn(lambda _m: real, text)
+            text, k = rx.subn(lambda _m, real=real: real, text)   # bind now (ruff B023, 2026-11-20)
             n += k
     return text, n
 

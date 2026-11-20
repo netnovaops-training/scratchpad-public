@@ -32,7 +32,7 @@ services:
   #  WHICH MEANS THIS MUST NEVER BE REACHABLE EXCEPT THROUGH CADDY.
   #  An app that trusts an identity header will believe ANYONE who sets that
   #  header. Reaching this container directly on the LAN and sending
-  #  "X-Auth-Email: user@example.com" would make you Jason. Hence the bind to
+  #  "X-Auth-Email: user1@example.com" would make you Jason. Hence the bind to
   #  192.168.1.86 rather than 0.0.0.0, and hence the fact that the only
   #  route in from outside is the Caddy site block, which strips any
   #  inbound X-Auth-Email before setting its own. This is the same

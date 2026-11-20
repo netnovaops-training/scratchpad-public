@@ -34,7 +34,7 @@ def _http_only(target):
 SITE = os.environ.get("PEEWEE_SITE") or os.path.normpath(
     os.path.join(os.path.dirname(os.path.abspath(__file__)),
                  "..", "web", "public", "peewee"))
-UA = {"User-Agent": "PeeWeeTribute/1.0 (family memorial; user@example.com)"}
+UA = {"User-Agent": "PeeWeeTribute/1.0 (family memorial; user3@example.com)"}
 
 # The frame: downtown Albany, centred on the South Pearl Street blocks.
 SOUTH, WEST, NORTH, EAST = 42.6395, -73.7595, 42.6560, -73.7405

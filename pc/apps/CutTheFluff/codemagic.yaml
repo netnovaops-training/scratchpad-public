@@ -118,7 +118,7 @@ workflows:
     publishing:
       email:
         recipients:
-          - user@example.com
+          - user3@example.com
         # Only failures by default would hide the first green build, which is
         # the one worth knowing about here.
         notify:

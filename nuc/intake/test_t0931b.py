@@ -39,7 +39,7 @@ import resumable
 from fastapi.testclient import TestClient
 
 ok_all = True
-ME = "user@example.com"   # private copy: the real tester, like the other intake tests (public copy shows a placeholder)
+ME = "user1@example.com"   # private copy: the real tester, like the other intake tests (public copy shows a placeholder)
 HDR = {"X-Auth-Email": ME, "X-Drop-Key": "k-test", "X-Auth-Level": "full"}   # what Caddy adds on the real path
 
 

@@ -307,7 +307,7 @@ private fun SignInScreen(authManager: AuthManager) {
                 api = api,
                 // The career section is hers. Shown by identity rather than by
                 // a setting, so it cannot be switched on for the wrong person.
-                isZee = verified.who.email.equals("user@example.com", ignoreCase = true),
+                isZee = verified.who.email.equals("user4@example.com", ignoreCase = true),
                 onBack = { showTools = false },
                 onNeedsSignIn = needsSignIn,
             )

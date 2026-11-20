@@ -43,7 +43,7 @@ SITE = os.environ.get("PEEWEE_SITE") or os.path.normpath(
 # Wikipedia asks API users to identify themselves; a real contact beats a
 # fake browser string and is why the 403s stop.
 UA = {"User-Agent": "PeeWeeTribute/1.0 (family memorial site; contact: "
-                    "user@example.com)"}
+                    "user3@example.com)"}
 
 
 def wiki(query, limit=6000):
