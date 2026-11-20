@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+{% block title %}Models — {{ site_name }}{% endblock %}
+{% block body %}
+{% set page = 'models' %}{% include "admin_nav.html" %}
+<h1>Models</h1>
+{% if msg %}<div class="notice ok">{{ msg }}</div>{% endif %}
+
+<div class="card">
+  <h2 style="margin-top:0">The specialists</h2>
+  <p class="small muted" style="margin-top:0">
+    Profile <strong class="mono">{{ profile }}</strong>. Each request is routed by
+    code, never by a model — see which one handled what on any ticket page.</p>
+  <table class="grid">
+    <tr><th>Role</th><th>Model</th><th>Installed</th><th>Does</th></tr>
+    {% set what = {'reason':'Works out the answer and the steps',
+                   'vision':'Reads her photos and reports what is in them',
+                   'quick':'Short, cheap jobs',
+                   'embed':'Finds similar problems already solved'} %}
+    {% for h in health %}
+    <tr>
+      <td><strong>{{ h.role }}</strong></td>
+      <td class="mono">{{ h.model }}</td>
+      <td>{% if h.installed %}<span class="pill ok">yes</span>
+          {% else %}<span class="pill bad">missing</span>{% endif %}</td>
+      <td class="small muted">{{ what.get(h.role, '') }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% if health|selectattr('installed','equalto',false)|list %}
+  <div class="notice err" style="margin-top:1rem">
+    A model is missing. On the desktop, run <span class="mono">.\setup-models.ps1</span>
+    — or pull it directly with <span class="mono">ollama pull &lt;name&gt;</span>.
+  </div>
+  {% endif %}
+  <div class="row" style="margin-top:1rem">
+    <form method="post" action="{{ root }}/admin/models/prewarm">
+      <button type="submit" class="secondary">Wake and load the models</button></form>
+  </div>
+  <p class="small muted">
+    The desktop hibernates, which empties the graphics card. Loading takes about
+    20 seconds and normally happens automatically while she is still talking.</p>
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0">Backend</h2>
+  <table class="grid">
+    <tr><th>Ollama</th><td>{% if backend.ollama %}<span class="pill ok">up</span>
+        {% else %}<span class="pill bad">down</span>{% endif %}</td></tr>
+    <tr><th>Whisper</th><td>{% if backend.whisper %}<span class="pill ok">up</span>
+        {% else %}<span class="pill bad">down</span>{% endif %}</td></tr>
+  </table>
+  {% if backend.whisper and not backend.ollama %}
+  <div class="notice err" style="margin-top:1rem">
+    Whisper answers but Ollama does not, from the same machine on the same
+    network. That combination means Ollama is bound to localhost rather than
+    <span class="mono">0.0.0.0</span>. Quit Ollama from the Windows system tray
+    (not just the window) and start it again.
+  </div>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0">Memory</h2>
+  <div class="stat">
+    <div><b>{{ mem.total or 0 }}</b><span>indexed</span></div>
+    <div><b>{{ mem.get('ticket',{}).get('count',0) }}</b><span>resolutions</span></div>
+    <div><b>{{ mem.get('faq',{}).get('count',0) }}</b><span>answers</span></div>
+    <div><b>{{ mem.get('learned',{}).get('count',0) }}</b><span>notes</span></div>
+  </div>
+  <p class="small muted"><span class="mono">{{ mem.model }}</span>,
+    {{ mem.dim }} dimensions &middot;
+    {% if mem.ready %}ready{% else %}<strong>embedding model not installed</strong> —
+    retrieval is off and the assistant falls back to plain word search{% endif %}</p>
+  <form method="post" action="{{ root }}/admin/models/reindex" style="margin-top:.6rem">
+    <button type="submit" class="secondary">Rebuild the index</button></form>
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0">OTOBO</h2>
+  {% if pepper.enabled %}
+    <div class="stat">
+      <div><b>{{ pepper.get('synced',0) }}</b><span>mirrored</span></div>
+      <div><b>{{ pepper.get('queued',0) }}</b><span>queued</span></div>
+      <div><b>{{ pepper.get('failed',0) }}</b><span>failed</span></div>
+    </div>
+    <p class="small muted"><span class="mono">{{ pepper.url }}</span></p>
+    {% if pepper_pending %}
+    <table class="grid" style="margin-top:.8rem">
+      <tr><th>Ticket</th><th>Tries</th><th>Last error</th></tr>
+      {% for p in pepper_pending %}
+      <tr><td class="mono">{{ p.ticket_no or p.thread_id }}</td>
+          <td>{{ p.attempts }}</td>
+          <td class="small muted">{{ p.last_error[:90] }}</td></tr>
+      {% endfor %}
+    </table>
+    {% endif %}
+    <div class="row" style="margin-top:.8rem">
+      <form method="post" action="{{ root }}/admin/models/otobo-sync" style="margin:0">
+        <button type="submit" class="secondary">Sync now</button></form>
+      <a class="btn secondary" href="{{ root }}/admin/otobo">Open OTOBO, signed in</a>
+    </div>
+  {% else %}
+    <p class="muted">Not configured. Tickets are recorded locally regardless —
+      OTOBO is only a mirror, so nothing is lost while it is off.</p>
+    <p class="small muted">Set <span class="mono">MOM_OTOBO_URL</span> and
+      <span class="mono">MOM_OTOBO_PASSWORD</span> in
+      <span class="mono">.env</span> to turn it on.</p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0">Last {{ days }} days</h2>
+  {% if usage.by_model %}
+  <table class="grid">
+    <tr><th>Role</th><th>Model</th><th>Calls</th><th>Average</th><th>Failed</th></tr>
+    {% for u in usage.by_model %}
+    <tr><td>{{ u.role }}</td><td class="mono">{{ u.model }}</td><td>{{ u.n }}</td>
+        <td>{{ '%.1f'|format((u.avg_ms or 0) / 1000) }}s</td>
+        <td>{% if u.fails %}<span class="pill bad">{{ u.fails }}</span>{% else %}0{% endif %}</td></tr>
+    {% endfor %}
+  </table>
+  {% if usage.by_intent %}
+  <h3>By subject</h3>
+  <div class="stat">
+    {% for i in usage.by_intent %}<div><b>{{ i.n }}</b><span>{{ i.intent }}</span></div>{% endfor %}
+  </div>
+  {% endif %}
+  {% else %}<p class="muted">No model calls recorded yet.</p>{% endif %}
+</div>
+
+{% if recent %}
+<div class="card">
+  <h2 style="margin-top:0">Recent calls</h2>
+  <table class="grid">
+    <tr><th>When</th><th>Who</th><th>Via</th><th>Role</th><th>Took</th><th></th></tr>
+    {% for r in recent %}
+    <tr><td class="small muted">{{ r.ts|fmt_ts }}</td>
+        <td class="small">{{ r.username or '—' }}</td>
+        <td class="small">{{ r.channel }}</td>
+        <td class="small">{{ r.role }}</td>
+        <td class="small">{{ '%.1f'|format(r.ms / 1000) }}s</td>
+        <td>{% if r.ok %}<span class="pill ok">ok</span>
+            {% else %}<span class="pill bad" title="{{ r.detail }}">failed</span>{% endif %}</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endif %}
+{% endblock %}

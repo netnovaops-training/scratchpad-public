@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}The library{% endblock %}
+{% block sub %}<p class="small muted">&nbsp;</p>{% endblock %}
+
+{% block body %}
+
+<div class="card">
+  <p style="margin:0">
+    The library app itself is for Jason, Casey, and Mama. Everything in it is
+    already readable right here — every recipe, every photo, every step —
+    with no separate sign-in needed.
+  </p>
+  <p class="small muted" style="margin:.8rem 0 0">
+    You have not been given an account there, on purpose: this app can show
+    you everything without one.
+  </p>
+</div>
+
+<p style="text-align:center">
+  <a class="btn ghost" href="{{ root }}/">Back to the recipes</a>
+</p>
+
+{% endblock %}

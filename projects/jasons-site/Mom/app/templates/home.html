@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}{{ site_name }}{% endblock %}
+{% block body %}
+
+<h1>What can I help with?</h1>
+
+<div class="card">
+{% if user.is_read_only %}
+<p class="muted">This is a read-only guest account -- you can look through
+  what's here, but sending a new question needs a full account. Ask Jason.</p>
+{% else %}
+{% with followup = false %}{% include "_composer.html" %}{% endwith %}
+{% endif %}
+</div>
+
+<div class="notice warn small">
+  <strong>If someone called you</strong> saying there's a problem with your computer,
+  or a message told you to call a number &mdash; don't do what they ask. Tell me about
+  it here first, or call {{ helper }}.
+</div>
+
+{% if my_tickets %}
+<h2>Your tickets</h2>
+<div class="card">
+  <ul class="threads">
+    {% for t in my_tickets %}
+    <li><a href="{{ root }}/t/{{ t.id }}">
+      <span class="mono small">{{ t.ticket_no }}</span> {{ t.title }}
+      <span class="when">
+        {%- if t.status == 'pending' %} &middot; ⏳ pending
+        {%- elif t.status == 'escalated' %} &middot; ⚠ escalated
+        {%- else %} &middot; open{% endif %}</span>
+    </a></li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+{% if kb_articles %}
+<h2>Answers already written down</h2>
+<div class="card">
+  <ul class="threads">
+    {% for a in kb_articles %}
+    <li><a href="/mama/kb/a/{{ a.id }}">{{ a.title }}</a></li>
+    {% endfor %}
+  </ul>
+  <p class="small muted" style="margin:.7rem 0 0">
+    <a href="/mama/kb">See everything written down</a></p>
+</div>
+{% endif %}
+
+{% if threads %}
+<h2>Things you've asked before</h2>
+<div class="card">
+  <ul class="threads">
+    {% for t in threads %}
+    <li><a href="{{ root }}/t/{{ t.id }}">{{ t.title }}
+      <span class="when">{{ t.updated_at|fmt_ts }}{% if t.resolved %} &middot; sorted{% endif %}</span>
+    </a></li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+{% endblock %}

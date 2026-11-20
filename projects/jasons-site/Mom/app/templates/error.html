@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}{{ code }} — {{ site_name }}{% endblock %}
+{% block body %}
+<div class="card">
+  <h1 style="margin-top:0">That didn't work</h1>
+  <p>{{ detail }}</p>
+  <p class="muted small">Nothing is broken. Try going back to the start.</p>
+  <p><a class="btn" href="{{ root }}/">Back to the start</a></p>
+</div>
+{% endblock %}

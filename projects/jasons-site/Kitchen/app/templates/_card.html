@@ -1,0 +1,63 @@
+{# ONE CARD, used by the home page and by browse.
+
+   A partial rather than the same markup twice, because the moment there are
+   two copies one of them stops showing the vote count and nobody notices for
+   a month. Include it with:
+
+       {% with c = item %}{% include "_card.html" %}{% endwith %}
+
+   and it reads `votes` and `says` from the page context — both are whole-table
+   lookups fetched once per page, not per card. #}
+<a class="rcard" href="{{ root }}/r/{{ c.id }}">
+  <div class="shot">
+    {# YOUR photo, then the page's, then nothing. Same order as the guide.
+       A card showing a stock photo of a dish somebody has photographed
+       themselves is the app forgetting what it was told. #}
+    {% if c.own_photo %}
+      <img src="{{ root }}/photo/{{ c.id }}/{{ c.own_photo }}" alt="" loading="lazy">
+    {% elif c.image %}
+      <img src="{{ c.image }}" alt="" loading="lazy" referrerpolicy="no-referrer">
+    {% else %}
+      {# No photo is a normal state, not a broken image. A plate outline says
+         "nothing here yet" without looking like a failed download. #}
+      <span class="noshot" aria-hidden="true">
+        <svg viewBox="0 0 48 32"><ellipse cx="24" cy="16" rx="15" ry="9"/>
+          <ellipse cx="24" cy="16" rx="9" ry="5"/></svg>
+      </span>
+    {% endif %}
+
+    {% set v = votes.get(c.id) if votes else None %}
+    {% if v and (v.up or v.down) %}
+      <span class="tally">
+        {% if v.up %}<b>&#9650; {{ v.up }}</b>{% endif %}
+        {% if v.down %}<i>&#9660; {{ v.down }}</i>{% endif %}
+      </span>
+    {% endif %}
+  </div>
+
+  <div class="body">
+    <h3>{{ c.title }}</h3>
+
+    <p class="meta sans">
+      {% if c.course %}{{ c.course }}{% endif %}
+      {% if c.cuisine %}{% if c.course %} · {% endif %}{{ c.cuisine }}{% endif %}
+      {% if c.steps %}{% if c.course or c.cuisine %} · {% endif %}{{ c.steps }} steps{% endif %}
+    </p>
+
+    {% if c.labels %}
+      <span class="tags">
+        {% for name in c.labels[:3] %}
+          <span class="tag {{ 'made' if ' made and tested' in name }}">{{ name }}</span>
+        {% endfor %}
+      </span>
+    {% endif %}
+
+    <p class="foot sans">
+      {% if c.mealie_slug or c.tandoor_id %}
+        <span class="kept">in the library{% if c.kept_by_name %} · {{ c.kept_by_name }}{% endif %}</span>
+      {% endif %}
+      {% set n = says.get(c.id) if says else 0 %}
+      {% if n %}<span>{{ n }} note{{ '' if n == 1 else 's' }}</span>{% endif %}
+    </p>
+  </div>
+</a>

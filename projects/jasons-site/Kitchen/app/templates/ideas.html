@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}What shall I cook?{% endblock %}
+{% block sub %}<p class="small muted">Four suggestions, from what you have in</p>{% endblock %}
+
+{% block body %}
+
+{% if err %}<div class="notice err">{{ err }}</div>{% endif %}
+
+<form class="card" method="post" action="{{ root }}/ideas">
+  <label for="have">What have you got in?
+    <span class="hint">Rough is fine — "chicken thighs, half a bag of spinach,
+      the usual cupboard".</span></label>
+  <textarea id="have" name="have">{{ '' }}</textarea>
+
+  <label for="mood">What do you fancy?
+    <span class="hint">Optional. "Quick", "something warm", "no washing up",
+      "using up the cream before it turns".</span></label>
+  <input id="mood" name="mood">
+
+  <button class="big" type="submit">Give me four</button>
+</form>
+
+{% if ideas is not none %}
+  <div class="card">
+    <h2>For: {{ asked }}</h2>
+    {% if not ideas %}
+      <p class="muted">Nothing came back. Try naming a couple more things.</p>
+    {% endif %}
+    {% for idea in ideas %}
+      <h3>{{ idea.get('name', 'Something') }}</h3>
+      {% if idea.get('why') %}<p style="margin:0">{{ idea.why }}</p>{% endif %}
+      {% if idea.get('key_ingredients') %}
+        <p class="small muted" style="margin:.3rem 0 0">
+          {{ idea.key_ingredients|join(', ') }}
+        </p>
+      {% endif %}
+      {% if idea.get('needs') %}
+        <p class="small" style="margin:.3rem 0 0">
+          You would need: <strong>{{ idea.needs }}</strong>
+        </p>
+      {% endif %}
+    {% endfor %}
+
+    {% if ideas %}
+      <!-- No import button here on purpose. These are the model's ideas, not
+           recipes -- it has not read a method, and turning four names into
+           four invented recipes is exactly the failure this app is built to
+           avoid. Pick one, find a real page for it, paste the link. -->
+      <p class="small muted" style="margin:1.2rem 0 0">
+        These are suggestions, not recipes — nothing above has been read off a
+        real page. Pick one you like, find a recipe for it, and paste the link
+        into the importer.
+      </p>
+    {% endif %}
+  </div>
+{% endif %}
+
+{% endblock %}

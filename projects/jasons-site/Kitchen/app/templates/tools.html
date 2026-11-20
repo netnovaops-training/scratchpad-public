@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Tools{% endblock %}
+{% block sub %}<p class="small muted">Mealie's Tools organizer, in one searchable list</p>{% endblock %}
+{% block mainclass %}wide{% endblock %}
+
+{% block body %}
+
+<div class="card">
+  <form method="get" action="{{ root }}/tools">
+    <input type="search" name="q" value="{{ q }}" placeholder="Search tools…"
+           autofocus style="width:100%">
+  </form>
+  <p class="small muted" style="margin:.6rem 0 0">
+    {% if q %}{{ rows|length }} of {{ total }} match "{{ q }}"
+    {% else %}{{ total }} tools{% endif %}
+  </p>
+</div>
+
+{% if not rows %}
+<div class="card"><p class="muted" style="margin:0">
+  {% if q %}Nothing matches "{{ q }}".{% else %}No tools yet.{% endif %}</p></div>
+{% else %}
+<div class="card">
+  <div class="foodlist">
+    {% for r in rows %}
+    <div class="foodrow">
+      <div class="foodpic">
+        {% if r.image %}
+          <img src="{{ r.image.url }}" alt="{{ r.image.alt or r.name }}" loading="lazy">
+        {% else %}
+          <span class="foodpic-none" aria-hidden="true">&#128293;</span>
+        {% endif %}
+      </div>
+      <div class="foodmain">
+        <span>{{ r.name }}</span>
+        {% if r.image and r.image.source == "ai-drawn" %}
+          <span class="small muted">(AI-drawn, not a real photo)</span>
+        {% endif %}
+      </div>
+      {% if owner %}
+      <a class="small" href="{{ root }}/tools/{{ r.id }}/photos">
+        {% if r.image %}change picture{% else %}find a picture{% endif %}</a>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<style>
+.foodlist{display:flex;flex-direction:column}
+.foodrow{display:flex;justify-content:flex-start;align-items:center;gap:.8rem;
+  padding:.6rem 0;border-top:1px solid var(--line)}
+.foodrow:first-child{border-top:0}
+.foodmain{display:flex;flex-direction:column;flex:1;min-width:0}
+/* A bigger thumbnail, not a small icon -- Jason's own distinction between
+   the two organizers ("ingredients can be smaller icons, tools can be
+   bigger thumbnails"). See foods.html's .foodpic (6rem) for the smaller
+   version. CAUGHT LIVE (2026-08-25), Jason's own report: 18rem (288px)
+   was not "bigger", it was almost the whole screen width on a phone,
+   one row per screen in a scrolling LIST -- shrunk to a real thumbnail
+   size that's still visibly bigger than a food icon. */
+.foodpic{width:9rem;height:9rem;flex:none;border-radius:8px;overflow:hidden;
+  display:flex;align-items:center;justify-content:center;background:var(--line)}
+.foodpic img{width:100%;height:100%;object-fit:cover;display:block}
+.foodpic-none{font-size:3.5rem;opacity:.6}
+</style>
+
+{% endblock %}

@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% block title %}{{ t.ticket_no or 'Ticket' }} — {{ site_name }}{% endblock %}
+{% block body %}
+{% set page = 'tickets' %}{% include "admin_nav.html" %}
+
+<p class="small"><a href="{{ root }}/admin/tickets">&larr; All tickets</a></p>
+<h1 style="margin-bottom:.3rem">{{ t.title }}</h1>
+<p class="mono muted">{{ t.ticket_no }} &middot;
+  <span class="pill {{ t.status }}">{{ t.status }}</span> &middot;
+  {{ categories.get(t.category, t.category) }} &middot; {{ t.username }}</p>
+{% if msg %}<div class="notice ok">{{ msg }}</div>{% endif %}
+
+{% if t.summary or steps %}
+<div class="card">
+  <h2 style="margin-top:0">The record</h2>
+  {% if t.summary %}<p>{{ t.summary }}</p>{% endif %}
+  {% if t.resolution %}<p><strong>Cause:</strong> {{ t.resolution }}</p>{% endif %}
+  {% if steps %}
+    <h3>Steps that worked</h3>
+    <ol>{% for s in steps %}<li>{{ s }}</li>{% endfor %}</ol>
+  {% endif %}
+  <p class="small muted">
+    Opened {{ t.created_at|fmt_ts }}{% if t.closed_at %} &middot; closed {{ t.closed_at|fmt_ts }}{% endif %}
+    {% if t.emailed_at %} &middot; emailed {{ t.emailed_at|fmt_ts }}{% endif %}
+  </p>
+</div>
+{% endif %}
+
+<div class="card">
+  <h2 style="margin-top:0">Conversation</h2>
+  {% for m in messages %}
+    {% if m.role in ('user','assistant') %}
+    <div style="margin-bottom:1rem;padding-left:.8rem;
+                border-left:4px solid {% if m.role=='user' %}var(--line){% else %}var(--accent){% endif %}">
+      <p class="small muted" style="margin:0 0 .2rem">
+        {{ 'She said' if m.role=='user' else 'Answer' }} &middot; {{ m.created_at|fmt_ts }}
+        {% if m.model %}&middot; <span class="mono">{{ m.model }}</span>{% endif %}
+        {% if m.flags and m.flags != '[]' %}&middot; <span class="pill bad">{{ m.flags }}</span>{% endif %}
+      </p>
+      <div style="white-space:pre-wrap">{{ m.content }}</div>
+      {% if m.role == 'user' and m.video_path %}
+      <video controls preload="none" style="display:block;max-width:320px;border-radius:10px;
+             margin-top:.6rem;border:1px solid var(--line)">
+        <source src="{{ root }}/admin/ticket/{{ t.id }}/video/{{ m.id }}">
+      </video>
+      <p class="small muted" style="margin:.3rem 0 0">Only you can see this.</p>
+      {% endif %}
+      {% if m.role == 'assistant' %}
+        {% if m.image_path %}
+        <img src="{{ root }}/generated/{{ m.image_path }}" alt="a drawing of this"
+             style="display:block;max-width:280px;border-radius:10px;margin-top:.6rem;
+                    border:1px solid var(--line)">
+        <form method="post" action="{{ root }}/admin/ticket/{{ t.id }}/msg/{{ m.id }}/draw/remove"
+              style="margin-top:.4rem">
+          <button type="submit" class="secondary" style="font-size:.8rem">Remove picture</button></form>
+        {% else %}
+        <details style="margin-top:.5rem">
+          <summary class="small muted">Add a picture</summary>
+          <form method="post" action="{{ root }}/admin/ticket/{{ t.id }}/msg/{{ m.id }}/draw"
+                style="margin-top:.4rem">
+            <input type="text" name="prompt" placeholder="Leave blank to draw the answer above as-is"
+                   style="width:100%">
+            <button type="submit" class="secondary" style="margin-top:.4rem">Draw it</button>
+          </form>
+        </details>
+        {% endif %}
+      {% endif %}
+    </div>
+    {% endif %}
+  {% else %}<p class="muted">No messages.</p>{% endfor %}
+</div>
+
+{% if routes %}
+<div class="card">
+  <h2 style="margin-top:0">Which models handled this</h2>
+  <table class="grid">
+    <tr><th>When</th><th>Role</th><th>Model</th><th>Took</th><th></th></tr>
+    {% for r in routes %}
+    <tr>
+      <td class="small muted">{{ r.ts|fmt_ts }}</td>
+      <td>{{ r.role }}</td>
+      <td class="mono">{{ r.model }}</td>
+      <td>{{ '%.1f'|format(r.ms / 1000) }}s</td>
+      <td>{% if r.ok %}<span class="pill ok">ok</span>
+          {% else %}<span class="pill bad" title="{{ r.detail }}">failed</span>{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+{% endif %}
+
+<div class="card">
+  <h2 style="margin-top:0">Actions</h2>
+  <div class="row">
+    {% if t.status in ('closed','resolved') %}
+    <form method="post" action="{{ root }}/admin/ticket/{{ t.id }}/reopen">
+      <button type="submit" class="secondary">Reopen</button></form>
+    <p class="small muted" style="margin:.5rem 0 0">
+      Reopening also removes this from the assistant's memory, so it stops being
+      offered as a fix that worked.</p>
+    {% else %}
+    <form method="post" action="{{ root }}/admin/ticket/{{ t.id }}/close">
+      <button type="submit">Document and close</button></form>
+    {% if t.status == 'pending' %}
+    <form method="post" action="{{ root }}/admin/ticket/{{ t.id }}/reopen" style="margin-top:.5rem">
+      <button type="submit" class="secondary">Mark open again</button></form>
+    {% else %}
+    <form method="post" action="{{ root }}/admin/ticket/{{ t.id }}/pending" style="margin-top:.5rem">
+      <button type="submit" class="secondary">Mark pending</button></form>
+    {% endif %}
+    <p class="small muted" style="margin:.5rem 0 0">
+      Document and close writes the summary, publishes an answer, emails you, and
+      adds it to memory. Pending just means "waiting on something" -- it stays
+      unresolved and off the assistant's memory of fixes that worked.</p>
+    {% endif %}
+  </div>
+</div>
+
+{# The web twin of Telegram's "🛠 Work on it" flow -- same linkfix.py, same
+   draft-then-send shape, so a ticket can be worked from whichever is in
+   your hand. Nothing reaches her until you press Send. #}
+<div class="card">
+  <h2 style="margin-top:0">Help resolve it</h2>
+  {% if draft %}
+    <p class="small muted" style="margin:0 0 .5rem">Draft fix -- nothing sent yet:</p>
+    <pre style="white-space:pre-wrap;background:var(--bg);border:1px solid var(--line);
+                padding:.8rem;border-radius:8px;margin:0 0 1rem">{{ draft }}</pre>
+    <div class="row">
+      <form method="post" action="{{ root }}/admin/ticket/{{ t.id }}/apply-fix">
+        <button type="submit">Send to her</button></form>
+      <form method="post" action="{{ root }}/admin/ticket/{{ t.id }}/apply-fix">
+        <input type="hidden" name="also_close" value="1">
+        <button type="submit" class="secondary">Send + close</button></form>
+      <form method="post" action="{{ root }}/admin/ticket/{{ t.id }}/discard-fix">
+        <button type="submit" class="secondary">Discard</button></form>
+    </div>
+  {% else %}
+    <form method="post" action="{{ root }}/admin/ticket/{{ t.id }}/suggest" style="margin-bottom:.8rem">
+      <button type="submit">Ask my LLM</button></form>
+    <form method="post" action="{{ root }}/admin/ticket/{{ t.id }}/suggest" class="row">
+      <input type="url" name="link" placeholder="Or paste a link with the fix"
+             style="flex:1">
+      <button type="submit" class="secondary">Draft from that link</button></form>
+    <p class="small muted" style="margin:.5rem 0 0">
+      Either way, nothing reaches her until you press Send -- you get to read
+      it first.</p>
+  {% endif %}
+</div>
+{% endblock %}

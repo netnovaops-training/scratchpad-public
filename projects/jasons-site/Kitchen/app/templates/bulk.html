@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}Importing{% endblock %}
+{% block sub %}<p class="small muted">{{ done }} done{% if failed %}, {{ failed }} would not read{% endif %}, {{ rows|length }} in all</p>{% endblock %}
+
+{% block head_extra %}
+  {# A meta refresh, not JavaScript polling. It is three characters of config
+     rather than a fetch loop with backoff and an abort, it stops by itself
+     when the page is closed, and when the batch finishes the refresh is simply
+     not rendered any more. Nothing to leak, nothing to remember to cancel. #}
+  {% if busy %}<meta http-equiv="refresh" content="4">{% endif %}
+{% endblock %}
+
+{% block body %}
+
+{% if request.query_params.get('from') %}
+  <div class="notice ok">
+    Found {{ request.query_params.get('from') }} links on that page and queued
+    {{ rows|length }} of them. Anything that turns out not to be a recipe just
+    says so below — nothing to clean up.
+  </div>
+{% endif %}
+
+{% if keeping %}
+  <div class="notice warn">
+    Putting {{ done - kept }} of them in the library now. This page keeps
+    refreshing until it is done — safe to close and come back.
+  </div>
+{% elif busy %}
+  <div class="notice warn">
+    Still working. This page refreshes itself — you can close it and come back
+    to the same address, or carry on using the rest of the site while it runs.
+    <br><span class="small">Links whose page publishes its recipe properly take
+    about a second. The ones that need the model take a minute or so each.</span>
+  </div>
+{% else %}
+  <div class="notice ok">Finished.</div>
+{% endif %}
+
+{% if can_write and can_keep_all %}
+  <form method="post" action="{{ root }}/bulk/{{ batch }}/keep_all" class="card"
+        style="text-align:center">
+    <button class="big" type="submit">
+      Put all {{ done - kept }} of them in the library
+    </button>
+    <p class="small muted" style="margin:.7rem 0 0">
+      {% if kept %}{{ kept }} already there.{% endif %}
+      Says {{ me_name or "you" }} added them. Each one is still its own page if
+      you would rather look through them first and keep them one at a time.
+    </p>
+  </form>
+{% elif not busy and done and kept == done %}
+  <div class="notice ok" style="margin-top:-.4rem">All {{ done }} are in the library.</div>
+{% elif not can_write and not busy and done > kept %}
+  <p class="small muted" style="text-align:center">
+    {{ done - kept }} of these are not in the library yet. Only Jason, Casey, or
+    Mama can put them there.
+  </p>
+{% endif %}
+
+<div class="card">
+  <ul class="plain">
+    {% for row in rows %}
+      <li>
+        {% if row.state == 'done' %}
+          <span class="state ok">{{ 'kept' if row.kept else 'done' }}</span>
+          <a href="{{ root }}/r/{{ row.draft_id }}">{{ row.title }}</a>
+        {% elif row.state == 'failed' %}
+          <span class="state bad">no</span>
+          <span class="muted">{{ row.url }}</span>
+          <div class="small muted" style="margin-top:.2rem">{{ row.detail }}</div>
+        {% elif row.state == 'working' %}
+          <span class="state go">reading</span>
+          <span class="muted">{{ row.url }}</span>
+        {% else %}
+          <span class="state">waiting</span>
+          <span class="muted">{{ row.url }}</span>
+        {% endif %}
+      </li>
+    {% endfor %}
+  </ul>
+</div>
+
+{% if failed and not busy %}
+  <p class="small muted" style="text-align:center">
+    The ones that would not read are usually sites that block anything which is
+    not a browser, or pages built by JavaScript. Open one yourself and paste the
+    text into the box on the import page.
+  </p>
+{% endif %}
+
+<p style="text-align:center">
+  <a class="btn ghost" href="{{ root }}/">Import some more</a>
+</p>
+
+{% endblock %}

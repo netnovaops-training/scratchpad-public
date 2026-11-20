@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}Admin — {{ site_name }}{% endblock %}
+{% block body %}
+{% set page = 'overview' %}{% include "admin_nav.html" %}
+<h1>Overview</h1>
+{% if msg %}<div class="notice ok">{{ msg }}</div>{% endif %}
+
+<h2>Alerts</h2>
+<div class="card">
+  <p class="small muted" style="margin-top:0">Anything the safety rules stopped, or
+    flagged as worth a look. Check this whenever you get a chance.</p>
+  {% if alerts %}
+  <table>
+    <tr><th>When</th><th>Kind</th><th>What happened</th></tr>
+    {% for a in alerts %}
+    <tr {% if not a.seen %}style="font-weight:700"{% endif %}>
+      <td class="small">{{ a.ts|fmt_ts }}</td>
+      <td class="small">{{ a.kind }}</td>
+      <td class="small">{{ a.detail }}{% if a.thread_id %}
+        &middot; <a href="{{ root }}/t/{{ a.thread_id }}">open</a>{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  <form method="post" action="{{ root }}/admin/alerts/seen" style="margin-top:1rem">
+    <button type="submit" class="secondary">Mark all as read</button></form>
+  {% else %}<p class="muted">Nothing yet.</p>{% endif %}
+</div>
+
+<h2>Backend</h2>
+<div class="card">
+  <table>
+    <tr><th>Ollama</th><td>{{ 'up' if backend.ollama else 'down' }}</td></tr>
+    <tr><th>Whisper</th><td>{{ 'up' if backend.whisper else 'down' }}</td></tr>
+    <tr><th>Desktop</th><td>{{ cfg.desktop_ip or '(not set)' }} &middot; {{ cfg.desktop_mac or '(no MAC)' }}</td></tr>
+    <tr><th>Model</th><td>{{ cfg.model }}</td></tr>
+    <tr><th>Available</th><td>{{ models|join(', ') if models else '(unreachable)' }}</td></tr>
+  </table>
+  <form method="post" action="{{ root }}/admin/wake" style="margin-top:.9rem">
+    <button type="submit">Wake the desktop</button></form>
+</div>
+
+<h2>What it remembers about {{ who }}</h2>
+<div class="card">
+  <p class="small muted" style="margin-top:0">Learned automatically so she never has
+    to repeat herself. Delete anything that's wrong &mdash; it will relearn.</p>
+  {% if memories %}
+  <table>
+    <tr><th>Thing</th><th>Value</th><th></th></tr>
+    {% for m in memories %}
+    <tr><td class="small"><code>{{ m.key }}</code></td><td class="small">{{ m.value }}</td>
+      <td><form method="post" action="{{ root }}/admin/forget">
+        <input type="hidden" name="who" value="{{ who }}">
+        <input type="hidden" name="key" value="{{ m.key }}">
+        <button type="submit" class="secondary" style="min-height:34px;padding:.2rem .7rem;font-size:.85rem">Forget</button>
+      </form></td></tr>
+    {% endfor %}
+  </table>
+  {% else %}<p class="muted">Nothing learned yet.</p>{% endif %}
+</div>
+
+<h2>Rules</h2>
+<div class="card">
+  <p class="small muted" style="margin-top:0">Version <code>{{ kb_version }}</code>.
+    Edit under <code>/opt/momhelp/knowledge/</code>; changes apply to the next question.
+    <code>git -C /opt/momhelp checkout knowledge/</code> resets them.</p>
+  <table><tr><th>File</th><th>Characters</th></tr>
+  {% for name, size in kb_files %}<tr><td><code>{{ name }}</code></td><td>{{ size }}</td></tr>
+  {% else %}<tr><td colspan="2" class="muted">No rules found.</td></tr>{% endfor %}</table>
+</div>
+
+<h2>People</h2>
+<div class="card">
+  <table><tr><th>Username</th><th>Name</th><th>Role</th></tr>
+  {% for u in users %}<tr><td>{{ u.username }}</td><td>{{ u.display_name }}</td>
+    <td>{{ u.role }}</td></tr>{% endfor %}</table>
+  <details><summary>Add or reset someone</summary>
+    <form method="post" action="{{ root }}/admin/user">
+      <label for="un">Username</label>
+      <input id="un" name="username" type="text" required pattern="[a-zA-Z0-9._%+\-]{2,64}(@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,24})?" autocapitalize="none">
+      <label for="dn">Display name</label><input id="dn" name="display_name" type="text">
+      <label for="pw">Password</label><input id="pw" name="password" type="text" required minlength="8">
+      <button type="submit" style="margin-top:1rem">Save</button>
+    </form>
+  </details>
+</div>
+
+<h2>Log</h2>
+<div class="card">
+  <table><tr><th>When</th><th>Level</th><th>Message</th></tr>
+  {% for e in events %}<tr><td class="small">{{ e.ts|fmt_ts }}</td><td class="small">{{ e.level }}</td>
+    <td class="small">{{ e.message }}</td></tr>{% endfor %}</table>
+</div>
+{% endblock %}

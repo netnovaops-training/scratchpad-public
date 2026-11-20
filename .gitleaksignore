@@ -1,0 +1,10 @@
+# >>> projects/ (projects_public_copy.py, reviewed test/example values)
+projects/jasons-site/Mom/tools/test_mom.py:generic-api-key:195
+projects/jasons-site/ai-stack/tests/test_invites.py:generic-api-key:113
+projects/jasons-site/ai-stack/SETUP-GOOGLE.md:curl-auth-header:130
+projects/jasons-site/ai-stack/SETUP-GOOGLE.md:curl-auth-header:137
+projects/jasons-site/ai-stack/colibri/docs/api.md:curl-auth-header:14
+projects/jasons-site/ai-stack/.env.example:generic-api-key:164
+projects/jasons-site/ai-stack/.env.example:generic-api-key:166
+projects/jasons-site/ai-stack/.env.example:generic-api-key:551
+# <<< projects/

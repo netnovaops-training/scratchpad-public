@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Answers — {{ site_name }}{% endblock %}
+{% block body %}
+{% set page = 'faq' %}{% include "admin_nav.html" %}
+<h1>Answers</h1>
+{% if msg %}<div class="notice ok">{{ msg }}</div>{% endif %}
+<p class="muted">Written automatically when a ticket closes. She sees the published
+  ones under <strong>Answers</strong>. Edit anything that came out wrong — your
+  edits are never overwritten by the assistant.</p>
+
+<form method="get" action="{{ root }}/admin/faq" class="filters">
+  <div style="flex:1;min-width:12rem">
+    <label for="q" style="margin-top:0">Search</label>
+    <input type="text" id="q" name="q" value="{{ q }}" placeholder="printer, wifi, ...">
+  </div>
+  <button type="submit">Search</button>
+  {% if q %}<a class="btn secondary" href="{{ root }}/admin/faq">Clear</a>{% endif %}
+</form>
+
+{% for f in rows %}
+<div class="card">
+  <form method="post" action="{{ root }}/admin/faq/{{ f.id }}">
+    <p class="small muted" style="margin-top:0">
+      <span class="mono">{{ f.ticket_no or '—' }}</span> &middot;
+      {{ f.updated_at|fmt_ts }}
+      {% if f.edited %}&middot; <span class="pill ok">edited by you</span>{% endif %}
+      {% if not f.published %}&middot; <span class="pill open">hidden</span>{% endif %}
+    </p>
+
+    <label for="q{{ f.id }}">Question
+      <span class="hint">In her words — this is what she searches</span></label>
+    <input type="text" id="q{{ f.id }}" name="question" value="{{ f.question }}">
+
+    <label for="a{{ f.id }}">Answer</label>
+    <textarea id="a{{ f.id }}" name="answer">{{ f.answer }}</textarea>
+
+    <div class="row" style="margin-top:.8rem;align-items:flex-end">
+      <div>
+        <label for="c{{ f.id }}" style="margin-top:0">Category</label>
+        <select id="c{{ f.id }}" name="category" style="width:auto;padding:.6rem">
+          {% for k, v in categories.items() %}
+          <option value="{{ k }}" {% if f.category==k %}selected{% endif %}>{{ v }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <label style="display:flex;gap:.5rem;align-items:center;margin:0">
+        <input type="checkbox" name="published" value="1" {% if f.published %}checked{% endif %}
+               style="width:auto;min-height:auto">
+        <span>Visible to her</span>
+      </label>
+      <button type="submit">Save</button>
+    </div>
+  </form>
+  <form method="post" action="{{ root }}/admin/faq/{{ f.id }}/delete"
+        onsubmit="return confirm('Delete this answer permanently?')" style="margin-top:.6rem">
+    <button type="submit" class="secondary"
+            style="border-color:var(--danger);color:var(--danger)">Delete</button>
+  </form>
+</div>
+{% else %}
+<div class="card"><p class="muted">
+  {% if q %}Nothing matches that search.{% else %}
+  No answers yet. One is written every time a problem is solved and confirmed.{% endif %}
+</p></div>
+{% endfor %}
+{% endblock %}

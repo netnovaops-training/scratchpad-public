@@ -1,0 +1,32 @@
+# Deliberately identical to Casey's and Mom's set, with nothing added.
+#
+# There is no HTML-parsing library here and that is on purpose. This app reads
+# recipe pages, which sounds like a job for beautifulsoup or selectolax -- but
+# the PRIMARY path never parses prose at all: it reads the schema.org JSON-LD
+# block that essentially every recipe site publishes, which is already JSON.
+# The fallback path hands rough text to a model, which does not need clean
+# markup either. A dependency that only improves the fallback of a fallback is
+# not worth a wheel that might not build on a rebuild two years from now.
+fastapi==0.162.0
+uvicorn[standard]==0.54.0
+jinja2==3.1.6
+python-multipart==0.0.32   # CVE-2026-24486, -42561, -53539 (was 0.0.20)
+itsdangerous==2.2.0
+httpx==0.28.1
+tzdata==2026.5
+
+# CAUGHT LIVE (2026-08-25), Jason's own request: "use the internet and,
+# YouTuber transcripts and make a helpful walkthrough for my mom." A
+# real, deliberate exception to this file's own "nothing added" rule
+# above -- there is no lightweight way to get a YouTube video's own
+# captions without it. yt-dlp needs no ffmpeg for this (see youtube.py's
+# own docstring): pulling caption TEXT, never the video/audio itself.
+# CAUGHT LIVE (2026-08-25): the version current when this was first
+# pinned (2025.1.15) failed EVERY real video with YouTube's own anti-bot
+# "page needs to be reloaded" PO-token challenge -- a stale yt-dlp is a
+# real, expected failure mode here, not an edge case, since YouTube
+# changes this often enough that yt-dlp ships new releases to keep up
+# roughly weekly. Upgrading to current fixed it immediately with no
+# extra workaround needed. Worth remembering next time this breaks: try
+# a fresh yt-dlp release before anything else.
+yt-dlp==2026.10.21

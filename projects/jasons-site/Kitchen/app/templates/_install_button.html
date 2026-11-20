@@ -1,0 +1,114 @@
+{# Add-to-home-screen for a bookmark page (desktop and mobile both --
+   beforeinstallprompt is the same API on desktop Chrome/Edge as it is on
+   Android; there is no separate "desktop" install trick). This partial
+   is page-agnostic -- the page itself has to put its own
+   <link rel="manifest" href="{{ root }}/manifest/PAGE.json">
+   in its head_extra block (see main.py's INSTALLABLE_PAGES for the valid
+   PAGE keys); this reads that same link to get the app's own name for
+   the banner text, rather than needing it passed in twice.
+
+   Chrome/Edge only offer to install a page that has BOTH a manifest and
+   a registered service worker -- this registers /sw.js (a no-op; see
+   main.py for why) the first time any bookmark page loads, then listens
+   for the browser's own beforeinstallprompt event.
+
+   A BANNER, NOT JUST A BUTTON. A small ghost button sitting at the
+   bottom of the page is easy to never notice -- Jason's own ask was for
+   something that actively asks, like a notification. So once the
+   browser says the page is installable, a dismissible bar drops down
+   from the top saying so, with Install / Not now. "Not now" is
+   remembered (localStorage) so it does not nag on every visit -- the
+   small button lower on the page (unchanged) is still there afterward
+   if they change their mind.
+
+   iOS Safari never fires beforeinstallprompt at all -- Apple has never
+   shipped it -- so this shows two-tap instructions there instead of a
+   banner that would never do anything. #}
+<div id="installBanner" role="status" hidden style="position:sticky;top:0;
+ z-index:50;background:#1b1b1b;color:#fff;display:flex;align-items:center;
+ justify-content:space-between;gap:.8rem;padding:.7rem 1rem;font-size:.92rem;
+ box-shadow:0 2px 8px rgba(0,0,0,.2)">
+  <span id="installBannerText" style="flex:1">Add this to your home screen?</span>
+  <span style="display:flex;gap:.5rem;flex-shrink:0">
+    <button type="button" id="installBannerYes" style="background:#e58325;color:#fff;
+     border:0;border-radius:8px;padding:.45rem .9rem;font-size:.88rem;
+     font-weight:700;cursor:pointer">Install</button>
+    <button type="button" id="installBannerNo" style="background:transparent;
+     color:#fff;border:1px solid rgba(255,255,255,.4);border-radius:8px;
+     padding:.45rem .9rem;font-size:.88rem;cursor:pointer">Not now</button>
+  </span>
+</div>
+
+<div id="installRow" style="text-align:center;margin-top:1.4rem" hidden>
+  <button type="button" class="btn ghost" id="installBtn">📲 Add to your home screen</button>
+</div>
+<p id="iosInstallHint" class="small muted" style="text-align:center;margin-top:1.4rem" hidden>
+  To keep this on your home screen: tap the Share icon, then "Add to Home Screen".
+</p>
+
+<script>
+(function(){
+  if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone) {
+    return; // already installed and running as its own app -- nothing to offer
+  }
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('{{ root }}/sw.js').catch(function(){});
+  }
+
+  var isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  var row = document.getElementById('installRow');
+  var btn = document.getElementById('installBtn');
+  var iosHint = document.getElementById('iosInstallHint');
+  var banner = document.getElementById('installBanner');
+  var bannerText = document.getElementById('installBannerText');
+  var bannerYes = document.getElementById('installBannerYes');
+  var bannerNo = document.getElementById('installBannerNo');
+
+  if (isIOS) {
+    if (iosHint) iosHint.hidden = false;
+    return;
+  }
+
+  // The app's own name, from the manifest already linked on this page --
+  // one source of truth instead of repeating it in the template too.
+  var dismissKey = 'ks-install-dismissed:' + location.pathname;
+  var manifestLink = document.querySelector('link[rel="manifest"]');
+  if (manifestLink && bannerText) {
+    fetch(manifestLink.href).then(function(r){ return r.json(); }).then(function(m){
+      if (m && m.short_name) bannerText.textContent = 'Add "' + m.short_name + '" to your home screen?';
+    }).catch(function(){});
+  }
+
+  var deferred = null;
+  window.addEventListener('beforeinstallprompt', function(e){
+    e.preventDefault();
+    deferred = e;
+    if (row) row.hidden = false;
+    var dismissed = false;
+    try { dismissed = localStorage.getItem(dismissKey) === '1'; } catch (err) {}
+    if (banner && !dismissed) banner.hidden = false;
+  });
+
+  function doInstall(){
+    if (!deferred) return;
+    deferred.prompt();
+    deferred.userChoice.finally(function(){
+      deferred = null;
+      if (row) row.hidden = true;
+      if (banner) banner.hidden = true;
+    });
+  }
+  if (btn) btn.addEventListener('click', doInstall);
+  if (bannerYes) bannerYes.addEventListener('click', doInstall);
+  if (bannerNo) {
+    bannerNo.addEventListener('click', function(){
+      if (banner) banner.hidden = true;
+      try { localStorage.setItem(dismissKey, '1'); } catch (err) {}
+    });
+  }
+  window.addEventListener('appinstalled', function(){
+    if (row) row.hidden = true;
+    if (banner) banner.hidden = true;
+  });
+})();
+</script>

@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% block title %}Handbook — {{ site_name }}{% endblock %}
+{% block body %}
+{% set page = 'guides' %}{% include "admin_nav.html" %}
+<h1>Handbook</h1>
+{% if msg %}<div class="notice ok">{{ msg }}</div>{% endif %}
+<p class="muted">What you write here is both browsable by her at
+  <span class="mono">/Mom/guides</span> <em>and</em> retrieved by the assistant
+  when it's relevant &mdash; so your answer about her oven wins over a generic one.</p>
+
+<div class="card">
+  <h2 style="margin-top:0">Add one</h2>
+  <form method="post" action="{{ root }}/admin/guides/new">
+    <label for="nt">Title</label>
+    <input type="text" id="nt" name="title" required
+           placeholder="How long to roast a chicken">
+    <label for="nc">Category</label>
+    <select id="nc" name="category">
+      {% for k, v in categories.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}
+    </select>
+    <label for="ns">One-line summary <span class="hint">Shown in the list</span></label>
+    <input type="text" id="ns" name="summary" placeholder="20 minutes per pound at 350F">
+    <label for="nb">The answer
+      <span class="hint">Markdown works. Numbered steps read best on a phone.</span></label>
+    <textarea id="nb" name="body" required style="min-height:200px"></textarea>
+    <label for="ng">Tags <span class="hint">Comma separated, helps searching</span></label>
+    <input type="text" id="ng" name="tags" placeholder="chicken, oven, dinner">
+    <div class="row" style="margin-top:.9rem">
+      <label style="display:flex;gap:.5rem;align-items:center;margin:0">
+        <input type="checkbox" name="published" value="1" checked style="width:auto;min-height:auto">
+        <span>Visible to her</span></label>
+      <label style="display:flex;gap:.5rem;align-items:center;margin:0">
+        <input type="checkbox" name="pinned" value="1" style="width:auto;min-height:auto">
+        <span>Pin to the top</span></label>
+      <button type="submit">Add</button>
+    </div>
+  </form>
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0">Paste a whole file</h2>
+  <p class="small muted" style="margin-top:0">Each <span class="mono">## Heading</span>
+    becomes an entry. Add <span class="mono">&lt;!-- category: cooking --&gt;</span>
+    under a heading to set its category. Faster than the form for bulk entry.</p>
+  <form method="post" action="{{ root }}/admin/guides/import">
+    <label for="it">Markdown</label>
+    <textarea id="it" name="text" required style="min-height:150px"
+      placeholder="## How long to roast a chicken&#10;&lt;!-- category: cooking --&gt;&#10;20 minutes per pound at 350F..."></textarea>
+    <label for="ic">Category for anything without one</label>
+    <select id="ic" name="category">
+      {% for k, v in categories.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}
+    </select>
+    <button type="submit" style="margin-top:.8rem">Import</button>
+  </form>
+</div>
+
+<form method="get" action="{{ root }}/admin/guides" class="filters">
+  <div style="flex:1;min-width:11rem">
+    <label for="q" style="margin-top:0">Search</label>
+    <input type="text" id="q" name="q" value="{{ q }}">
+  </div>
+  <div>
+    <label for="c" style="margin-top:0">Category</label>
+    <select id="c" name="category">
+      <option value="">any</option>
+      {% for k, v in categories.items() %}
+      <option value="{{ k }}" {% if category==k %}selected{% endif %}>{{ v }} ({{ counts.get(k,0) }})</option>
+      {% endfor %}
+    </select>
+  </div>
+  <button type="submit">Search</button>
+  <form method="post" action="{{ root }}/admin/guides/reindex" style="display:inline">
+    <button type="submit" class="secondary">Reindex</button></form>
+</form>
+
+{% for g in rows %}
+<div class="card">
+  <form method="post" action="{{ root }}/admin/guides/{{ g.id }}">
+    <p class="small muted" style="margin-top:0">
+      #{{ g.id }} &middot; {{ g.updated_at|fmt_ts }}
+      {% if not g.published %}&middot; <span class="pill open">hidden</span>{% endif %}
+      {% if g.pinned %}&middot; <span class="pill ok">pinned</span>{% endif %}</p>
+    <label for="t{{ g.id }}">Title</label>
+    <input type="text" id="t{{ g.id }}" name="title" value="{{ g.title }}">
+    <label for="s{{ g.id }}">Summary</label>
+    <input type="text" id="s{{ g.id }}" name="summary" value="{{ g.summary }}">
+    <label for="b{{ g.id }}">The answer</label>
+    <textarea id="b{{ g.id }}" name="body" style="min-height:170px">{{ g.body }}</textarea>
+    <label for="g{{ g.id }}">Tags</label>
+    <input type="text" id="g{{ g.id }}" name="tags" value="{{ g.tags }}">
+    <div class="row" style="margin-top:.8rem;align-items:flex-end">
+      <div><label for="c{{ g.id }}" style="margin-top:0">Category</label>
+        <select id="c{{ g.id }}" name="category" style="width:auto;padding:.6rem">
+          {% for k, v in categories.items() %}
+          <option value="{{ k }}" {% if g.category==k %}selected{% endif %}>{{ v }}</option>
+          {% endfor %}
+        </select></div>
+      <label style="display:flex;gap:.5rem;align-items:center;margin:0">
+        <input type="checkbox" name="published" value="1" {% if g.published %}checked{% endif %}
+               style="width:auto;min-height:auto"><span>Visible</span></label>
+      <label style="display:flex;gap:.5rem;align-items:center;margin:0">
+        <input type="checkbox" name="pinned" value="1" {% if g.pinned %}checked{% endif %}
+               style="width:auto;min-height:auto"><span>Pinned</span></label>
+      <button type="submit">Save</button>
+    </div>
+  </form>
+  <form method="post" action="{{ root }}/admin/guides/{{ g.id }}/delete"
+        onsubmit="return confirm('Delete this permanently?')" style="margin-top:.6rem">
+    <button type="submit" class="secondary"
+            style="border-color:var(--danger);color:var(--danger)">Delete</button></form>
+</div>
+{% else %}
+<div class="card"><p class="muted" style="margin:0">Nothing written yet.</p></div>
+{% endfor %}
+{% endblock %}

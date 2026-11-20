@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#050a12">
+<title>{{ site_name }}</title>
+<link rel="stylesheet" href="/theme.css">
+<link rel="stylesheet" href="{{ root }}/static/style.css?v={{ css_v }}">
+<link rel="manifest" href="{{ root }}/manifest.json">
+<link rel="icon" href="{{ root }}/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="{{ root }}/icon-192.png">
+<!-- iOS Safari never reads the manifest for "Add to Home Screen" --
+     these are the only way it picks up a name/icon/standalone mode
+     there. Jason's own report was "install to desktop," not iOS
+     specifically, but this costs nothing and closes the same gap for
+     whoever's on an iPhone. -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="{{ site_short_name }}">
+    <!-- The person's own theme, chosen once on the start page and
+         following them onto every page of ours. Served per-account
+         by the landing app; see looks_css in rust/landing. -->
+    <link rel="stylesheet" href="/looks.css">
+</head>
+<body>
+{# The variant badge and its "compare with /recipe" link lived here.
+   Jason, 2026-09-06: "get rid of this". The A/B it existed to run is
+   over -- there is one recipe page now, the Gemini notes are switched
+   off, and a banner on every page advertising a comparison nobody is
+   making is just a strip of chrome above the recipe. #}
+
+<header class="topbar">
+  <a href="{{ root }}/#/" class="brand" data-link>Recipes</a>
+  <nav>
+    <a href="{{ root }}/#/" data-link>Browse</a>
+    <a href="{{ root }}/#/import" data-link>Add a recipe</a>
+    <a href="{{ root }}/#/plan" data-link>This week</a>
+    <a href="{{ root }}/#/pantry" data-link>What can I make?</a>
+    <button id="surprise-btn" type="button">Surprise me</button>
+    <!-- Jason's own report (2026-08-26): "the install to desktop link is
+         still not working" -- the ONLY install control before this was
+         a popup that shows itself, once, only if/when the browser's own
+         beforeinstallprompt event happens to fire (never on iOS Safari
+         at all, and not reliably on desktop until Chrome's own
+         engagement heuristics are satisfied). Hidden by JS unless
+         there's actually something for it to do -- see wireInstallLink()
+         in app.js -- so this is never a dead button either. -->
+    <button id="install-link-btn" type="button" hidden>Install app</button>
+  </nav>
+</header>
+<main id="app"><p class="muted">Loading&hellip;</p></main>
+
+<div id="install-modal" class="install-overlay" hidden>
+  <div class="panel install-panel">
+    <button type="button" class="install-close" id="install-close" aria-label="Close">&times;</button>
+    <div class="install-icon"><img src="{{ root }}/icon.svg" alt="" width="34" height="34"></div>
+    <h2>Install Recipes?</h2>
+    <p class="sub">One tap from your home screen or desktop &mdash; no address bar, no
+      searching for the tab. Nothing to download from a store.</p>
+    <div class="install-actions">
+      <button type="button" class="ghost" id="install-no">Not now</button>
+      <button type="button" id="install-yes">Install</button>
+    </div>
+  </div>
+</div>
+
+<!-- Jason's own report (2026-08-26): "the install to desktop link is
+     still not working." Reached from the persistent "Install app" nav
+     button (see wireInstallLink() in app.js) whenever the browser has
+     no native install prompt to offer right now -- always iOS Safari
+     (Apple never fires beforeinstallprompt at all), and any other
+     browser before its own engagement heuristics decide to. Manual
+     steps instead of a dead button either way. -->
+<div id="install-help-modal" class="install-overlay" hidden>
+  <div class="panel install-panel">
+    <button type="button" class="install-close" id="install-help-close" aria-label="Close">&times;</button>
+    <div class="install-icon"><img src="{{ root }}/icon.svg" alt="" width="34" height="34"></div>
+    <h2>Install Recipes</h2>
+    <div class="sub" id="install-help-body"></div>
+  </div>
+</div>
+
+<!-- Jason's own request (2026-08-25): a tap-to-see popup for a step's
+     temp/timer/measurement call-outs (diagram.badges_for, drawn by
+     Kitchen, not this page). One shared, empty container -- app.js fills
+     it with whichever badge's SVG was tapped, same reusable pattern as
+     install-modal above. -->
+<div id="badge-modal" class="install-overlay" hidden>
+  <div class="panel install-panel badge-panel">
+    <button type="button" class="install-close" id="badge-close" aria-label="Close">&times;</button>
+    <div id="badge-modal-body"></div>
+  </div>
+</div>
+
+<!-- Jason's own request (2026-08-25): "allow person1@example.com to directly
+     add images... like on /kitchen in /recipe" -- search online or draw
+     one, embedded here instead of a link out to Kitchen's own page.
+     Only ever opened when the recipe's own "owner" flag is true (see
+     app.js's wirePhotoEdit()); the real permission check still happens
+     server-side on every search/keep/draw call regardless. -->
+<div id="photo-modal" class="install-overlay" hidden>
+  <div class="panel install-panel photo-panel">
+    <button type="button" class="install-close" id="photo-close" aria-label="Close">&times;</button>
+    <div id="photo-modal-body"></div>
+  </div>
+</div>
+
+<script>window.ROOT = {{ root|tojson }}; window.KITCHEN_ROOT = {{ kitchen_root|tojson }};
+// Which twin, for the client. Only the Gemini one asks for step notes.
+window.GEMINI = {{ (variant.name == "gemini" and variant.ready)|tojson }};</script>
+<script src="{{ root }}/static/app.js?v={{ js_v }}"></script>
+</body>
+</html>

@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% block title %}Browse{% endblock %}
+{% block sub %}<p class="small muted">Tap a pill for ideas</p>{% endblock %}
+{% block mainclass %}wide{% endblock %}
+
+{% block body %}
+
+{% if not pills %}
+  <div class="card">
+    <p style="margin:0" class="muted">No labels yet.</p>
+    <p class="small muted" style="margin:.6rem 0 0">
+      Labels are put on a recipe just after it imports, by the model, from what
+      is actually in it. Import a few and the pills will appear here.
+    </p>
+  </div>
+{% else %}
+  {# WHOSE RECIPES, FIRST AND SEPARATELY.
+     These are not the same kind of thing as "soup" or "quick" and mixing them
+     into the same run of pills buries them. A recipe somebody in this house
+     has actually made and vouched for is the most valuable thing in here --
+     anybody can paste a link -- so it gets its own row at the top. #}
+  {% if made %}
+    <div class="card">
+      <h2 class="sans">Made in this house</h2>
+      <div class="pills">
+        {% for name, count in made %}
+          <a href="{{ root }}/browse?label={{ name|urlencode }}"
+             class="pill made {{ 'on' if name == label }}">{{ name }}<span>{{ count }}</span></a>
+        {% endfor %}
+      </div>
+    </div>
+  {% endif %}
+
+  {% if whose %}
+    <div class="card">
+      <h2 class="sans">Who put it here</h2>
+      <div class="pills">
+        {% for name, email, count in whose %}
+          <a href="{{ root }}/browse?cook={{ email|urlencode }}"
+             class="pill {{ 'on' if email == cook }}">{{ name }}<span>{{ count }}</span></a>
+        {% endfor %}
+      </div>
+      <p class="small muted" style="margin:.9rem 0 0">
+        Everything anybody imports gets one of these automatically. It is not
+        the same as <em>made and tested</em> above — pasting a link is not the
+        same as having cooked it.
+      </p>
+    </div>
+  {% endif %}
+
+  {% if courses %}
+    <div class="card">
+      <h2 class="sans">What kind of thing</h2>
+      <div class="pills">
+        {% for name, count in courses %}
+          <a href="{{ root }}/browse?course={{ name|urlencode }}"
+             class="pill {{ 'on' if name == course }}">{{ name }}<span>{{ count }}</span></a>
+        {% endfor %}
+      </div>
+    </div>
+  {% endif %}
+
+  {% if cuisines %}
+    <div class="card">
+      <h2 class="sans">Where it's from</h2>
+      <div class="pills">
+        {% for name, count in cuisines %}
+          <a href="{{ root }}/browse?cuisine={{ name|urlencode }}"
+             class="pill {{ 'on' if name == cuisine }}">{{ name }}<span>{{ count }}</span></a>
+        {% endfor %}
+      </div>
+      <p class="small muted" style="margin:.9rem 0 0">
+        Guessed by the model, and often wrong about a dish a family has been
+        making for generations — open a recipe and change it. Once you set it
+        by hand it stays set.
+      </p>
+    </div>
+  {% endif %}
+
+  <div class="card">
+    <h2 class="sans">Everything else</h2>
+    <div class="pills">
+      {# The count is on the pill deliberately. "chicken 14" tells you there is
+         something behind it; a bare pill that turns out to have one recipe
+         under it is a wasted tap, and on a phone every tap costs. #}
+      {% for name, count in pills %}
+        <a href="{{ root }}/browse?label={{ name|urlencode }}"
+           class="pill {{ 'on' if name == label }}">{{ name }}<span>{{ count }}</span></a>
+      {% endfor %}
+    </div>
+    {% if rare_pills %}
+    <details style="margin-top:.7rem">
+      <summary class="small muted">Show {{ rare_pills|length }} more
+        (fewer than 5 recipes each)</summary>
+      <div class="pills" style="margin-top:.6rem">
+        {% for name, count in rare_pills %}
+          <a href="{{ root }}/browse?label={{ name|urlencode }}"
+             class="pill {{ 'on' if name == label }}">{{ name }}<span>{{ count }}</span></a>
+        {% endfor %}
+      </div>
+    </details>
+    {% endif %}
+    <p class="small muted" style="margin:.9rem 0 0">
+      Labels are put on by the model from what is actually in a recipe — except
+      the ones above, which only a person can give.
+      <a href="{{ root }}/mine">Write out one of your own</a> and it starts on
+      your shelf.
+    </p>
+  </div>
+{% endif %}
+
+{% if heading %}
+  <div class="card">
+    <h2 class="sans">{{ heading }}</h2>
+    {% if not items %}
+      <p class="muted" style="margin:0">Nothing under that one any more.</p>
+    {% else %}
+      <div class="cards">
+        {% for item in cards %}{% with c = item %}{% include "_card.html" %}{% endwith %}{% endfor %}
+      </div>
+    {% endif %}
+  </div>
+{% endif %}
+
+{% endblock %}

@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block title %}Known fixes — {{ site_name }}{% endblock %}
+{% block body %}
+{% set page = 'kb' %}{% include "admin_nav.html" %}
+<h1>Known fixes</h1>
+
+<div class="card">
+  <p style="margin-top:0">Problems that are already solved. When one of these
+    matches what she asks, the answer comes straight from the file &mdash;
+    instantly, in your words, <strong>without waking the computer or asking a
+    model anything</strong>.</p>
+  <p class="small muted" style="margin-bottom:0">
+    Written on the site admin&rsquo;s <strong>Mama&rsquo;s knowledge base</strong>
+    page, not here. This screen is for checking that what you wrote arrived and
+    that it matches the words she would actually use. File:
+    <span class="mono">{{ st.file }}</span>.</p>
+</div>
+
+<div class="card">
+  <div class="stat">
+    <div><b>{{ st.total }}</b><span>articles</span></div>
+    <div><b>{{ st.direct }}</b><span>answer on their own</span></div>
+    <div><b>{{ st.total - st.direct }}</b><span>context only</span></div>
+    <div><b>{{ st.categories|length }}</b><span>categories</span></div>
+  </div>
+  {% if not st.exists %}
+  <p class="small muted" style="margin-bottom:0">
+    No file yet. That is a normal state &mdash; the assistant works exactly as it
+    always has until the first article is written.</p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0">Try a question</h2>
+  <p class="small muted" style="margin-top:0">Type it the way she would say it.
+    This runs the real matcher &mdash; nothing here is a simulation.</p>
+  <form method="get" action="{{ root }}/admin/kb" class="filters">
+    <div style="flex:1;min-width:14rem">
+      <label for="ask" style="margin-top:0">What she might ask</label>
+      <input type="text" id="ask" name="ask" value="{{ ask }}"
+             placeholder="the printer says offline">
+    </div>
+    <button type="submit">Try it</button>
+    {% if ask %}<a class="btn secondary" href="{{ root }}/admin/kb">Clear</a>{% endif %}
+  </form>
+
+  {% if tried %}
+  <p style="margin:.4rem 0 .8rem">
+    <strong>&ldquo;{{ tried.question }}&rdquo;</strong> would be
+    {{ tried.outcome }}.</p>
+  <table class="grid">
+    <tr><th>Article</th><th style="width:6rem">Score</th><th style="width:9rem"></th></tr>
+    {% for row in tried.scores %}
+    <tr>
+      <td>{{ row.article.title }}
+        <span class="small muted mono">{{ row.article.id }}</span></td>
+      <td class="mono">{{ '%.2f'|format(row.score) }}</td>
+      <td>
+        {% if row.score >= direct_score and row.article.direct %}
+          <span class="pill ok">answers on its own</span>
+        {% elif row.score >= direct_score %}
+          <span class="pill open">strong, but not vetted</span>
+        {% elif row.score >= context_score %}
+          <span class="pill closed">given to the model</span>
+        {% else %}
+          <span class="small muted">below the line</span>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  <p class="small muted" style="margin-bottom:0">
+    Answers on its own at <span class="mono">{{ '%.2f'|format(direct_score) }}</span>
+    and above, and only when the article says <span class="mono">"direct": true</span>.
+    Given to the model from <span class="mono">{{ '%.2f'|format(context_score) }}</span>.
+    A near-miss usually means the words she used are not in the article&rsquo;s
+    <span class="mono">symptoms</span> &mdash; add the phrase and try again.</p>
+  {% endif %}
+</div>
+
+<form method="get" action="{{ root }}/admin/kb" class="filters">
+  <div style="flex:1;min-width:12rem">
+    <label for="q" style="margin-top:0">Search the articles</label>
+    <input type="text" id="q" name="q" value="{{ q }}">
+  </div>
+  <button type="submit">Search</button>
+  {% if q %}<a class="btn secondary" href="{{ root }}/admin/kb">Clear</a>{% endif %}
+</form>
+
+{% for a in articles %}
+<div class="card">
+  <h3 style="margin-top:0">{{ a.title }}
+    {% if a.direct %}<span class="pill ok">answers on its own</span>
+    {% else %}<span class="pill open">context only</span>{% endif %}</h3>
+  <p class="small muted" style="margin:0 0 .6rem">
+    <span class="mono">{{ a.id }}</span> &middot; {{ a.category }}
+    {% if a.source %}&middot; {{ a.source }}{% endif %}</p>
+
+  {% if a.answer %}<p style="margin:.2rem 0 .6rem">{{ a.answer }}</p>{% endif %}
+  {% if a.steps %}
+  <ol style="margin:0 0 .6rem">{% for s in a.steps %}<li>{{ s }}</li>{% endfor %}</ol>
+  {% endif %}
+  {% if a.symptoms %}
+  <p class="small muted" style="margin:0">
+    Matches when she says: {% for s in a.symptoms %}&ldquo;{{ s }}&rdquo;{% if not loop.last %}, {% endif %}{% endfor %}</p>
+  {% endif %}
+</div>
+{% else %}
+<div class="card"><p class="muted">
+  {% if q %}Nothing matches.{% else %}
+  Nothing written yet. Add the first one on the site admin, under
+  <strong>Mama&rsquo;s knowledge base</strong> &mdash; the next time she asks about
+  something you have already fixed, she gets your answer straight away.{% endif %}
+</p></div>
+{% endfor %}
+{% endblock %}

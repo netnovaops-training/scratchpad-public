@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Fill In Your Own Recipe{% endblock %}
+{% block sub %}<p class="small muted">The way you actually make it</p>{% endblock %}
+{% block nav %}{% endblock %}
+{% block head_extra %}
+<link rel="manifest" href="{{ root }}/manifest/your-own-recipe.json">
+<link rel="icon" href="{{ root }}/icon/your-own-recipe.svg">
+{% endblock %}
+
+{% block body %}
+{% include "_own_recipe_form.html" %}
+{% include "_install_button.html" %}
+{% include "_back_to_mealie.html" %}
+{% endblock %}

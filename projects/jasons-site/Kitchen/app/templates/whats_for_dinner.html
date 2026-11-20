@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}What's For Dinner{% endblock %}
+{% block nav %}{% endblock %}
+{% block head_extra %}
+<link rel="manifest" href="{{ root }}/manifest/whats-for-dinner.json">
+<link rel="icon" href="{{ root }}/icon/whats-for-dinner.svg">
+{% endblock %}
+
+{% block body %}
+
+{# The pantry picker moved to the standalone /recipe app (2026-08-24,
+   Jason's own words: "I don't want extra links to click into, I want it
+   all there on /recipe") -- this page stays for whoever already has it
+   as a home-screen shortcut, but points at the one real place now. #}
+<div class="card" style="text-align:center">
+  <h2>What's in the pantry?</h2>
+  <p class="muted">This lives at <a href="/recipe/#/pantry">/recipe</a> now.</p>
+  <a class="btn" href="/recipe/#/pantry">Open it</a>
+</div>
+
+{% include "_install_button.html" %}
+{% include "_back_to_mealie.html" %}
+
+{% endblock %}

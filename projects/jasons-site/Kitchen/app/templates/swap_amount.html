@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}{{ have }} instead of {{ ingredient }}{% endblock %}
+{% block sub %}<p class="small muted">for {{ draft.title }}</p>{% endblock %}
+
+{% block body %}
+
+<div class="card">
+  <h2>Using {{ have }} instead of {{ ingredient }}</h2>
+
+  <p class="small muted sans" style="margin:-.3rem 0 1rem">
+    Worked out by the model just now, for this exact amount. Sanity-check it
+    against what you know.
+  </p>
+
+  {% if answer.amount %}
+    <p style="font-size:1.3rem;font-weight:700;margin:0 0 .3rem">{{ answer.amount }}</p>
+  {% else %}
+    <p class="muted">Nothing useful came back for that one.</p>
+  {% endif %}
+
+  {% if answer.note %}
+    <p class="small muted" style="margin:.6rem 0 0">{{ answer.note }}</p>
+  {% endif %}
+
+  {% if answer.warning %}
+    <div class="notice warn" style="margin:1rem 0 0">{{ answer.warning }}</div>
+  {% endif %}
+</div>
+
+<p style="text-align:center">
+  <a class="btn ghost" href="{{ root }}/r/{{ id }}">Back to the recipe</a>
+</p>
+
+{% endblock %}

@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Tickets — {{ site_name }}{% endblock %}
+{% block body %}
+{% set page = 'tickets' %}{% include "admin_nav.html" %}
+<h1>Tickets</h1>
+{% if msg %}<div class="notice ok">{{ msg }}</div>{% endif %}
+
+<div class="card">
+  <div class="stat">
+    <div><b>{{ counts.total or 0 }}</b><span>total</span></div>
+    <div><b>{{ counts.open or 0 }}</b><span>open</span></div>
+    <div><b>{{ counts.closed or 0 }}</b><span>closed</span></div>
+    <div><b>{{ counts.escalated or 0 }}</b><span>escalated</span></div>
+    <div><b>{{ counts.faq or 0 }}</b><span>answers</span></div>
+  </div>
+</div>
+
+<form method="get" action="{{ root }}/admin/tickets" class="filters">
+  <div style="flex:1;min-width:12rem">
+    <label for="q" style="margin-top:0">Search
+      <span class="hint">Ticket number, or any word from the conversation</span></label>
+    <input type="text" id="q" name="q" value="{{ q }}" placeholder="printer, TH-260728-003, ...">
+  </div>
+  <div>
+    <label for="status" style="margin-top:0">Status</label>
+    <select id="status" name="status">
+      <option value="">any</option>
+      {% for s in ['open','closed','escalated','resolved'] %}
+      <option value="{{ s }}" {% if status==s %}selected{% endif %}>{{ s }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div>
+    <label for="category" style="margin-top:0">Category</label>
+    <select id="category" name="category">
+      <option value="">any</option>
+      {% for k, v in categories.items() %}
+      <option value="{{ k }}" {% if category==k %}selected{% endif %}>{{ v }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <button type="submit">Search</button>
+  {% if q or status or category %}
+  <a class="btn secondary" href="{{ root }}/admin/tickets">Clear</a>{% endif %}
+</form>
+
+<div class="card">
+  {% if rows %}
+  <table class="grid">
+    <tr><th>Ticket</th><th>What</th><th>Category</th><th>Status</th><th>When</th></tr>
+    {% for t in rows %}
+    <tr>
+      <td class="mono"><a href="{{ root }}/admin/ticket/{{ t.id }}">{{ t.ticket_no or '—' }}</a></td>
+      <td>{{ t.title }}
+        {% if t.summary %}<br><span class="small muted">{{ t.summary[:110] }}{% if t.summary|length > 110 %}…{% endif %}</span>{% endif %}
+      </td>
+      <td class="small">{{ categories.get(t.category, t.category) }}</td>
+      <td><span class="pill {{ t.status }}">{{ t.status }}</span></td>
+      <td class="small muted">{{ (t.closed_at or t.updated_at)|fmt_ts }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  <p class="small muted" style="margin-bottom:0">{{ rows|length }} shown.</p>
+  {% else %}
+  <p class="muted">Nothing matches. {% if q %}Try a shorter search.{% else %}
+    No tickets yet — one is opened automatically the first time she asks something.{% endif %}</p>
+  {% endif %}
+</div>
+{% endblock %}

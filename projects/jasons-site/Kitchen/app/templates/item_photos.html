@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Picture for {{ item_name }}{% endblock %}
+{% block sub %}<p class="small muted">A real photo first; drawing one is a fallback, and it always says so</p>{% endblock %}
+
+{% block body %}
+
+{% if found %}
+<p class="notice ok">Saved.</p>
+{% endif %}
+{% if err %}
+<p class="notice err">{{ err }}</p>
+{% endif %}
+
+<div class="card">
+  <h2>{{ item_name }}</h2>
+  {% if current %}
+    {# Small icon for a food, a bigger thumbnail for a tool -- same
+       distinction as foods.html/tools.html's own listings. #}
+    <img src="{{ current.url }}" alt="{{ current.alt or item_name }}"
+         style="max-width:{% if kind == 'tool' %}220px{% else %}90px{% endif %};
+                border-radius:10px;border:1px solid var(--line);display:block">
+    {% if current.source == "ai-drawn" %}
+      <p class="drawnote">AI-drawn, not a real photo.</p>
+    {% else %}
+      <p class="small muted" style="margin:.4rem 0 0">A real photo, found on the internet.</p>
+    {% endif %}
+  {% else %}
+    <p class="muted">No picture yet.</p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h3>Find a real photo</h3>
+  <form method="get" action="{{ root }}/{{ kind }}s/{{ item_id }}/photos">
+    <input type="search" name="q" value="{{ q }}" placeholder="Search the internet…">
+    <button class="big" type="submit">Search</button>
+  </form>
+
+  {% if candidates %}
+  <div class="cards" style="margin-top:1rem">
+    {% for c in candidates %}
+    <form method="post" action="{{ root }}/{{ kind }}s/{{ item_id }}/photos/keep">
+      <input type="hidden" name="url" value="{{ c.url }}">
+      <input type="hidden" name="title" value="{{ c.title }}">
+      <div class="rcard" style="cursor:default">
+        <div class="shot"><img src="{{ c.thumbnail }}" alt="{{ c.title }}" loading="lazy"></div>
+        <div class="body">
+          <p class="meta">{{ c.title }}</p>
+          <button class="small" type="submit">Keep this one</button>
+        </div>
+      </div>
+    </form>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+
+{% if owner %}
+<div class="card">
+  <h3>Or draw one instead</h3>
+  <p class="small muted">
+    {% if room_ok %}There is room to draw right now.
+    {% else %}Cannot draw right now: {{ room_why }}.{% endif %}
+  </p>
+  <form method="post" action="{{ root }}/{{ kind }}s/{{ item_id }}/photos/draw">
+    <button class="big ghost" type="submit" {% if not room_ok %}disabled{% endif %}>
+      Generate a picture of {{ item_name }}</button>
+  </form>
+  <p class="small muted" style="margin:.5rem 0 0">
+    Drawn, not photographed -- it will always be labelled that way, and it
+    goes on the admin panel's picture backlog until it is reviewed.
+  </p>
+</div>
+{% endif %}
+
+{% endblock %}

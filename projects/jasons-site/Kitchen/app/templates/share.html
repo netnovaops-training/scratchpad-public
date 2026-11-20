@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#e58325">
+<title>{{ title }}</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='88'>&#127859;</text></svg>">
+<style>
+{# Same palette as base.html, on purpose -- a shared link should still look
+   like it came from the same place, even with none of that page's chrome. #}
+:root{--bg:#f2f2f2;--panel:#fff;--ink:#1b1b1b;--muted:#68696b;--line:#e0e0e0;
+ --accent:#e58325;--accent-ink:#fff}
+@media (prefers-color-scheme:dark){:root{--bg:#121212;--panel:#1e1e1e;--ink:#eaeaea;
+ --muted:#a3a3a3;--line:#2e2e2e;--accent:#f0994a;--accent-ink:#1b1200}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+ font:16px/1.6 "Roboto",ui-sans-serif,-apple-system,"Segoe UI",sans-serif;
+ padding:0 0 3rem}
+.wrap{max-width:640px;margin:0 auto;padding:0 1rem}
+header{text-align:center;padding:1.6rem 1rem .4rem}
+header p{margin:.3rem 0 0;color:var(--muted);font-size:.9rem}
+h1{margin:0;font-size:clamp(1.5rem,6vw,2rem);letter-spacing:-.01em}
+h2{font-size:1.15rem;margin:0 0 .7rem}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+ padding:1.1rem;margin:0 0 1rem}
+.hero{width:100%;border-radius:12px;display:block;margin:0 0 1rem;object-fit:cover;
+ max-height:340px}
+.plain{list-style:none;margin:0;padding:0}
+.ing li,.tool-list li{display:flex;align-items:center;gap:.7rem;padding:.5rem 0;
+ border-bottom:1px solid var(--line)}
+.ing li:last-child,.tool-list li:last-child{border-bottom:0}
+.itempic{width:3.4rem;height:3.4rem;flex:none;object-fit:cover;border-radius:8px}
+.step{display:flex;gap:.9rem;padding:1rem 0;border-bottom:1px solid var(--line)}
+.step:last-child{border-bottom:0}
+.step .art img{width:6.5rem;height:6.5rem;object-fit:cover;border-radius:10px;flex:none}
+.step .art svg{width:6.5rem;height:6.5rem;flex:none}
+.step .n{font-weight:700;color:var(--accent);margin-right:.3rem}
+.step .icons{display:flex;gap:.4rem;flex-wrap:wrap;margin:.4rem 0 0}
+.step .icons img{width:2.2rem;height:2.2rem;object-fit:cover;border-radius:6px}
+.drawnote{font-size:.72rem;color:var(--muted);text-align:center;margin:.2rem 0 0}
+table{width:100%;border-collapse:collapse}
+td{padding:.3rem .2rem;border-top:1px solid var(--line);font-size:.88rem}
+.expiry{text-align:center;color:var(--muted);font-size:.82rem;margin:1.4rem 0 0}
+</style>
+</head>
+<body>
+<header>
+  <h1>{{ title }}</h1>
+  <p>Shared from the family kitchen &mdash; no account needed to read this.</p>
+  {# Jason's own request (2026-08-26): "use the original source as a
+     link... so that if someone doesn't want to use my recipe they can
+     see the original." Applies here at least as much as on /recipe
+     itself -- everyone reading THIS page is, by definition, someone
+     outside the household. #}
+  {% if recipe.source %}
+    <p><a href="{{ recipe.source }}" target="_blank" rel="noreferrer">See the original source</a></p>
+  {% endif %}
+</header>
+<div class="wrap">
+
+{% if hero %}
+  <img class="hero" src="{{ hero }}" alt="" loading="lazy" referrerpolicy="no-referrer">
+{% endif %}
+
+<div class="card" id="ingredients">
+  <h2>Ingredients</h2>
+  <ul class="plain ing">
+    {% for item in ingredients %}
+      <li>
+        {% if item.icon %}<img class="itempic" src="{{ item.icon.url }}" alt="" loading="lazy">{% endif %}
+        <span>{{ item.text }}</span>
+      </li>
+    {% endfor %}
+  </ul>
+</div>
+
+{% if tools %}
+<div class="card" id="tools">
+  <h2>Tools</h2>
+  <ul class="plain tool-list">
+    {% for t in tools %}
+      <li>
+        {% if t.url %}<img class="itempic" src="{{ t.url }}" alt="" loading="lazy">{% endif %}
+        <span>{{ t.name }}</span>
+      </li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+<div class="card" id="method">
+  <h2>Method</h2>
+  {% for step in steps %}
+    <div class="step">
+      <div class="art">
+        {% if step.photo %}
+          <img src="{{ step.photo }}" alt="{{ step.alt }}" loading="lazy" referrerpolicy="no-referrer">
+          {% if step.drawn %}<p class="drawnote">a drawing, not a photo</p>{% endif %}
+        {% else %}
+          {{ step.svg|safe }}
+        {% endif %}
+      </div>
+      <div>
+        <p style="margin:0"><span class="n">{{ step.n }}.</span>{{ step.text }}</p>
+        {% if step.icons %}
+          <div class="icons">
+            {% for icon in step.icons %}
+              <img src="{{ icon.url }}" alt="{{ icon.name }}" title="{{ icon.name }}" loading="lazy">
+            {% endfor %}
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  {% endfor %}
+</div>
+
+{% if daily_values %}
+<div class="card" id="nutrition">
+  <h2>Nutrition, per serving</h2>
+  <table>
+    {% for n in daily_values %}
+      <tr><td>{{ n.label }}</td><td>{{ n.amount }} {{ n.unit }}</td>
+        <td>{{ n.pct }}{% if n.pct is not none %}%{% endif %}</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endif %}
+
+<p class="expiry">This link stops working {{ expires_note }}.</p>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}What we've fixed — {{ site_name }}{% endblock %}
+{% block body %}
+<h1>What we've fixed before</h1>
+<p class="muted">Everything you've asked about that got sorted, and the steps that
+  worked. If something happens again, look here first &mdash; the answer is
+  probably already written down.</p>
+
+{% if total %}
+<div class="card">
+  <form method="get" action="{{ root }}/history">
+    <label for="q" style="margin-top:0">Search
+      <span class="hint">A word or two is enough &mdash; "printer", "wifi"</span></label>
+    <div class="row">
+      <input type="text" id="q" name="q" value="{{ q }}" style="flex:1;min-width:10rem">
+      <button type="submit">Look</button>
+      {% if q or category %}<a class="btn secondary" href="{{ root }}/history">Show all</a>{% endif %}
+    </div>
+  </form>
+</div>
+
+<div class="cats">
+  <a href="{{ root }}/history" class="cat {% if not category %}on{% endif %}">
+    All <span>{{ total }}</span></a>
+  {% for key, items in groups %}
+  <a href="{{ root }}/history?category={{ key }}"
+     class="cat {% if category == key %}on{% endif %}">
+    {{ categories.get(key, key) }} <span>{{ items|length }}</span></a>
+  {% endfor %}
+</div>
+
+{% for key, items in groups %}
+<h2>{{ categories.get(key, key) }}</h2>
+<div class="card">
+  <ul class="threads">
+    {% for t in items %}
+    <li><a href="{{ root }}/history/{{ t.id }}">{{ t.title }}
+      <span class="when">{{ (t.closed_at or t.updated_at)|fmt_ts }}</span>
+    </a></li>
+    {% endfor %}
+  </ul>
+</div>
+{% endfor %}
+
+{% else %}
+<div class="card">
+  <p class="muted" style="margin:0">Nothing here yet. Once something gets sorted
+    out it'll be written down here automatically, so you never have to remember
+    what we did.</p>
+</div>
+{% endif %}
+
+<style>
+.cats{display:flex;gap:.5rem;flex-wrap:wrap;margin:1.2rem 0}
+.cat{display:inline-flex;align-items:center;gap:.45rem;padding:.6rem 1rem;
+  border:2px solid var(--line);border-radius:999px;text-decoration:none;
+  color:var(--ink);font-weight:700;font-size:1rem;background:var(--panel)}
+.cat.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.cat span{font-size:.85rem;opacity:.75}
+</style>
+{% endblock %}

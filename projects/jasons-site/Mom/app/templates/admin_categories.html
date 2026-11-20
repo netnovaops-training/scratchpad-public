@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}By category — {{ site_name }}{% endblock %}
+{% block body %}
+{% set page = 'tickets' %}{% include "admin_nav.html" %}
+<h1>By category</h1>
+{% if msg %}<div class="notice ok">{{ msg }}</div>{% endif %}
+<p class="muted">{{ total }} ticket(s), grouped by what kind of problem they were.
+  Useful for spotting the thing that keeps coming back.</p>
+
+<div class="card">
+  <table class="grid">
+    <tr><th>Category</th><th>Total</th><th>Closed</th><th>Open</th><th></th></tr>
+    {% for g in groups %}
+    <tr>
+      <td><strong>{{ g.label }}</strong></td>
+      <td>{{ g.n }}</td>
+      <td>{{ g.closed }}</td>
+      <td>{% if g.open %}<span class="pill open">{{ g.open }}</span>{% else %}0{% endif %}</td>
+      <td class="small"><a href="{{ root }}/admin/tickets?category={{ g.key }}">open list</a></td>
+    </tr>
+    {% endfor %}
+  </table>
+</div>
+
+{% for g in groups %}{% if g.items %}
+<h2>{{ g.label }} <span class="muted small">({{ g.n }})</span></h2>
+<div class="card">
+  <table class="grid">
+    <tr><th>Ticket</th><th>Problem</th><th>What fixed it</th><th>When</th></tr>
+    {% for t in g.items[:25] %}
+    <tr>
+      <td class="mono"><a href="{{ root }}/admin/ticket/{{ t.id }}">{{ t.ticket_no or '—' }}</a></td>
+      <td>{{ t.title }}<br><span class="pill {{ t.status }}">{{ t.status }}</span></td>
+      <td class="small">{{ (t.resolution or t.summary or '—')[:120] }}</td>
+      <td class="small muted">{{ (t.closed_at or t.updated_at)|fmt_ts }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% if g.n > 25 %}
+  <p class="small muted" style="margin-bottom:0">Showing 25 of {{ g.n }} &middot;
+    <a href="{{ root }}/admin/tickets?category={{ g.key }}">see all</a></p>
+  {% endif %}
+</div>
+{% endif %}{% endfor %}
+{% endblock %}

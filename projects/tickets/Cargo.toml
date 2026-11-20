@@ -1,0 +1,23 @@
+[package]
+name = "tickets-server"
+version = "0.1.0"
+edition = "2021"
+description = "Tickets: a ticket editor behind the household SSO that saves to GitHub and Google Drive"
+
+[dependencies]
+# Same stack as the household's other Rust services (Sprout Pals, ai-stack/rust).
+axum = "0.8"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal", "fs", "sync"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# rustls instead of OpenSSL: the image needs no system TLS library
+reqwest = { version = "0.13", default-features = false, features = ["json", "query", "rustls"] }
+base64 = "0.23"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+rand = "0.10"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"
