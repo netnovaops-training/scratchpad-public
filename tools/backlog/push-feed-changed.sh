@@ -5,12 +5,12 @@
 # copy-test-swap). Why a new script:
 #   - push-feed.sh sent the whole feed (17,134 files, ~683 MB) every run and used the LAN address
 #     192.168.1.86 (T0998: Tailscale only). Nothing scheduled it; sync.log shows the last run 2026-11-15.
-#   - This one sends only files newer than the stamp file .last-feed-push, over Tailscale (100.64.0.10),
+#   - This one sends only files newer than the stamp file .last-feed-push, over Tailscale (100.64.0.11),
 #     and skips sync.lock and Synology Drive "Name clash" copies (the NUC copy made 11-17 skips them too).
 # Runs every 30 min from the Windows task "Backlog feed push" (Git Bash). One-way PC -> NUC. No new port.
 # Prints PASS/FAIL only; writes one line to push-feed.log. Never deletes anything on the NUC.
 cd "$(dirname "$0")" || exit 1
-NUC=server@100.64.0.10
+NUC=server@100.64.0.11
 STAMP=.last-feed-push
 LOG=push-feed.log
 NEW=.last-feed-push.new

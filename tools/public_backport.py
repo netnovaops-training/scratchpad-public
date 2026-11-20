@@ -82,7 +82,13 @@ def main():
                + "\n".join(f"- {d}" for d in done)
                + "\n\nMerged on GitHub by the nightly routine. Live code in www/ai-stack still needs the same change.\n")
         git(SRC, "commit", "-q", "-F", "-", inp=msg)
-    git(PUB, "merge", "-q", "--no-edit", "github/main")
+    # Bring the public copy's main up to GitHub. OUTCOME 2026-11-20: a plain `git merge github/main` merged into
+    # whatever branch was checked out (D:/scratchpad-public sat on a sync/<date> branch), not main. When main is
+    # not checked out, fast-forward it in place instead; if that is not a fast-forward, git refuses and we stop.
+    if git(PUB, "rev-parse", "--abbrev-ref", "HEAD").strip() == "main":
+        git(PUB, "merge", "-q", "--no-edit", "github/main")
+    else:
+        git(PUB, "fetch", "-q", ".", "github/main:main")
     print(f"backport: {len(done)} files back-ported, {len(changed) - len(code)} workflow files merged")
     return 0
 

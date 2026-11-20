@@ -39,7 +39,7 @@ DB = os.environ.get("KUMA_DB", "/tmp/kuma-work/kuma.db")  # nosec B108
 # from the router's reservation list -- the list and reality disagree.
 HOSTS = [
     # The one that matters most: the box that holds the other Kuma.
-    ("Pi 5 (sachin)", "192.168.1.69"),
+    ("Pi 5 (alex)", "192.168.1.69"),
     # The Pi 3 answers at .237, NOT at its .67 reservation. The .67 entry
     # is bound to a MAC that is not this Pi's eth0 (b8:27:eb:e9:e3:7e) --
     # almost certainly its wlan0, from when it was set up over WiFi.

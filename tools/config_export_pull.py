@@ -31,7 +31,7 @@ import secret_scan
 REPO = Path(r"D:\scratchpad")
 DEST = REPO / "nuc" / "config-export"
 LOG = REPO / "audit" / "config-export" / "run.log"
-NUC = "server@100.64.0.10"
+NUC = "server@100.64.0.11"
 
 
 def entropy(s: str) -> float:
