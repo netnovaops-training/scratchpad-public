@@ -157,6 +157,15 @@ def slug(text, taken):
     return s
 
 
+def _header_safe(value) -> str:
+    """A header value with CR and LF removed, so it cannot start a new header or a second response.
+
+    2026-11-20: written as str.replace (the form CodeQL's py/http-response-splitting recognises);
+    an earlier re.sub version did the same thing but stayed flagged.
+    """
+    return str(value).replace("\r", "").replace("\n", "")
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "dj"
 
@@ -167,10 +176,12 @@ class Handler(BaseHTTPRequestHandler):
         elif isinstance(body, str):
             body = body.encode("utf-8")
         self.send_response(code)
-        self.send_header("Content-Type", ctype)
+        # 2026-11-20 (CodeQL py/http-response-splitting, alert 3042): CR/LF
+        # stripped from every header value, as in collage/app.py.
+        self.send_header("Content-Type", _header_safe(ctype))
         self.send_header("Content-Length", str(len(body)))
         for k, v in (extra or {}).items():
-            self.send_header(k, v)
+            self.send_header(_header_safe(k), _header_safe(v))
         self.end_headers()
         if self.command != "HEAD":
             self.wfile.write(body)

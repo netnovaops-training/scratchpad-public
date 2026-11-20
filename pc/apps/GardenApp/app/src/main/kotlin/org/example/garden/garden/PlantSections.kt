@@ -97,7 +97,7 @@ private fun money(raw: String): String {
     val n = raw.toDoubleOrNull() ?: return raw
     // Whole dollars print as whole dollars. "$25" beats "$25.00" on a phone,
     // and the cents are never meaningful here.
-    return if (n % 1.0 == 0.0) "$" + n.toInt() else "$" + String.format("%.2f", n)
+    return if (n % 1.0 == 0.0) "$" + n.toInt() else "$" + String.format(java.util.Locale.US, "%.2f", n)
 }
 
 /** Joined with the website's separator, skipping the parts that are missing. */

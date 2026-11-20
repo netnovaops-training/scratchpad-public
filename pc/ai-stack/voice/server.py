@@ -724,9 +724,10 @@ def _squash_ws(m) -> str:
     run = m.group(0)
     if "\n" in run:
         return "\n"
-    if not run.strip(" \t"):
-        return " "
-    return run
+    # 2026-11-20: every other run (spaces, tabs, \r, no-break spaces...) is
+    # now one space. Before, "anything stranger" was left as it was, so a
+    # long run of \r or U+00A0 still made the patterns below slow.
+    return " "
 
 
 def normalize_narration(text: str) -> str:
@@ -738,7 +739,9 @@ def normalize_narration(text: str) -> str:
                 # (same characters as before), so each is plainly one block.
                 "\u2600-\u26ff"           # misc symbols
                 "\u2700-\u27bf"           # dingbats
-                "\U0001F1E6-\U0001F1FF"   # flag letters
+                # flag letters (U+1F1E6-1F1FF) are inside the first range already;
+                # 2026-11-20: their separate range was dropped (CodeQL
+                # py/overly-large-range, alert 3041, saw the two overlap).
                 "\u2b00-\u2bff"           # arrows, stars
                 "\ufe0e\ufe0f\u200d"     # variation selectors, joiner
                 "]+", " ", t)
@@ -754,9 +757,9 @@ def normalize_narration(text: str) -> str:
     # 2026-11-20: shrink every run of 2+ whitespace characters to one before the
     # whitespace-hungry patterns below. A long run of spaces made them
     # re-scan it from every position (polynomial time, ~0.5 s for 5000
-    # spaces). A run with a newline becomes "\n", a run of only spaces and
-    # tabs becomes " ", anything stranger is left alone. The spoken result is
-    # identical (checked against the old code on random input).
+    # spaces). A run with a newline becomes "\n", any other run becomes " "
+    # (2026-11-20 later: odd whitespace too, see _squash_ws). The spoken result
+    # is identical (checked against the old code on random input).
     t = _re.sub(r"\s{2,}", _squash_ws, t)
     # year/number ranges: 1923-1992 (any dash) -> "1923 to 1992"
     t = _re.sub(r"(\d)\s*[\u2013\u2014-]\s*(\d)", r"\1 to \2", t)

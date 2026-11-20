@@ -53,7 +53,7 @@ BROWSERS = {
     "brave": r"C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe",
 }
 MAX_PAGE_PX = 19000          # 200 in at 96 px/in is 19200; keep a little room
-ROBOT = re.compile(r"unusual traffic|not a robot|recaptcha", re.I)
+ROBOT = re.compile(r"unusual traffic|not a robot|recaptcha", re.IGNORECASE)
 
 
 def audited(name: str) -> str:
@@ -86,7 +86,7 @@ LONG_PAGE_CSS = "@page{margin:0} main{padding:14mm 14mm 16mm !important} .print-
 
 def clipboard() -> str:
     out = subprocess.run(["powershell", "-NoProfile", "-Command", "Get-Clipboard"],
-                         capture_output=True, text=True).stdout
+                         capture_output=True, text=True, check=False).stdout
     m = re.search(r"https?://\S+", out)
     if not m:
         sys.exit("No link on the clipboard.")
@@ -133,7 +133,7 @@ def html_mode(a, files: list[pathlib.Path]) -> None:
         ctx = b.new_context()
         for f in files:
             html = f.read_text(encoding="utf-8")
-            m = re.search(r"<title>(.*?)</title>", html, re.S)
+            m = re.search(r"<title>(.*?)</title>", html, re.DOTALL)
             title = re.sub(r"&\w+;", " ", m.group(1)) if m else f.stem
             target, height = long_pdf(ctx, html, title, a.out)
             print(f"Saved {target} ({height}px tall) from {f.name}")

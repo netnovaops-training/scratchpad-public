@@ -56,8 +56,8 @@ def build() -> str:
         line = re.sub(rf"^{re.escape(p.name)}\s*[-:]\s*", "", line)  # drop a repeated file name
         groups.setdefault(str(Path(f).parent).replace("\\", "/"), []).append(f"- `{p.name}`: {line}")
     out = ["# Scratchpad tools", "",
-           "One line per script, taken from each script's own header. Regenerate with "
-           "`python tools/make_tools_index.py`.", ""]
+           ("One line per script, taken from each script's own header. Regenerate with "
+            "`python tools/make_tools_index.py`."), ""]
     for folder in sorted(groups):
         out += [f"## {folder}", ""] + groups[folder] + [""]
     return "\n".join(out)
