@@ -158,11 +158,46 @@ def _same(sent: str | None, want: bytes) -> bool:
     return bool(want) and hmac.compare_digest((sent or "").strip().encode(), want)
 
 
+# T0931 /app/file (2026-11-20): a peer entry may also be a container NAME on intake's docker network ("auth-nuc").
+# The NUC sign-in service calls intake as http://intake:8100 (the host address is firewalled from containers,
+# tested: 000), so intake sees its container address, which changes on every recreate. Names are resolved with
+# docker's own DNS and cached for 30 s; only containers on this compose network can answer to them.
+_PEER_CACHE: dict = {}
+
+
+def _peers(entries: set, peer: str = "") -> set:
+    """IP addresses for a set of peer entries (IP literals as they are, names resolved, unresolvable ones skipped).
+
+    A peer that is not in the cached set triggers a fresh lookup (at most every 2 s): a container that was just
+    recreated has a new address. OUTCOME 2026-11-20 sandbox: with a plain 30 s cache, the healthcheck filled the
+    cache before the caller container existed and every call from it got 403 for half a minute.
+    """
+    import ipaddress
+    import socket
+    key = frozenset(entries)
+    hit = _PEER_CACHE.get(key)
+    if hit:
+        age = time.monotonic() - hit[0]
+        if age < 30 and (peer in hit[1] or age < 2):
+            return hit[1]
+    out = set()
+    for e in entries:
+        try:
+            out.add(str(ipaddress.ip_address(e)))
+        except ValueError:
+            try:
+                out |= {ai[4][0] for ai in socket.getaddrinfo(e, None, proto=socket.IPPROTO_TCP)}
+            except OSError:
+                pass                     # name not on the network right now: it simply is not allowed
+    _PEER_CACHE[key] = (time.monotonic(), out)
+    return out
+
+
 @app.middleware("http")
 async def gatekeeper(request: Request, call_next):
     """Refuse unknown peers (A1), peers without the shared key, and writes that are not "full" (A7/item 8)."""
     peer = request.client.host if request.client else ""
-    if peer not in ALLOWED_PEERS:
+    if peer not in _peers(ALLOWED_PEERS, peer):
         return JSONResponse({"error": "not allowed from this address"}, status_code=403)
     write = request.method not in READ_METHODS
     level = (request.headers.get("x-auth-level") or "").strip().lower()
@@ -176,7 +211,8 @@ async def gatekeeper(request: Request, call_next):
         return JSONResponse({"error": "not allowed without the service key"}, status_code=403)
     if write and level != "full":
         service = (key_ok and not level and peer != "127.0.0.1"
-                   and ((peer in SERVICE_PEERS and request.url.path == "/upload") or request.url.path == "/intake"))
+                   and ((peer in _peers(SERVICE_PEERS, peer) and request.url.path == "/upload")
+                        or request.url.path == "/intake"))
         if not service:
             return JSONResponse({"error": "your access here is view-only"}, status_code=403)
     return await call_next(request)
