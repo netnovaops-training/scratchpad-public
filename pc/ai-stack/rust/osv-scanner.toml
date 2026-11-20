@@ -1,0 +1,21 @@
+# OSV-Scanner exceptions for this Cargo.lock. Each one says why it is accepted and when to look again.
+# Added 2026-11-20 with Jason's approval (both advisories have no usable fixed release for this tree yet).
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2023-0071"
+ignoreUntil = 2027-02-20
+reason = """rsa (Marvin attack, also CVE-2023-49092). rsa 0.9.10 signs the OIDC id_token here; with webauthn-rs 0.6
+rsa 0.10.0-rc.19 also comes in through crypto-glue, which pins the rc. The attack is a timing side channel that
+needs many timed private-key operations by an attacker on the same network path; re-check when rsa 0.10.0 can be
+used (webauthn-rs / crypto-glue release) and move the OIDC signing to it."""
+
+[[IgnoredVulns]]
+id = "CVE-2023-49092"
+ignoreUntil = 2027-02-20
+reason = "Same advisory as RUSTSEC-2023-0071 (rsa Marvin attack); see above."
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0543"
+ignoreUntil = 2027-02-20
+reason = """chrono 0.4.45 is the newest release and the advisory lists no fixed version. Re-check with the monthly
+Dependabot run; take the fix as soon as one is published."""
