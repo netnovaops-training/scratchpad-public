@@ -167,7 +167,7 @@ fn caller_email(state: &AppState, headers: &HeaderMap) -> Result<String, Respons
             tracing::info!("trial {email} tried a members-only route");
             Err((
                 StatusCode::FORBIDDEN,
-                "That part needs a household account. Email user@example.com                  if you would like one.",
+                "That part needs a household account. Email user3@example.com                  if you would like one.",
             )
                 .into_response())
         }
@@ -1238,7 +1238,7 @@ const SUGGESTIONS: &[Suggestion] = &[
 /// whether it is advertised cannot drift apart and start disagreeing.
 fn garden_people() -> Vec<String> {
     std::env::var("GARDEN_FOR")
-        .unwrap_or_else(|_| "user@example.com,user@example.com,user@example.com".into())
+        .unwrap_or_else(|_| "user6@example.com,user1@example.com,user3@example.com".into())
         .split(',')
         .map(|e| e.trim().to_lowercase())
         .filter(|e| !e.is_empty())
@@ -1298,7 +1298,7 @@ pub async fn prompts(State(state): State<Arc<AppState>>, headers: HeaderMap) -> 
 /// The address a trial is told to write to. Configurable rather than compiled
 /// in, so the person who fields these is a setting and not a code change.
 fn trial_contact() -> String {
-    std::env::var("TRIAL_CONTACT").unwrap_or_else(|_| "user@example.com".into())
+    std::env::var("TRIAL_CONTACT").unwrap_or_else(|_| "user3@example.com".into())
 }
 
 /// `POST /app/trial/start` -- redeem an invite code.

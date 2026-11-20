@@ -185,7 +185,7 @@ class TrialManager(private val context: Context) {
         const val BASE = "https://example.org/auth/app"
         const val START = "$BASE/trial/start"
         const val STATUS = "$BASE/trial/status"
-        const val DEFAULT_CONTACT = "user@example.com"
+        const val DEFAULT_CONTACT = "user3@example.com"
 
         const val KEY_TOKEN = "token"
         const val KEY_EMAIL = "email"

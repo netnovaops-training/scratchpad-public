@@ -4,7 +4,7 @@
 # because the sandbox is not behind Caddy; in production Caddy strips any inbound X-Auth-Email first.
 set -u
 B=http://intake-sbx:8100
-H="X-Auth-Email: user@example.com"
+H="X-Auth-Email: user1@example.com"
 cd /tmp || exit 1
 echo "== manifest"; curl -s $B/manifest.webmanifest | head -c 160; echo
 echo "== page has manifest link"; curl -s -H "$H" $B/ | grep -c manifest.webmanifest

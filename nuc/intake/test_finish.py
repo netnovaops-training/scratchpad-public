@@ -16,7 +16,7 @@ import urllib.request
 
 # T0931 item 23 (2026-11-20): sends what Caddy sends: the drop key (env INTAKE_KEY, if the sandbox has one) and
 # X-Auth-Level: full (the gate's second lock, item 8).
-ME = {"X-Auth-Email": "user@example.com", "Content-Type": "application/json", "X-Auth-Level": "full",
+ME = {"X-Auth-Email": "user1@example.com", "Content-Type": "application/json", "X-Auth-Level": "full",
       **({"X-Drop-Key": os.environ["INTAKE_KEY"]} if os.environ.get("INTAKE_KEY") else {})}
 ok_all = True
 

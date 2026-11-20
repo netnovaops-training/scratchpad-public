@@ -13,3 +13,7 @@ pc/ai-stack/scripts/release-app.sh SC1017
 pc/ai-stack/scripts/release-app.sh SC1044
 pc/ai-stack/scripts/release-app.sh SC1072
 pc/ai-stack/scripts/release-app.sh SC1073
+# 2026-11-20 (sync PR #27): unused vars in the projects/ copy (loop counter, colour, timestamp); harmless, fix in the Projects repo
+projects/jasons-site/Mom/deploy.sh SC2034
+projects/jasons-site/Mom/tools/install-nightly.sh SC2034
+projects/jasons-site/Mom/tools/test-wake-on-login.sh SC2034

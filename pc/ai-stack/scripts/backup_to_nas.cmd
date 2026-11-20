@@ -12,7 +12,8 @@ REM Log: backup_to_nas.log next to this file. Robocopy exit codes 0-7 are succes
 
 if "%NAS_SHARE%"=="" set NAS_SHARE=\\192.168.1.68\homelab\pc-backup
 set LOG=%~dp0backup_to_nas.log
-set XD=node_modules target __pycache__ .venv
+REM 2026-11-20: All-Documents lives on D: now; the C: path is a junction, so skip it there and copy D: once.
+set XD=node_modules target __pycache__ .venv "C:\Jasons New Site\www\ai-stack\All-Documents"
 set XF=.env .env.* *.pem *.key people.json *.pfx id_* *.bak-*
 
 echo ==== %DATE% %TIME% ==== >> "%LOG%"
@@ -20,6 +21,7 @@ call :copy "C:\Jasons New Site\www" "%NAS_SHARE%\www"
 call :copy "D:\Robin-garden-template" "%NAS_SHARE%\Robin-garden-template"
 call :copy "D:\homelab-docs" "%NAS_SHARE%\homelab-docs"
 call :copy "D:\paperless-feed" "%NAS_SHARE%\paperless-feed"
+call :copy "D:\ai-stack\All-Documents" "%NAS_SHARE%\All-Documents"
 REM 2026-11-12: Homelab Docs moved into ai-stack\All-Documents\Projects\, which the "www" line
 REM above already copies (All-Documents is git-ignored, not robocopy-excluded). A separate
 REM Homelab Docs copy would now be a duplicate, so that line was removed.

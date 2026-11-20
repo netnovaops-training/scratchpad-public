@@ -106,7 +106,7 @@ Say ""
 Say "  After that first run the file is the truth and this line is ignored, so"
 Say "  removing somebody in the admin cannot be undone by a stale value here."
 Say ""
-$default = "user@example.com,user@example.com,user@example.com"
+$default = "user1@example.com,user5@example.com,user4@example.com"
 Say "  Default: $default"
 $who = Read-Host "  Press Enter to accept, or type a comma separated list"
 if ([string]::IsNullOrWhiteSpace($who)) { $who = $default }

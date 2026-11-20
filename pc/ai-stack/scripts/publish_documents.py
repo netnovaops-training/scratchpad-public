@@ -29,7 +29,7 @@ import markdown
 
 # Moved 2026-11-12 into All-Documents (step 2 cleanup). The old path
 # C:\Users\USER\Documents\Homelab Docs is now a junction to this folder, so either works.
-SRC = r"C:\Jasons New Site\www\ai-stack\All-Documents\Projects\Homelab Docs"
+SRC = r"D:\ai-stack\All-Documents\Projects\Homelab Docs"  # 2026-11-20: All-Documents moved to D:
 BUILD = r"D:\homelab-docs\_site_build"
 SITE = "https://example.org"
 NUC = "server@192.168.1.86"

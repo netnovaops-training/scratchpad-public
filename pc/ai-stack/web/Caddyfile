@@ -838,8 +838,8 @@ example.org {
 			# alternative is auto-registration, which is precisely how Jason's
 			# repositories would end up beside a duplicate account.
 			map {http.request.header.X-Auth-Email} {gitea_user} {
-				"user@example.com"       "Jason"
-				"user@example.com" "Robin"
+				"user1@example.com"       "Jason"
+				"user6@example.com" "Robin"
 				default               ""
 			}
 

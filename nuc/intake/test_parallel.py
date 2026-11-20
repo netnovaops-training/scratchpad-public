@@ -30,7 +30,7 @@ def check(name, cond):
 
 def main():
     base, key, data = sys.argv[1], sys.argv[2], pathlib.Path(sys.argv[3])
-    hdr = {"X-Auth-Email": "user@example.com", "X-Drop-Key": key, "X-Auth-Level": "full", "Content-Type": "application/json"}
+    hdr = {"X-Auth-Email": "user1@example.com", "X-Drop-Key": key, "X-Auth-Level": "full", "Content-Type": "application/json"}
 
     def call(method, path, body=None, extra=None):
         rq = urllib.request.Request(base + path, data=body if isinstance(body, (bytes, type(None))) else

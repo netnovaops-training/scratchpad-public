@@ -70,7 +70,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 PORT = 8788
-ADMIN = "user@example.com"
+ADMIN = "user1@example.com"
 TODO = Path(os.environ.get("TODO_FILE", str(Path.home() / "nuc-homelab" / "TODO-ALL.md")))
 THREADS = threading.Lock()
 LOCKFILE = Path.home() / ".todo-all.lock"     # shared with todo_merge.py

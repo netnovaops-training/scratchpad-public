@@ -333,6 +333,6 @@ data class ChatMessage(val role: String, val text: String) {
  */
 class TrialFinishedException(serverSaid: String) : Exception(
     serverSaid.ifBlank {
-        "That was the last of your free questions. Email user@example.com to keep going."
+        "That was the last of your free questions. Email user3@example.com to keep going."
     }
 )

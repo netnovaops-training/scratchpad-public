@@ -20,9 +20,9 @@ OUTCOME 2026-11-17: written before a fresh /clear; run once, results in the hand
 #>
 # Tailscale first (Jason, 2026-11-17); the LAN address is only a fallback, and the row says which one was used.
 # OUTCOME 2026-11-17: NUC over Tailscale PASS; Pi falls back to LAN until T0936 (Pi Tailscale logged out).
-$NUC = 'server@100.64.0.11'
+$NUC = 'server@100.64.0.10'
 $SSHO = @('-o', 'BatchMode=yes', '-o', 'ConnectTimeout=8')
-$PI = @('-p', '1143', 'jason@100.64.0.12'); $piVia = 'Tailscale'
+$PI = @('-p', '1143', 'jason@100.64.0.11'); $piVia = 'Tailscale'
 ssh @SSHO @PI true 2>$null
 if ($LASTEXITCODE -ne 0) { $PI = @('-p', '1143', 'jason@192.168.1.69'); $piVia = 'LAN fallback' }
 $fails = 0

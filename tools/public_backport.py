@@ -56,7 +56,13 @@ def main():
         return 0
     base = git(PUB, "merge-base", local, remote).strip()
     changed = [f for f in git(PUB, "diff", "--name-only", base, remote).split("\n") if f]
-    code = [f for f in changed if not f.startswith(".github/")]
+    # 2026-11-20: projects/ is a cleaned copy of the private Projects repo (projects_public_copy.py), not of
+    # the Scratchpad. Its changes are listed for a hand port into Projects; projects_public_copy refuses to
+    # refresh until that is done.
+    proj = [f for f in changed if f.startswith("projects/")]
+    if proj:
+        print("backport: projects/ changed on GitHub, port by hand into private Projects:", ", ".join(proj[:10]))
+    code = [f for f in changed if not f.startswith((".github/", "projects/"))]
     pmap = path_map() if code else {}
     done, stuck = [], []
     for pub in code:

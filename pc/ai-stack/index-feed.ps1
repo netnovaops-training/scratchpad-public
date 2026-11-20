@@ -31,7 +31,7 @@ param(
     [string]$Dest    = "/home/user/index-feeds",
     [string]$NucHost = "server@192.168.1.86",
     [string]$Api     = "http://recipe-app:8004",
-    [string]$AsUser  = "user@example.com",
+    [string]$AsUser  = "user1@example.com",
     [switch]$Install
 )
 

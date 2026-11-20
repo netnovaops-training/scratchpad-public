@@ -20,8 +20,8 @@ import urllib.request
 import uuid
 
 ok_all = True
-ME = "user@example.com"
-ROBIN = "user@example.com"
+ME = "user1@example.com"
+ROBIN = "user6@example.com"
 
 
 def call(base, path, method="GET", headers=None, body=None, timeout=120):

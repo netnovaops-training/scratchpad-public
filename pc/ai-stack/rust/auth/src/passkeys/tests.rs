@@ -1894,11 +1894,11 @@ fn label_fallback_order() {
     assert_eq!(display_label("  ", "  Casey  ", EMAIL), "Casey Passkey");
     // 3. the part of the email before the @
     assert_eq!(
-        display_label("", "", "user@example.com"),
+        display_label("", "", "user5@example.com"),
         "davetta1 Passkey"
     );
     assert_eq!(
-        display_label("", "   ", "user@example.com"),
+        display_label("", "   ", "user5@example.com"),
         "davetta1 Passkey"
     );
     assert_eq!(display_label("", "", "@odd"), "My Passkey");

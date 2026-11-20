@@ -38,7 +38,7 @@ import tarfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
-DOCS = os.path.join(os.path.dirname(HERE), "All-Documents")
+DOCS = r"D:\ai-stack\All-Documents"  # 2026-11-20: moved to D: (the one documents home); the old ai-stack path is a junction
 REMOTE = "~/documents/jason/All-Documents"
 # New stamp file for the new source, so the first run sends everything (moved files keep their
 # old modified times, which the previous stamp would have treated as already sent).

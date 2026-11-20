@@ -5120,7 +5120,7 @@ async fn run() -> anyhow::Result<()> {
             .unwrap_or(Path::new("/data/auth"))
             .join("admin-revoked"),
         // YOUR addresses. Comma separated in .env if they ever change.
-        owners: common::env_or("ADMIN_OWNERS", "user@example.com")
+        owners: common::env_or("ADMIN_OWNERS", "user1@example.com")
             .split(',')
             .map(common::people::normalise)
             .filter(|e| !e.is_empty())

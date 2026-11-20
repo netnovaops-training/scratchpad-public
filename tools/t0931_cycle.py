@@ -28,7 +28,7 @@ import sys
 import time
 from pathlib import Path
 
-NUC = "server@100.64.0.11"
+NUC = "server@100.64.0.10"
 SP = Path("D:/scratchpad")
 PUB = Path("D:/scratchpad-public")
 REPO = "netnovaops-training/scratchpad-public"
@@ -121,8 +121,15 @@ git push -q origin master; git log --oneline -1""")
         say("STOP: backport needs a hand port; public copy not refreshed")
         sys.exit(2)
     run(["git", "-C", str(PUB), "fetch", "-q", "github"])
-    branch = f"sync/t0931-{stamp}"
-    run(["git", "-C", str(PUB), "checkout", "-q", "-B", branch, "github/main"])
+    # Fewer, larger PRs: when a sync/t0931-* PR is still open, add to it instead of opening a second one.
+    openr = run(["gh", "pr", "list", "-R", REPO, "--state", "open", "--json", "number,headRefName"], check=False)
+    open_sync = [p for p in json.loads(openr.stdout or "[]") if p["headRefName"].startswith("sync/t0931-")]
+    if open_sync:
+        branch = open_sync[0]["headRefName"]
+        run(["git", "-C", str(PUB), "checkout", "-q", "-B", branch, f"github/{branch}"])
+    else:
+        branch = f"sync/t0931-{stamp}"
+        run(["git", "-C", str(PUB), "checkout", "-q", "-B", branch, "github/main"])
     c = run(PY + [str(SP / "tools/public_copy.py"), "--write"], check=False, cwd=str(PUB))
     say("public copy: " + " | ".join(c.stdout.strip().splitlines()[-2:]))
     if c.returncode != 0:
@@ -134,11 +141,15 @@ git push -q origin master; git log --oneline -1""")
         return
     run(["git", "-C", str(PUB), "commit", "-q", "-m", f"Sync from private Scratchpad {stamp} (Atomic Drop, T0931)"])
     run(["git", "-C", str(PUB), "push", "-q", "-u", "github", branch])
-    pr = run(["gh", "pr", "create", "-R", REPO, "--head", branch, "--base", "main",
-              "--title", f"Sync {stamp}: Atomic Drop code (T0931)",
-              "--body", "Cleaned copy from the private Scratchpad, now including nuc/intake (Atomic Drop) "
-                        "so the cloud review can see it."]).stdout.strip()
-    num = pr.rstrip("/").split("/")[-1]
+    if open_sync:
+        num = str(open_sync[0]["number"])
+        pr = f"https://github.com/{REPO}/pull/{num} (added to)"
+    else:
+        pr = run(["gh", "pr", "create", "-R", REPO, "--head", branch, "--base", "main",
+                  "--title", f"Sync {stamp}: Atomic Drop code (T0931)",
+                  "--body", ("Cleaned copy from the private Scratchpad, now including nuc/intake (Atomic Drop) "
+                             "so the cloud review can see it.")]).stdout.strip()
+        num = pr.rstrip("/").split("/")[-1]
     say(f"PR {pr}")
     if wait_checks(num):
         run(["gh", "pr", "merge", num, "-R", REPO, "--merge", "--delete-branch"])

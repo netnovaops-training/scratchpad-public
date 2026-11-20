@@ -30,7 +30,7 @@ DATA = pathlib.Path(sys.argv[2] if len(sys.argv) > 2 else os.path.expanduser("~/
 HOST, PORT = urllib.parse.urlsplit(BASE).hostname, urllib.parse.urlsplit(BASE).port
 KEY = {"X-Drop-Key": os.environ["INTAKE_KEY"]} if os.environ.get("INTAKE_KEY") else {}
 LEVEL = {"X-Auth-Level": "full"}
-ME, OTHER = "user@example.com", "someone-else@example.com"
+ME, OTHER = "user1@example.com", "someone-else@example.com"
 ok_all = True
 
 

@@ -136,7 +136,7 @@ mod tests {
     #[test]
     fn findings() {
         assert!(blockers("x = 'ghp_abcdefghijklmnopqrstuvwxyz0123'").contains(&"an API key or token"));
-        assert!(blockers("mail me at user@example.com").contains(&"an email address"));
+        assert!(blockers("mail me at user10@example.com").contains(&"an email address"));
         assert!(blockers("ssh server@192.168.1.86").contains(&"a home network address"));
         assert!(blockers(r"C:\Users\USER\Documents").contains(&"a private file path"));
         assert!(blockers("password = \"hunter22\"").contains(&"a password or key written into the code"));

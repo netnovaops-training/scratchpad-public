@@ -1,6 +1,6 @@
 """Load GitHub facts into one person's Hermes memory, through Hermes' own MemoryStore.
 
-    docker exec -i hermes python /app/load_github_facts.py user@example.com < facts.json
+    docker exec -i hermes python /app/load_github_facts.py user3@example.com < facts.json
 
 facts.json is made by github_to_hermes.py: a list of {"summary": ..., "body": ...}. Each becomes
 one fact (kind "github", source "github-snapshot"). Saving the same summary again replaces the

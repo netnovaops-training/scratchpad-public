@@ -79,7 +79,7 @@ def recreate():
 
 def probe(key):
     req = urllib.request.Request("http://127.0.0.1:8770/",
-                                 headers={"X-Auth-Email": "user@example.com", "X-Backlog-Key": key})
+                                 headers={"X-Auth-Email": "user3@example.com", "X-Backlog-Key": key})
     try:
         return urllib.request.urlopen(_http_only(req), timeout=10).status  # nosec B310
     except urllib.error.HTTPError as e:

@@ -142,9 +142,23 @@ def _paths(uid: str) -> tuple[pathlib.Path, pathlib.Path]:
     # right here before any path is built. Same ids pass as before (the old test allowed letters, digits,
     # "-" and "_" up to 40; token_urlsafe never makes anything else). Note: str.isalnum() also accepts
     # non-ASCII letters, which the regex does not.
+    return _staged(uid, ".part"), _staged(uid, ".json")
+
+
+def _staged(uid: str, suffix: str) -> pathlib.Path:
+    """STAGE/<uid><suffix> for a checked upload id; 404 for anything else.
+
+    OUTCOME 2026-11-20 (sync PR #27): the regex alone already stops every escape (no "/" or "." can pass),
+    but CodeQL py/path-injection does not count a regex as a guard and kept 12 alerts open on main. The
+    normpath + startswith wall below is the form it recognizes; same ids pass, same 404 for the rest.
+    """
     if not re.fullmatch(r"[A-Za-z0-9_-]{1,40}", uid):
         raise HTTPException(404, "no such upload")
-    return STAGE / f"{uid}.part", STAGE / f"{uid}.json"
+    base = os.path.normpath(str(STAGE))
+    p = os.path.normpath(os.path.join(base, uid + suffix))
+    if not p.startswith(base + os.sep):
+        raise HTTPException(404, "no such upload")
+    return pathlib.Path(p)
 
 
 def _load(uid: str, email: str) -> tuple[dict, pathlib.Path, pathlib.Path]:
@@ -160,9 +174,7 @@ def _load(uid: str, email: str) -> tuple[dict, pathlib.Path, pathlib.Path]:
 
 def _extra(uid: str) -> tuple[pathlib.Path, pathlib.Path, pathlib.Path]:
     """Result file, finish lock and work folder of one upload (all inside STAGE, same disk as the .part)."""
-    if not re.fullmatch(r"[A-Za-z0-9_-]{1,40}", uid):
-        raise HTTPException(404, "no such upload")
-    return STAGE / f"{uid}.result.json", STAGE / f"{uid}.finishing", STAGE / f"{uid}.work"
+    return _staged(uid, ".result.json"), _staged(uid, ".finishing"), _staged(uid, ".work")
 
 
 def _sweep() -> None:
@@ -335,9 +347,7 @@ BIG_FILE = 256 * 1048576
 
 
 def _got(uid: str) -> pathlib.Path:
-    if not re.fullmatch(r"[A-Za-z0-9_-]{1,40}", uid):
-        raise HTTPException(404, "no such upload")
-    return STAGE / f"{uid}.got"
+    return _staged(uid, ".got")
 
 
 def _open_count(email: str) -> int:
@@ -505,7 +515,14 @@ async def finish(uid: str, x_auth_email: str | None = Header(default=None)):
             return JSONResponse({"offset": meta["size"], "working": True}, status_code=409)
     name = meta["name"]
     work.mkdir(exist_ok=True)
-    target = work / name
+    import share  # late import: share imports app, app includes this router
+    # Second wall (CodeQL py/path-injection, 2026-11-20): meta["name"] already went through safe_name at
+    # /up/start, so this never fires; share._in_tmp makes the check visible to the scanner.
+    try:
+        target = share._in_tmp(work, name)
+    except ValueError:
+        lock_p.unlink(missing_ok=True)
+        raise HTTPException(400, "bad file name") from None
     if part.exists() and meta.get("parallel"):          # T0928: every numbered piece must be in
         # T0931: wait for pieces already being written (they hold LOCK_SH); new ones see lock_p and stop.
         pfd = os.open(part, os.O_RDONLY)
@@ -530,20 +547,20 @@ async def finish(uid: str, x_auth_email: str | None = Header(default=None)):
     elif not target.exists():
         lock_p.unlink(missing_ok=True)
         raise HTTPException(404, "no such upload")
-    import share  # late import: share imports app, app includes this router
     hint, shelf = meta.get("hint"), meta.get("shelf")
+    details: list[dict] = []   # internal error text, WHY.txt only (share._file, 2026-11-20)
     try:
         if (hint is None and name.lower().endswith(".zip") and zipfile.is_zipfile(target)
                 and not share._is_comic_zip(target)):
-            results = await share._unzip_and_file(target, email, work)
+            results = await share._unzip_and_file(target, email, work, details)
         else:
-            results = [await share._file(target, name, email, hint, shelf)]
+            results = [await share._file(target, name, email, hint, shelf, details)]
     except Exception as e:  # noqa: BLE001  -- any failure: keep the bytes, say so
         # T0931 (U14): the raw exception (paths, internals) went to the phone; it now goes to WHY.txt only.
-        results = [{"name": name, "status": "error", "why": "This file could not be filed.",
-                    "detail": f"{type(e).__name__}: {e}"}]
+        results = [{"name": name, "status": "error", "why": "This file could not be filed."}]
+        details.append({"name": name, "detail": f"{type(e).__name__}: {e}"})
     kept = False
-    if any(r.get("status") == "error" for r in results) and keep_failed(work, email, name, results, uid):
+    if any(r.get("status") == "error" for r in results) and keep_failed(work, email, name, results + details, uid):
         kept = True
         results.append({"name": name, "status": "kept", "why": "not filed; kept safe on the server for Jason"})
     else:
@@ -551,7 +568,6 @@ async def finish(uid: str, x_auth_email: str | None = Header(default=None)):
     # T0931 item 14 (2026-11-20): one line per finish with uid, size and the verdicts (no names of people, no
     # paths, no error text): the questions "did it arrive?" and "where did it go?" are answered from the log.
     _say(f"finish uid={uid} size={meta['size']} results={[r.get('status') for r in results]} kept={kept}")
-    results = [{k: v for k, v in r.items() if k != "detail"} for r in results]   # internals stay server-side
     _write_atomic(res_p, json.dumps(results))
     lock_p.unlink(missing_ok=True)
     return JSONResponse(results)

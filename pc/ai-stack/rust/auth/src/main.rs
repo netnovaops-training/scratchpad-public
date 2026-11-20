@@ -1403,7 +1403,7 @@ async fn run() -> anyhow::Result<()> {
         eprintln!("AUTH_ALLOWED_EMAILS is empty and no people.json exists yet,");
         eprintln!("so nobody could ever sign in.");
         eprintln!("Set it in .env, comma separated:");
-        eprintln!("  AUTH_ALLOWED_EMAILS=user@example.com,user@example.com,user@example.com");
+        eprintln!("  AUTH_ALLOWED_EMAILS=user1@example.com,user5@example.com,user4@example.com");
         std::process::exit(1);
     }
 

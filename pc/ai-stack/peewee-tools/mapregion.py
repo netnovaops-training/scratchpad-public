@@ -38,7 +38,7 @@ def _http_only(target):
 SITE = os.environ.get("PEEWEE_SITE") or os.path.normpath(
     os.path.join(os.path.dirname(os.path.abspath(__file__)),
                  "..", "web", "public", "peewee"))
-UA = {"User-Agent": "PeeWeeTribute/1.0 (family memorial; user@example.com)"}
+UA = {"User-Agent": "PeeWeeTribute/1.0 (family memorial; user3@example.com)"}
 OVERPASS = "https://overpass-api.de/api/interpreter"
 
 # The corridor, framed to the tribute's 1000x700 viewBox.

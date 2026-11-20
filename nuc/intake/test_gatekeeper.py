@@ -43,7 +43,7 @@ def multipart(filename, data, fields):
 
 def main():
     allowed, blocked = sys.argv[1], sys.argv[2]
-    me = {"X-Auth-Email": "user@example.com"}
+    me = {"X-Auth-Email": "user1@example.com"}
     full = {**me, "X-Auth-Level": "full"}
     check("allowed peer: /healthz 200", call(allowed, "/healthz") == 200)
     check("stranger peer: /healthz 403", call(blocked, "/healthz") == 403)

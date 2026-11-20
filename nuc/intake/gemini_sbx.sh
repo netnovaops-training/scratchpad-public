@@ -21,7 +21,7 @@ trash-put /tmp/intake-test.env
 docker network connect webprint intake-sbx   # gotenberg-web lives only there (same as live intake)
 sleep 6
 B=http://intake-sbx:8100
-H="X-Auth-Email: user@example.com"
+H="X-Auth-Email: user1@example.com"
 run() { docker run --rm --network nuc-homelab_default curlimages/curl:8.11.1 -s -H "$H" -H "Accept: application/json" "$@" "$B/share"; echo; }
 echo "== dead Gemini share (must be refused)"; run -F "url=https://g.co/gemini/share/0a1b2c3d4e5f"
 echo "== Google AI Mode link (CAPTCHA, must be refused)"; run -F "url=https://www.google.com/search?udm=50&q=free+pdf+maker+from+gemini"
