@@ -41,9 +41,9 @@ import hashlib
 import json
 import os
 import pathlib
+import re
 import secrets
 import shutil
-import tempfile
 import time
 import zipfile
 
@@ -63,6 +63,15 @@ FAILED = pathlib.Path(os.environ.get("INTAKE_FAILED", str(STAGE.parent / ".faile
 RESERVE = int(os.environ.get("INTAKE_RESERVE_MB", "1024")) * 1048576
 LOCK_STALE = 3600            # a finish lock older than this is from a crashed/restarted container
 MAX_OPEN = int(os.environ.get("INTAKE_MAX_OPEN", "20"))   # unfinished uploads one person may hold at once
+
+
+def _say(msg: str) -> None:
+    """Log through app.say (same file, rotated). Late import: app imports this module. No secrets in `msg`."""
+    try:
+        from app import say
+        say(msg)
+    except ImportError:                  # used on its own (tests): print only
+        print(msg, flush=True)
 
 
 def _write_atomic(path: pathlib.Path, text: str) -> None:
@@ -88,6 +97,7 @@ def keep_failed(folder: pathlib.Path, email: str, name: str, results: list, dest
     keep.parent.mkdir(parents=True, exist_ok=True)
     shutil.move(str(folder), keep)
     (keep / "WHY.txt").write_text(json.dumps({"email": email, "name": name, "results": results}, indent=1))
+    _say(f"kept in .failed as {keep.name}")   # T0931 item 14: the folder name is a uid or a timestamp, no names
     return True
 
 
@@ -98,7 +108,7 @@ def _clear_finish_locks() -> None:
     for up to LOCK_STALE (1 h).
     """
     try:
-        for p in STAGE.glob("*.finishing"):
+        for p in [*STAGE.glob("*.finishing"), *STAGE.glob("*.finishing.*.old")]:   # .old: item 12 leftovers
             p.unlink(missing_ok=True)
     except OSError:
         pass
@@ -128,7 +138,11 @@ def _who(x_auth_email: str | None) -> str:
 
 
 def _paths(uid: str) -> tuple[pathlib.Path, pathlib.Path]:
-    if not uid.replace("-", "").replace("_", "").isalnum() or len(uid) > 40:
+    # T0931 (CodeQL py/path-injection, 2026-11-20): the id check is now an explicit regex full match, done
+    # right here before any path is built. Same ids pass as before (the old test allowed letters, digits,
+    # "-" and "_" up to 40; token_urlsafe never makes anything else). Note: str.isalnum() also accepts
+    # non-ASCII letters, which the regex does not.
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,40}", uid):
         raise HTTPException(404, "no such upload")
     return STAGE / f"{uid}.part", STAGE / f"{uid}.json"
 
@@ -146,6 +160,8 @@ def _load(uid: str, email: str) -> tuple[dict, pathlib.Path, pathlib.Path]:
 
 def _extra(uid: str) -> tuple[pathlib.Path, pathlib.Path, pathlib.Path]:
     """Result file, finish lock and work folder of one upload (all inside STAGE, same disk as the .part)."""
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,40}", uid):
+        raise HTTPException(404, "no such upload")
     return STAGE / f"{uid}.result.json", STAGE / f"{uid}.finishing", STAGE / f"{uid}.work"
 
 
@@ -170,14 +186,75 @@ def _sweep() -> None:
             pass
 
 
+def sweep_stale_files() -> dict:
+    """Hourly housekeeping by age (T0931 item 13, 2026-11-20). Returns counts, for the log and the tests.
+
+    - STAGE/*.part with no .json (an upload whose meta never got written, or was cancelled mid-write), STAGE
+      *.tmp (a crashed _write_atomic) and *.finishing.*.old (item 12): older than 1 hour -> deleted. Nothing
+      a person sent is lost: a .part with its .json is the 48 h _sweep()'s business, not this one's.
+    - STAGE/*.work folders older than STALE_HOURS that are not empty: a crash mid-finish. The bytes are moved
+      to FAILED (keep_failed), never deleted; the phone has long since stopped asking.
+    - TMPDIR intake-*/drop-*/share-* folders older than 24 h (a crash inside a request): moved to FAILED too.
+    """
+    done = {"parts": 0, "tmp": 0, "work_kept": 0, "tmpdir_kept": 0}
+    now = time.time()
+    try:
+        names = {p.stem for p in STAGE.glob("*.json")}
+        for p in STAGE.glob("*.part"):
+            if p.stem not in names and now - p.stat().st_mtime > 3600:
+                p.unlink(missing_ok=True)
+                _got(p.stem).unlink(missing_ok=True)
+                done["parts"] += 1
+        for pat in ("*.tmp", "*.finishing.*.old"):
+            for p in STAGE.glob(pat):
+                if now - p.stat().st_mtime > 3600:
+                    p.unlink(missing_ok=True)
+                    done["tmp"] += 1
+        for w in STAGE.glob("*.work"):
+            if w.is_dir() and now - w.stat().st_mtime > STALE_HOURS * 3600:
+                if keep_failed(w, "?", w.stem, [{"status": "error", "why": "left by a crash"}], f"{w.stem}-work"):
+                    done["work_kept"] += 1
+                shutil.rmtree(w, ignore_errors=True)
+        td = os.environ.get("TMPDIR")
+        for pref in ("intake-", "drop-", "share-"):
+            for d in (pathlib.Path(td).glob(pref + "*") if td else []):
+                if d.is_dir() and now - d.stat().st_mtime > 86400:
+                    keep_failed(d, "?", d.name, [{"status": "error", "why": "left by a crash"}])
+                    shutil.rmtree(d, ignore_errors=True)
+                    done["tmpdir_kept"] += 1
+    except OSError as e:
+        _say(f"sweep stopped: {e.strerror}")
+    if any(done.values()):
+        _say(f"sweep {done}")
+    return done
+
+
+async def sweep_loop(every: float = 3600.0) -> None:
+    """Run sweep_stale_files() and the 48 h _sweep() every hour in a worker thread (started by app's lifespan)."""
+    while True:
+        await asyncio.sleep(every)
+        try:
+            await asyncio.to_thread(_sweep)
+            await asyncio.to_thread(sweep_stale_files)
+        except Exception as e:  # noqa: BLE001  -- housekeeping must never stop the loop
+            _say(f"sweep error {type(e).__name__}")
+
+
 @router.post("/up/start")
 async def start(request: Request, x_auth_email: str | None = Header(default=None)):
     email = _who(x_auth_email)
-    body = await request.json()
-    name = pathlib.PurePosixPath(str(body.get("name") or "shared")).name[:200] or "shared"
-    if name in (".", ".."):              # A10: PurePosixPath('..').name == '..' -> target was the folder itself
-        name = "shared"
-    size = int(body.get("size") or 0)
+    try:
+        body = await request.json()
+        size = int(body.get("size") or 0)
+    except (ValueError, TypeError, AttributeError):   # T0931 item 17: plain words, not a 500 with a trace
+        raise HTTPException(400, "The upload request was not understood. Try again.")
+    from app import safe_name  # late import: app imports this module
+    # T0931 item 9 (2026-11-20): safe_name (NUL, control characters, newlines, separators) instead of only
+    # PurePosixPath(...).name; the same function /intake and /upload already use. A10's rule stays: "." and
+    # ".." (and empty) are still filed as "shared" (safe_name alone would say "unnamed"), so nothing changes
+    # for names that were fine before.
+    raw = pathlib.PurePosixPath(str(body.get("name") or "shared")).name
+    name = safe_name("shared" if raw in ("", ".", "..") else raw)
     if size < 0 or size > MAX_MB * 1048576:
         raise HTTPException(413, f"This file is bigger than the {MAX_MB / 1024:g} GB limit.")
     hint = body.get("hint") if body.get("hint") in ("video",) else None
@@ -186,6 +263,26 @@ async def start(request: Request, x_auth_email: str | None = Header(default=None
     if shutil.disk_usage(STAGE).free < size + RESERVE:   # A11: refuse up front, not after 2 GB arrived
         raise HTTPException(507, "The server is short of space. Try again later.")
     _sweep()
+    # T0931 item 15 (2026-11-20): idempotent start. A phone that never saw the answer (signal lost right after
+    # POST /up/start) used to start a second upload and send the whole file twice. When the page sends
+    # lastModified, the key is sha256(email|name|size|lastModified); an unfinished upload with the same key
+    # is handed back ("resumed": true) and the page carries on from GET /up/{id}. No lastModified = as before.
+    key = None
+    lm = body.get("lastModified")
+    if isinstance(lm, (int, float)) and not isinstance(lm, bool) and lm > 0:
+        key = hashlib.sha256(f"{email}|{name}|{size}|{int(lm)}".encode()).hexdigest()
+        for mp in STAGE.glob("*.json"):
+            if mp.name.endswith(".result.json"):
+                continue
+            try:
+                m = json.loads(mp.read_text())
+            except (OSError, ValueError):
+                continue
+            if (m.get("key") == key and m.get("email") == email and mp.with_suffix(".part").exists()
+                    and not _extra(mp.stem)[1].exists()):
+                _say(f"start resumed uid={mp.stem} size={size}")
+                return {"id": mp.stem, "offset": 0, "chunk": m["chunk"], "parallel": bool(m.get("parallel")),
+                        "resumed": True}
     if _open_count(email) >= MAX_OPEN:   # T0931: one person cannot fill the disk with half-sent uploads
         raise HTTPException(429, "Too many unfinished uploads. Let some finish, then try again.")
     uid = secrets.token_urlsafe(16)
@@ -209,14 +306,17 @@ async def start(request: Request, x_auth_email: str | None = Header(default=None
             if e.errno not in (errno.EOPNOTSUPP, errno.EINVAL):
                 os.close(fd)
                 part.unlink(missing_ok=True)
-                raise
+                _say(f"start failed uid={uid} errno={e.errno}")
+                raise HTTPException(500, "The server could not prepare space for this file. Try again later.")
             os.ftruncate(fd, size)
         os.close(fd)
         _got(uid).touch()
     else:
         part.touch()
     _write_atomic(meta_p, json.dumps({"email": email, "name": name, "size": size, "started": time.time(),
-                                      "hint": hint, "shelf": shelf, "parallel": parallel, "chunk": chunk}))
+                                      "hint": hint, "shelf": shelf, "parallel": parallel, "chunk": chunk,
+                                      "key": key}))
+    _say(f"start uid={uid} size={size} parallel={parallel}")
     return {"id": uid, "offset": 0, "chunk": chunk, "parallel": parallel}
 
 
@@ -235,6 +335,8 @@ BIG_FILE = 256 * 1048576
 
 
 def _got(uid: str) -> pathlib.Path:
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,40}", uid):
+        raise HTTPException(404, "no such upload")
     return STAGE / f"{uid}.got"
 
 
@@ -295,6 +397,12 @@ async def piece_at(uid: str, n: int, request: Request, x_auth_email: str | None 
         raise HTTPException(416, "no such piece")
     expect = min(c, meta["size"] - n * c)
     want = (request.headers.get("x-piece-sha256") or "").strip().lower()
+    if not re.fullmatch(r"[0-9a-f]{64}", want):
+        # T0931 item 11 (2026-11-20): numbered pieces are written straight into the file, so a piece without
+        # a checksum could put damaged bytes in place with nothing to catch it. The page always sends it
+        # (Web Crypto exists on https; atomic_ui.py sum()). 428 = "send it with its checksum".
+        return JSONResponse({"piece": n, "error": "This piece needs its checksum. Reload the page and try again."},
+                            status_code=428)
     buf = bytearray()
     async for data in request.stream():
         if len(buf) + len(data) > expect:
@@ -302,12 +410,12 @@ async def piece_at(uid: str, n: int, request: Request, x_auth_email: str | None 
         buf += data
     if len(buf) != expect:               # cut off: not listed, the page sends it again
         return JSONResponse({"piece": n, "error": "This piece was cut short. Sending it again."}, status_code=400)
-    if want and hashlib.sha256(buf).hexdigest() != want:
+    if hashlib.sha256(buf).hexdigest() != want:
         return JSONResponse({"piece": n, "checksum": True}, status_code=422)
     if n in _have(uid):                  # a retry of a piece that is already in whole: keep the good copy
         os.utime(meta_p)
         return {"piece": n, "already": True}
-    _, lock_p, _ = _extra(uid)
+    lock_p = _extra(uid)[1]
     try:
         fd = os.open(part, os.O_WRONLY)
     except FileNotFoundError:            # finish already took the file
@@ -323,8 +431,11 @@ async def piece_at(uid: str, n: int, request: Request, x_auth_email: str | None 
             if e.errno == errno.ENOSPC:
                 raise HTTPException(507, "The server is short of space. Try again later.")
             raise
-        with open(_got(uid), "a") as g:  # O_APPEND: whole short lines, safe with several pieces at once
-            g.write(f"{n}\n")
+        gfd = os.open(_got(uid), os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+        try:                             # O_APPEND: whole short lines, safe with several pieces at once
+            os.write(gfd, f"{n}\n".encode())
+        finally:
+            os.close(gfd)
     finally:
         os.close(fd)                     # closing drops the flock
     os.utime(meta_p)
@@ -367,16 +478,31 @@ async def finish(uid: str, x_auth_email: str | None = Header(default=None)):
     and anything not filed is moved to FAILED with a note instead of being deleted.
     """
     email = _who(x_auth_email)
-    meta, part, meta_p = _load(uid, email)
+    meta, part, _ = _load(uid, email)
     res_p, lock_p, work = _extra(uid)
     if res_p.exists():
         return JSONResponse(json.loads(res_p.read_text()))
     try:
         os.close(os.open(lock_p, os.O_CREAT | os.O_EXCL | os.O_WRONLY))
     except FileExistsError:
-        if time.time() - lock_p.stat().st_mtime < LOCK_STALE:
+        try:
+            old = time.time() - lock_p.stat().st_mtime
+        except FileNotFoundError:        # the other finish just ended: let the phone ask again
             return JSONResponse({"offset": meta["size"], "working": True}, status_code=409)
-        lock_p.touch()                   # left by a restart mid-finish: take it over
+        if old < LOCK_STALE:
+            return JSONResponse({"offset": meta["size"], "working": True}, status_code=409)
+        # T0931 item 12 (2026-11-20): the takeover was lock_p.touch(), so two phones retrying at the same
+        # moment both "took over" and both ran the filing. rename() of the old lock to a private name is
+        # atomic: exactly one caller moves it, the other gets FileNotFoundError and waits; the winner then
+        # creates the lock with O_EXCL again. (Start-up also clears every lock, _clear_finish_locks.)
+        try:
+            os.rename(lock_p, lock_p.with_name(f"{lock_p.name}.{secrets.token_hex(4)}.old"))
+        except FileNotFoundError:
+            return JSONResponse({"offset": meta["size"], "working": True}, status_code=409)
+        try:
+            os.close(os.open(lock_p, os.O_CREAT | os.O_EXCL | os.O_WRONLY))
+        except FileExistsError:
+            return JSONResponse({"offset": meta["size"], "working": True}, status_code=409)
     name = meta["name"]
     work.mkdir(exist_ok=True)
     target = work / name
@@ -416,10 +542,15 @@ async def finish(uid: str, x_auth_email: str | None = Header(default=None)):
         # T0931 (U14): the raw exception (paths, internals) went to the phone; it now goes to WHY.txt only.
         results = [{"name": name, "status": "error", "why": "This file could not be filed.",
                     "detail": f"{type(e).__name__}: {e}"}]
+    kept = False
     if any(r.get("status") == "error" for r in results) and keep_failed(work, email, name, results, uid):
+        kept = True
         results.append({"name": name, "status": "kept", "why": "not filed; kept safe on the server for Jason"})
     else:
         shutil.rmtree(work, ignore_errors=True)
+    # T0931 item 14 (2026-11-20): one line per finish with uid, size and the verdicts (no names of people, no
+    # paths, no error text): the questions "did it arrive?" and "where did it go?" are answered from the log.
+    _say(f"finish uid={uid} size={meta['size']} results={[r.get('status') for r in results]} kept={kept}")
     results = [{k: v for k, v in r.items() if k != "detail"} for r in results]   # internals stay server-side
     _write_atomic(res_p, json.dumps(results))
     lock_p.unlink(missing_ok=True)
@@ -432,4 +563,5 @@ def cancel(uid: str, x_auth_email: str | None = Header(default=None)):
     part.unlink(missing_ok=True)
     _got(uid).unlink(missing_ok=True)
     meta_p.unlink(missing_ok=True)
+    _say(f"cancel uid={uid}")
     return {"ok": True}

@@ -10,6 +10,7 @@ Run on the PC: python gen_icons.py icons_png.py   (the Dockerfile copies only *.
 import base64
 import io
 import math
+import pathlib
 import sys
 
 from PIL import Image, ImageDraw
@@ -36,4 +37,4 @@ for size in (192, 512):
     img.save(out.replace(".py", f"-{size}.png"))  # preview copy, not shipped
     lines.append(f"ICON_{size} = base64.b64decode({base64.b64encode(buf.getvalue()).decode()!r})")
     print(size, len(buf.getvalue()), "bytes")
-open(out, "w").write("import base64\n\n" + "\n".join(lines) + "\n")
+pathlib.Path(out).write_text("import base64\n\n" + "\n".join(lines) + "\n")

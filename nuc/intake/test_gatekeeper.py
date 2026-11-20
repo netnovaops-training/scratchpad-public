@@ -7,16 +7,19 @@ BASE_ALLOWED: a sandbox whose INTAKE_ALLOWED_PEERS includes this host's address 
 BASE_BLOCKED: a sandbox with INTAKE_ALLOWED_PEERS=127.0.0.1 (the default), i.e. this host is a stranger.
 Talks only to sandboxes on 127.0.0.1 with scratch folders, never the live intake.
 """
+import os
 import sys
 import urllib.error
 import urllib.request
 import uuid
 
 ok_all = True
+# T0931 item 23 (2026-11-20): X-Drop-Key from env INTAKE_KEY when the sandbox has one (it must, item 7).
+KEY = {"X-Drop-Key": os.environ["INTAKE_KEY"]} if os.environ.get("INTAKE_KEY") else {}
 
 
 def call(base, path, method="GET", headers=None, body=None):
-    rq = urllib.request.Request(base + path, data=body, method=method, headers=headers or {})
+    rq = urllib.request.Request(base + path, data=body, method=method, headers={**KEY, **(headers or {})})
     try:
         with urllib.request.urlopen(rq, timeout=60) as r:
             return r.status
@@ -41,11 +44,14 @@ def multipart(filename, data, fields):
 def main():
     allowed, blocked = sys.argv[1], sys.argv[2]
     me = {"X-Auth-Email": "user@example.com"}
+    full = {**me, "X-Auth-Level": "full"}
     check("allowed peer: /healthz 200", call(allowed, "/healthz") == 200)
     check("stranger peer: /healthz 403", call(blocked, "/healthz") == 403)
     body, h = multipart("x.pdf", b"%PDF-1.4 test", {})
     check("stranger peer with a forged email: /upload 403",
           call(blocked, "/upload", "POST", {**h, **me}, body) == 403)
+    check("no level on a write (item 8): /upload 403", call(allowed, "/upload", "POST", {**h, **me}, body) == 403)
+    check("full level: /upload 200", call(allowed, "/upload", "POST", {**h, **full}, body) == 200)
     check("view-only level: /upload 403",
           call(allowed, "/upload", "POST", {**h, **me, "X-Auth-Level": "view"}, body) == 403)
     check("view-only level: GET / still 200", call(allowed, "/", headers={**me, "X-Auth-Level": "view"}) == 200)

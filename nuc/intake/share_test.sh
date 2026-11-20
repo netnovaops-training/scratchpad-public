@@ -5,7 +5,7 @@
 set -u
 B=http://intake-sbx:8100
 H="X-Auth-Email: user@example.com"
-cd /tmp
+cd /tmp || exit 1
 echo "== manifest"; curl -s $B/manifest.webmanifest | head -c 160; echo
 echo "== page has manifest link"; curl -s -H "$H" $B/ | grep -c manifest.webmanifest
 printf 'Electric bill\nAccount 0000\nAmount due: 42.10\nDue date: 2026-12-01\n' > bill.txt

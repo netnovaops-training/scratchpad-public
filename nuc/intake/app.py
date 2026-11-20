@@ -45,6 +45,8 @@ pipeline people stop trusting the first time something vanishes.
 """
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import hashlib
 import hmac
 import json
@@ -52,21 +54,20 @@ import os
 import pathlib
 import re
 import shutil
-import urllib.request
-import urllib.parse
 import tempfile
 import time
-
-from fastapi import FastAPI, File, Form, Header, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse, JSONResponse
-from starlette.concurrency import run_in_threadpool
+import urllib.parse
+import urllib.request
 
 # The module as well as the function: GRANT_FOR_KIND and
 # PENDING_ROOT are tables that belong beside the classifier, not
 # copies of them here that would drift the first time one changed.
 import classify as classify_mod
-from classify import PEOPLE, SHELF, classify
 import portal
+from classify import classify
+from fastapi import FastAPI, File, Form, Header, HTTPException, Request, UploadFile
+from fastapi.responses import HTMLResponse, JSONResponse
+from starlette.concurrency import run_in_threadpool
 
 UNSORTED = pathlib.Path(os.environ.get("INTAKE_UNSORTED", "/srv/unsorted"))
 LOG = pathlib.Path(os.environ.get("INTAKE_LOG", "/srv/unsorted/intake.log"))
@@ -87,7 +88,20 @@ if _tmpdir:
 ALLOW: dict[str, str] = json.loads(os.environ.get("TELEGRAM_ALLOW", "{}"))
 MAIL_ALLOW: dict[str, str] = json.loads(os.environ.get("MAIL_ALLOW", "{}"))
 
-app = FastAPI(title="intake")
+@contextlib.asynccontextmanager
+async def _lifespan(_app):
+    """Start the hourly sweep of leftovers (T0931 item 13, 2026-11-20); stop it with the app."""
+    import resumable
+    task = asyncio.create_task(resumable.sweep_loop())
+    if not INTAKE_TOKEN:
+        say("WARNING: INTAKE_TOKEN is not set; /intake still accepts the shared drop key (T0931 item 10)")
+    try:
+        yield
+    finally:
+        task.cancel()
+
+
+app = FastAPI(title="intake", lifespan=_lifespan)
 
 # ---------------------------------------------------------------------------
 #  WHO MAY TALK TO THIS CONTAINER AT ALL (T0924 A1, 2026-11-19)
@@ -105,47 +119,100 @@ app = FastAPI(title="intake")
 #
 #  A7: X-Auth-Level "view" may look but not write. The gate already refuses
 #  most view-only writes (rust/auth view_blocks); this is the second lock.
+#  T0931 item 8 (2026-11-20): the second lock is now an ALLOW-list, not a deny-list. A write needs
+#  X-Auth-Level "full" (Caddy copies it from /verify for every signed-in person: "full" or "view").
+#  Outcome of the check on the code: the gate always sends one of the two, so no phone is affected; a
+#  missing or odd value used to pass as if it were "full". Two explicit exceptions, both for callers that
+#  never pass the gate and so have no level:
+#    - the PC auth service (/app/file -> POST /upload): a peer listed in INTAKE_SERVICE_PEERS
+#      (default 192.168.1.100) that sends the right X-Drop-Key;
+#    - n8n -> POST /intake: with INTAKE_TOKEN set, it must send X-Intake-Token (item 10, below).
 #
 #  SHARED KEY (T0925 part 2, 2026-11-19): an allowed address alone is not
-#  enough. Any other process on the NUC host is also "192.168.1.86". When
-#  INTAKE_KEY is set, every peer except 127.0.0.1 (the healthcheck) must send
-#  X-Drop-Key with that value: Caddy adds it (header_up X-Drop-Key
-#  {env.DROP_KEY}), the PC auth service adds it from its own INTAKE_KEY.
-#  Unset = not enforced, so the rollout can go Caddy + PC first, intake last.
-#  Compared with hmac.compare_digest (no timing hint about the value).
+#  enough. Any other process on the NUC host is also "192.168.1.86". Every
+#  peer except 127.0.0.1 (the healthcheck) must send X-Drop-Key with the
+#  INTAKE_KEY value: Caddy adds it (header_up X-Drop-Key {env.DROP_KEY}),
+#  the PC auth service adds it from its own INTAKE_KEY.
+#  T0931 item 7 (2026-11-20): INTAKE_KEY unset is no longer "not enforced"; the app REFUSES TO START
+#  (the live container has had it set since 11-19, so nothing changes there). Compared with
+#  hmac.compare_digest (no timing hint about the value).
+#
+#  T0931 item 10: /intake is called by n8n, which is not a person and not Caddy. Sharing the drop key
+#  with Caddy and the PC meant any of them could post files "from" any Telegram sender. When
+#  INTAKE_TOKEN is set, /intake wants X-Intake-Token (and the drop key alone no longer opens it).
+#  Unset = the old rule (drop key) so the rollout can go intake first, n8n second; a warning is logged.
 # ---------------------------------------------------------------------------
 ALLOWED_PEERS = {p.strip() for p in
                  os.environ.get("INTAKE_ALLOWED_PEERS", "127.0.0.1").split(",") if p.strip()}
+SERVICE_PEERS = {p.strip() for p in
+                 os.environ.get("INTAKE_SERVICE_PEERS", "192.168.1.100").split(",") if p.strip()}
 DROP_KEY = os.environ.get("INTAKE_KEY", "").strip().encode()
+INTAKE_TOKEN = os.environ.get("INTAKE_TOKEN", "").strip().encode()
+if not DROP_KEY:
+    raise RuntimeError("INTAKE_KEY is not set: refusing to start (T0931 item 7). Set it in compose.")
 READ_METHODS = {"GET", "HEAD", "OPTIONS"}
 VIDEO_EXT = {".mp4", ".m4v", ".mkv", ".mov", ".webm", ".avi", ".wmv", ".mpg", ".mpeg", ".ts", ".3gp"}
 
 
+def _same(sent: str | None, want: bytes) -> bool:
+    return bool(want) and hmac.compare_digest((sent or "").strip().encode(), want)
+
+
 @app.middleware("http")
 async def gatekeeper(request: Request, call_next):
-    """Refuse unknown peers (A1), peers without the shared key, and writes by view-only users (A7)."""
+    """Refuse unknown peers (A1), peers without the shared key, and writes that are not "full" (A7/item 8)."""
     peer = request.client.host if request.client else ""
     if peer not in ALLOWED_PEERS:
         return JSONResponse({"error": "not allowed from this address"}, status_code=403)
-    if DROP_KEY and peer != "127.0.0.1":
-        sent = (request.headers.get("x-drop-key") or "").strip().encode()
-        if not hmac.compare_digest(sent, DROP_KEY):
-            return JSONResponse({"error": "not allowed without the service key"}, status_code=403)
+    write = request.method not in READ_METHODS
     level = (request.headers.get("x-auth-level") or "").strip().lower()
-    if level == "view" and request.method not in READ_METHODS:
-        return JSONResponse({"error": "your access here is view-only"}, status_code=403)
+    token_door = write and request.url.path == "/intake" and bool(INTAKE_TOKEN)
+    if token_door:                       # n8n: its own token instead of the drop key
+        if not _same(request.headers.get("x-intake-token"), INTAKE_TOKEN):
+            return JSONResponse({"error": "not allowed without the intake token"}, status_code=403)
+        return await call_next(request)
+    key_ok = _same(request.headers.get("x-drop-key"), DROP_KEY)
+    if peer != "127.0.0.1" and not key_ok:
+        return JSONResponse({"error": "not allowed without the service key"}, status_code=403)
+    if write and level != "full":
+        service = (key_ok and not level and peer != "127.0.0.1"
+                   and ((peer in SERVICE_PEERS and request.url.path == "/upload") or request.url.path == "/intake"))
+        if not service:
+            return JSONResponse({"error": "your access here is view-only"}, status_code=403)
     return await call_next(request)
 
 
+_LOG_MAX = int(os.environ.get("INTAKE_LOG_MAX_MB", "5")) * 1048576
+
+
+def _rotate_log() -> None:
+    """Keep intake.log from growing for ever: past _LOG_MAX it becomes .1 (.1 -> .2 -> .3, oldest dropped).
+
+    T0931 item 14 (2026-11-20): the log was append-only. Checked with a 6 KB limit in test_t0931b.py.
+    """
+    try:
+        if LOG.stat().st_size < _LOG_MAX:
+            return
+        for i in (2, 1):
+            src = LOG.with_name(f"{LOG.name}.{i}")
+            if src.exists():
+                os.replace(src, LOG.with_name(f"{LOG.name}.{i + 1}"))
+        os.replace(LOG, LOG.with_name(f"{LOG.name}.1"))
+    except OSError:
+        pass                             # no log yet, or a race with another writer: try again next line
+
+
 def say(msg: str) -> None:
+    """Print one line and append it to intake.log. Never put keys, tokens or file contents in `msg`."""
     line = f"{time.strftime('%Y-%m-%d %H:%M:%S')}  {msg}"
     print(line, flush=True)
     try:
         LOG.parent.mkdir(parents=True, exist_ok=True)
+        _rotate_log()
         with LOG.open("a", encoding="utf-8") as f:
             f.write(line + "\n")
-    except Exception:
-        pass
+    except OSError as e:
+        print(f"(log file not written: {e.strerror})", flush=True)   # the line above is still in docker logs
 
 
 def sha256(path: pathlib.Path) -> str:
@@ -166,7 +233,9 @@ def safe_name(name: str) -> str:
     both separators are stripped before it.
     """
     name = name.replace("\\", "/").split("/")[-1]
-    name = re.sub(r"[\x00-\x1f]", "", name).strip().lstrip(".")
+    # T0931 item 9: also DEL, the C1 controls and the Unicode line/paragraph separators (they split a log line
+    # or a WHY.txt just like \n does).
+    name = re.sub(r"[\x00-\x1f\x7f-\x9f\u2028\u2029]", "", name).strip().lstrip(".")
     name = re.sub(r'[<>:"|?*]', "_", name)
     return name[:200] or "unnamed"
 
@@ -178,11 +247,11 @@ def place(tmp: pathlib.Path, dest_dir: pathlib.Path, name: str,
     # Already here, under any name? The checksum decides, so a volume
     # re-sent from a phone does not land twice.
     for existing in dest_dir.iterdir():
-        if existing.is_file() and existing.stat().st_size == tmp.stat().st_size:
-            if sha256(existing) == digest:
-                tmp.unlink(missing_ok=True)
-                say(f"  duplicate of {existing.name}, skipped")
-                return {"status": "duplicate", "path": str(existing)}
+        if (existing.is_file() and existing.stat().st_size == tmp.stat().st_size
+                and sha256(existing) == digest):
+            tmp.unlink(missing_ok=True)
+            say(f"  duplicate of {existing.name}, skipped")
+            return {"status": "duplicate", "path": str(existing)}
 
     target = dest_dir / name
     if target.exists():
@@ -215,7 +284,7 @@ def healthz():
         probe.write_text("ok")
         probe.unlink()
     except OSError as e:
-        problems.append(f"staging not writable: {e.strerror or e}")
+        problems.append(f"staging not writable: {e.strerror or 'error'}")
     try:
         free_mb = shutil.disk_usage(resumable.STAGE).free // 1048576
         if free_mb * 1048576 < resumable.RESERVE:
@@ -223,14 +292,24 @@ def healthz():
     except OSError as e:
         free_mb = -1
         problems.append(f"no disk info: {e.strerror or e}")
-    body = {"ok": not problems, "free_mb": free_mb, "problems": problems,
+    # T0931 item 13 (2026-11-20): (a) INTAKE_SENTINELS = comma list of files that exist only while a NAS share is
+    # mounted (e.g. /srv/books/.mounted); a missing one means "unmounted, files would land on the local disk"
+    # -> 503. (b) how many files wait in .failed for the owner (information only, not a failure).
+    for sentinel in [x.strip() for x in os.environ.get("INTAKE_SENTINELS", "").split(",") if x.strip()]:
+        if not pathlib.Path(sentinel).exists():
+            problems.append(f"not mounted: {pathlib.PurePosixPath(sentinel).parent.name or sentinel}")
+    try:
+        failed = sum(1 for _ in resumable.FAILED.iterdir()) if resumable.FAILED.is_dir() else 0
+    except OSError:
+        failed = -1
+    body = {"ok": not problems, "free_mb": free_mb, "problems": problems, "failed": failed,
             "allow_telegram": len(ALLOW), "allow_mail": len(MAIL_ALLOW)}
     return JSONResponse(body, status_code=200 if not problems else 503)
 
 
 @app.post("/intake")
 async def intake(
-    file: UploadFile = File(...),
+    file: UploadFile = File(...),  # noqa: B008  -- FastAPI's own parameter pattern (T0931 2026-11-20)
     sender: str = Form(...),
     source: str = Form("telegram"),
     caption: str | None = Form(None),
@@ -354,15 +433,15 @@ def level_for(email: str, app: str) -> str | None:
     """
     if not SERVICE_KEY or not email or not app:
         return None
-    url = "{}?email={}&apps={}".format(
-        AUTH_LEVELS_URL, urllib.parse.quote(email), urllib.parse.quote(app))
+    url = f"{AUTH_LEVELS_URL}?email={urllib.parse.quote(email)}&apps={urllib.parse.quote(app)}"
     req = urllib.request.Request(url)
     req.add_header("X-Service-Key", SERVICE_KEY)
     try:
         with urllib.request.urlopen(req, timeout=10) as r:
             body = json.loads(r.read())
     except Exception as e:  # noqa: BLE001
-        say("level check failed for {} on {}: {}".format(email, app, e))
+        # T0931 item 14: the exception text can hold the URL; log only its type
+        say(f"level check failed for {email} on {app}: {type(e).__name__}")
         return None
     got = (body.get("levels") or {}).get(app)
     return got if got in ("view", "full") else None
@@ -370,14 +449,13 @@ def level_for(email: str, app: str) -> str | None:
 
 @app.post("/upload")
 async def upload(
-    file: UploadFile = File(...),
+    file: UploadFile = File(...),  # noqa: B008  -- FastAPI's own parameter pattern (T0931 2026-11-20)
     hint: str | None = Form(None),
     shelf: str | None = Form(None),
     x_auth_email: str | None = Header(default=None),
 ):
     """Same routing as /intake, but the person comes from the gate."""
     email = (x_auth_email or "").strip().lower()
-    who = _person(email)
     if not email:
         raise HTTPException(401, "no identity from the gate")
 
@@ -475,11 +553,13 @@ def route_file(tmp: pathlib.Path, name: str, size: int, email: str,
 
 
 # Phone share sheet -> Drop (T0872, 2026-11-18): /manifest.webmanifest, /sw.js, /icon.svg, POST /share.
-from share import router as share_router  # noqa: E402
+from share import router as share_router
+
 app.include_router(share_router)
 
 # Atomic Share resumable sends (T0884, 2026-11-18): /up/* pieces + /sending page with progress and resume.
-from resumable import router as resumable_router  # noqa: E402
-from atomic_ui import router as atomic_ui_router  # noqa: E402
+from atomic_ui import router as atomic_ui_router
+from resumable import router as resumable_router
+
 app.include_router(resumable_router)
 app.include_router(atomic_ui_router)

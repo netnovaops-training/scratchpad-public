@@ -59,7 +59,7 @@ def main():
 
     # A3: a text file makes the classifier call the (dead) model and wait. Meanwhile /healthz must answer fast.
     body, ctype = multipart("file", "slow-note.txt", b"A note long enough to need the model. " * 20)
-    hdr = {**good, "X-Auth-Email": ME, "Content-Type": ctype}
+    hdr = {**good, "X-Auth-Email": ME, "X-Auth-Level": "full", "Content-Type": ctype}
     done = {}
     t = threading.Thread(target=lambda: done.update(r=call(base, "/upload", "POST", hdr, body)))
     t0 = time.time()
@@ -82,7 +82,7 @@ def main():
     # grant, the same verdict files it to /srv/books/robin. The shelf itself is checked by
     # `docker exec <sandbox> python -c "import classify; print(classify.SHELF['robin'])"`.
     body, ctype = multipart("file", "robin-test-book.epub", b"PK\x03\x04 not really an epub")
-    st, res = call(base, "/upload", "POST", {**good, "X-Auth-Email": ROBIN, "Content-Type": ctype}, body)
+    st, res = call(base, "/upload", "POST", {**good, "X-Auth-Email": ROBIN, "X-Auth-Level": "full", "Content-Type": ctype}, body)
     got = json.loads(res) if st == 200 else {}
     path = got.get("path", "")
     check(f"robin's .epub is his book, not unsorted ({st} {path})",
@@ -91,7 +91,7 @@ def main():
 
     # A10 on the share door: a file named '..' is filed, not a 500.
     body, ctype = multipart("files", "..", b"dotdot share")
-    st, _ = call(base, "/share", "POST", {**good, "X-Auth-Email": ME, "Content-Type": ctype,
+    st, _ = call(base, "/share", "POST", {**good, "X-Auth-Email": ME, "X-Auth-Level": "full", "Content-Type": ctype,
                                           "Accept": "application/json"}, body)
     check(f"share of a file named '..' -> 200 ({st})", st == 200)
 

@@ -35,10 +35,10 @@ from __future__ import annotations
 import html
 import ipaddress
 import json
+import pathlib
 import re
 import socket
 import tempfile
-import pathlib
 import urllib.parse
 import zipfile
 
@@ -85,7 +85,7 @@ ICON = (  # Jason 11-18: the share card is "Atomic Share"; the atom echoes his a
 # nothing, so the page is never stale and no file ever sits in the phone's cache.
 # T0884 (2026-11-18): the service worker now catches the share POST and keeps the files on the phone
 # until /sending uploads them in resumable pieces; see atomic_ui.py. Plain POST /share below still works.
-from atomic_ui import SW  # noqa: E402
+from atomic_ui import SW
 
 
 @router.get("/manifest.webmanifest")
@@ -151,6 +151,7 @@ def _is_gemini(url: str | None) -> bool:
 def _pdf_text(pdf: bytes) -> str:
     """Plain text of a PDF, letters only spaced as printed (Gemini's font spaces every letter: 'H i ,  I 'm')."""
     import io
+
     import pypdf
     raw = " ".join((pg.extract_text() or "") for pg in pypdf.PdfReader(io.BytesIO(pdf)).pages)
     return re.sub(r"\s+", "", raw).lower()
@@ -192,7 +193,7 @@ async def _file(data_path: pathlib.Path, name: str, email: str,
         res = await run_in_threadpool(route_file, data_path, safe_name(name), data_path.stat().st_size, email,
                                       hint, shelf)
         return {"name": name, **res}
-    except Exception as e:  # HTTPException or anything else: report it, keep going with the rest
+    except Exception as e:  # noqa: BLE001  -- HTTPException or anything else: report it, keep going with the rest
         # T0931 (U14): an HTTPException's detail is written for people; any other error's text is internal
         # (paths, library names), so the phone gets plain words and the text goes to WHY.txt as "detail".
         if hasattr(e, "detail"):
@@ -223,9 +224,11 @@ async def _unzip_and_file(path: pathlib.Path, email: str, tmp: pathlib.Path) -> 
             if total > ZIP_MAX_MB * 1048576:
                 out.append({"name": m.filename, "status": "skipped", "why": f"zip over {ZIP_MAX_MB}MB"})
                 break
-            name = pathlib.PurePosixPath(m.filename).name  # drop folders: no ../ escapes
-            if not name or name.startswith("."):
-                continue
+            from app import safe_name  # late import: app imports this module
+            raw = pathlib.PurePosixPath(m.filename.replace("\\", "/")).name   # drop folders: no ../ escapes
+            if not raw or raw.startswith("."):
+                continue                       # hidden files (".DS_Store") were skipped before; still are
+            name = safe_name(raw)              # T0931 item 9: and no control characters in the name
             target = tmp / f"z{len(out)}-{name}"
             await run_in_threadpool(_extract, z, m, target)
             out.append(await _file(target, name, email))
@@ -250,6 +253,7 @@ class _Skip(Exception):
 
 @router.post("/share")
 async def share(request: Request, x_auth_email: str | None = Header(default=None)):
+    from app import safe_name  # late import: app imports this module
     email = (x_auth_email or "").strip().lower()
     if not email:
         return HTMLResponse(_page([{"name": "-", "status": "error", "why": "no identity from the gate"}]), 401)
@@ -260,9 +264,10 @@ async def share(request: Request, x_auth_email: str | None = Header(default=None
     tmp = pathlib.Path(tempfile.mkdtemp(prefix="share-"))
     try:
         for f in files:
-            name = pathlib.PurePosixPath(f.filename).name
-            if name in ("", ".", ".."):        # A10: '..' made p the folder itself -> 500
-                name = "shared"
+            # T0931 item 9 (2026-11-20): safe_name (separators, NUL, control and line-separator characters)
+            # instead of PurePosixPath(...).name; A10's rule stays: "", "." and ".." are filed as "shared".
+            raw = pathlib.PurePosixPath(f.filename).name
+            name = safe_name("shared" if raw in ("", ".", "..") else raw)
             p = tmp / name
             with p.open("wb") as out:
                 while chunk := await f.read(1 << 20):
@@ -296,7 +301,8 @@ async def share(request: Request, x_auth_email: str | None = Header(default=None
                                                    "publicly, was un-shared, or the link is cut off"})
                             raise _Skip
                         import datetime
-                        name = "Gemini chat - " + _slug(title, datetime.date.today().isoformat()) + ".pdf"
+                        today = datetime.datetime.now().astimezone().date().isoformat()  # server-local date, as date.today() was
+                        name = "Gemini chat - " + _slug(title, today) + ".pdf"
                     p = tmp / name
                     p.write_bytes(pdf)
                     results.append(await _file(p, name, email))
@@ -310,6 +316,7 @@ async def share(request: Request, x_auth_email: str | None = Header(default=None
         # T0931 (re-audit A5): this used to delete everything left in tmp, including files that failed to
         # file. Anything left after an error is now kept in .failed with a WHY.txt, like /up/finish does.
         import shutil
+
         from resumable import keep_failed
         if any(r.get("status") == "error" for r in results) and keep_failed(
                 tmp, email, ", ".join(r.get("name", "?") for r in results), results):

@@ -50,9 +50,9 @@ feature.
 """
 from __future__ import annotations
 
-import json
 import os
 import re
+import threading
 import time
 import zipfile
 
@@ -76,6 +76,10 @@ LLM_KEY = os.environ.get("LITELLM_KEY", "")
 # it, and is no less accurate on a four-way choice.
 LLM_MODEL = os.environ.get("INTAKE_MODEL", "mama")
 LLM_TIMEOUT = float(os.environ.get("INTAKE_LLM_TIMEOUT", "120"))
+# T0931 item 16 (2026-11-20): one model call at a time. Three parallel pieces x a few phones can finish several
+# files at once; each ask_model holds a worker thread for up to 2 x LLM_TIMEOUT, and a single 7B model on the
+# PC only queues them anyway. One at a time keeps the thread pool free for uploads; the others wait their turn.
+_MODEL_LOCK = threading.Semaphore(1)
 
 # --------------------------------------------------------------------------
 # WHO. A caption tag or the sending account, and nothing else.
@@ -93,14 +97,14 @@ PEOPLE = {
 
 # Where each person's things live, mirroring the mounts Kavita already has.
 SHELF = {
-    "casey": dict(manga="/srv/manga/casey", books="/srv/books/casey"),
-    "alex": dict(manga="/srv/manga/alex", books="/srv/books/alex"),
-    "jason": dict(manga="/srv/manga/jason", books="/srv/books/jason"),
-    "mom": dict(manga="/srv/manga/mom", books="/srv/books/mom"),
+    "casey": {"manga": "/srv/manga/casey", "books": "/srv/books/casey"},
+    "alex": {"manga": "/srv/manga/alex", "books": "/srv/books/alex"},
+    "jason": {"manga": "/srv/manga/jason", "books": "/srv/books/jason"},
+    "mom": {"manga": "/srv/manga/mom", "books": "/srv/books/mom"},
     # T0925 part 2 (A12, 2026-11-19): robin was in PEOPLE and portal.WHO but had no shelf, so his books
     # went to unsorted. /home/user/documents/robin already exists (owner server, 700). Kavita does not
     # mount it yet (only jason, alex, casey); that is a separate item.
-    "robin": dict(manga="/srv/manga/robin", books="/srv/books/robin"),
+    "robin": {"manga": "/srv/manga/robin", "books": "/srv/books/robin"},
 }
 
 # Where a kind waits when it is correctly identified but has nowhere to
@@ -189,7 +193,7 @@ def looks_like_comic(path: str, ext: str) -> bool:
             imgs = sum(n.endswith((".jpg", ".jpeg", ".png", ".webp", ".avif"))
                        for n in names)
             return bool(names) and imgs / len(names) > 0.8
-        except Exception:
+        except Exception:  # noqa: BLE001  -- a damaged zip is simply not a comic
             return False
     return False
 
@@ -247,23 +251,22 @@ def ask_model(name: str, text: str) -> str:
     # under it, while the second -- with the model now resident -- returns
     # in under a second. Retrying more than once would just be waiting on
     # something genuinely broken while a user's file sits in a temp dir.
-    last = None
-    for attempt in (1, 2):
-        try:
-            r = httpx.post(f"{LLM_BASE}/v1/chat/completions", json=body,
-                           headers=headers, timeout=LLM_TIMEOUT)
-            r.raise_for_status()
-            out = r.json()["choices"][0]["message"]["content"]
-            break
-        except Exception as e:
-            last = e
-            if attempt == 2:
-                return f"unknown:{type(e).__name__}"
-            time.sleep(2)
+    with _MODEL_LOCK:                    # T0931 item 16
+        for attempt in (1, 2):
+            try:
+                r = httpx.post(f"{LLM_BASE}/v1/chat/completions", json=body,
+                               headers=headers, timeout=LLM_TIMEOUT)
+                r.raise_for_status()
+                out = r.json()["choices"][0]["message"]["content"]
+                break
+            except Exception as e:  # noqa: BLE001  -- never raises (see above): any failure means "unknown"
+                if attempt == 2:
+                    return f"unknown:{type(e).__name__}"
+                time.sleep(2)
 
     # Strip a thinking block if a thinking model is configured after all --
     # cheap insurance against the model behind "big-context" being changed.
-    out = re.sub(r"<think>.*?</think>", "", out, flags=re.S)
+    out = re.sub(r"<think>.*?</think>", "", out, flags=re.DOTALL)
     word = re.sub(r"[^a-z]", "", out.strip().lower().split()[0]) if out.strip() else ""
     return word if word in KINDS else "unknown"
 
@@ -274,7 +277,7 @@ def extract_text(path: str, ext: str, limit: int = 6000) -> str:
         try:
             with open(path, "r", encoding="utf-8", errors="replace") as f:
                 return f.read(limit)
-        except Exception:
+        except Exception:  # noqa: BLE001  -- unreadable file: no text, the caller files it as a scan/unknown
             return ""
     if ext == ".pdf":
         try:
@@ -286,7 +289,7 @@ def extract_text(path: str, ext: str, limit: int = 6000) -> str:
                 if sum(map(len, out)) > limit:
                     break
             return "\n".join(out)[:limit]
-        except Exception:
+        except Exception:  # noqa: BLE001  -- unreadable file: no text, the caller files it as a scan/unknown
             return ""
     if ext == ".epub":
         try:
@@ -297,7 +300,7 @@ def extract_text(path: str, ext: str, limit: int = 6000) -> str:
                     re.sub(r"<[^>]+>", " ", z.read(n).decode("utf-8", "replace"))
                     for n in html)
             return re.sub(r"\s+", " ", txt)[:limit]
-        except Exception:
+        except Exception:  # noqa: BLE001  -- unreadable file: no text, the caller files it as a scan/unknown
             return ""
     return ""
 
@@ -366,9 +369,8 @@ def classify(path: str, filename: str, caption: str | None,
         # folder to drop a file into, and inventing one would put a file
         # somewhere nothing reads. It waits per-person instead, and the
         # remaining hop is an import call against those apps. See TODO.md.
-        dest = "{}/{}/{}".format(PENDING_ROOT, person, kind)
-        why.append("{} needs an import into its own app; held for {}"
-                   .format(kind, person))
+        dest = f"{PENDING_ROOT}/{person}/{kind}"
+        why.append(f"{kind} needs an import into its own app; held for {person}")
     if dest is None:
         why.append("UNSORTED: " + (
             "no person, and a book needs one to have a shelf"

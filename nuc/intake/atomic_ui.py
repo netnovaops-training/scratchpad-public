@@ -81,6 +81,11 @@ const Atomic = (() => {
   const STALL = 8000, CHECKSUM_TRIES = 3;
   const live = new Set(), wakers = new Set();      // requests in flight / pauses that 'online' can cut short
   class Signin extends Error {}
+  // T0931 item 21 (2026-11-20): a 5xx from the server (not 507) is "busy", not "no signal". The page said
+  // "Signal lost" for both. req() now rejects with Busy; send() retries it with the same 1-2-4-8 s waits and
+  // gives up after BUSY_TRIES in a row with a plain-words error (the file stays safe on the phone).
+  class Busy extends Error {}
+  const BUSY_TRIES = 8;
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   const mb = n => n >= 1073741824 ? (n / 1073741824).toFixed(2) + ' GB' : (n / 1048576).toFixed(1) + ' MB';
   function left(s) {                                // U13: "31 min left", not "1834 s left"
@@ -101,6 +106,7 @@ const Atomic = (() => {
       x.onabort = x.onerror = x.ontimeout = () => no(new Error('network'));
       x.onload = () => {
         if (x.status === 401 || /\/auth\//.test(x.responseURL)) return no(new Signin());
+        if (x.status >= 500 && x.status !== 507) return no(new Busy());
         let j = null; try { j = JSON.parse(x.responseText); } catch (_) {}
         if (j === null && x.status < 500) return no(new Signin());   // an HTML sign-in page, not our JSON
         ok({status: x.status, json: j});
@@ -179,13 +185,14 @@ const Atomic = (() => {
     if (broken) throw broken;
   }
   async function send(f, opts, ui) {
-    let tries = 0, damaged = 0;
+    let tries = 0, damaged = 0, busy = 0;
     const fail = (code, why) => [{name: f.name, status: 'error', code, why}];
     for (;;) {
       try {
         if (!f.uid) {
           const s = await req('POST', 'up/start', {name: f.name, size: f.blob.size, hint: opts.hint || null,
-                                                   shelf: opts.shelf || null, parallel: true});
+                                                   shelf: opts.shelf || null, parallel: true,
+                                                   lastModified: f.blob.lastModified || 0});   // T0931 item 15: lets the server hand back an unfinished upload instead of starting a second
           if (s.status !== 200) return fail(s.status, s.json && s.json.detail);
           f.uid = s.json.id; f.chunk = s.json.chunk; await ui.save();
         }
@@ -211,15 +218,19 @@ const Atomic = (() => {
         ui.sorting(false);
         const fin = await req('POST', 'up/' + f.uid + '/finish');
         if (fin.status === 409) { if (fin.json && fin.json.working) { ui.sorting(true); await sleep(3000); } continue; }
-        f.results = Array.isArray(fin.json) ? fin.json : fail(fin.status, 'the server gave an unexpected answer');
+        busy = 0; f.results = Array.isArray(fin.json) ? fin.json : fail(fin.status, 'the server gave an unexpected answer');
         await ui.save(); return f.results;
       } catch (e) {
         if (e instanceof Signin) { ui.signin(); await pause(2e9); continue; }   // until "Try again now"
+        if (e instanceof Busy) {
+          if (++busy > BUSY_TRIES) return fail(503, 'The server could not take this file right now. It is still on your phone: share it again later.');
+          (ui.busy || ui.waiting)(); await pause(Math.min(8000, 1000 * 2 ** Math.min(busy - 1, 3))); continue;
+        }
         ui.waiting(); await pause(Math.min(8000, 1000 * 2 ** Math.min(tries++, 3)));   // 1, 2, 4, 8 s
       }
     }
   }
-  return {send, req, poke, pause, plain, bad, mb, left, sleep, Signin};
+  return {send, req, poke, pause, plain, bad, mb, left, sleep, Signin, Busy};
 })();
 """
 
@@ -235,16 +246,16 @@ main{max-width:560px;margin:0 auto;padding:24px 16px calc(24px + env(safe-area-i
 .atom{display:block;width:min(56vw,240px);height:auto;margin:8px auto 4px;overflow:visible}
 .atom .nucleus{transform-origin:48px 48px;animation:pulse 1.6s ease-in-out infinite}
 .atom .glow{opacity:.8;transform-origin:48px 48px;animation:pulse 1.6s ease-in-out infinite}
-body.done .nucleus,body.done .glow{animation:none}
+body.done .nucleus,body.done .glow,body.bad .nucleus,body.bad .glow{animation:none}   /* T0931 item 20: stop the pulse on error too */
 body.done .nucleus{fill:var(--ok)}body.bad .nucleus{fill:var(--bad)}
 @keyframes pulse{50%{transform:scale(1.18)}}
 @media (prefers-reduced-motion:reduce){.atom .orbits,.atom .nucleus,.atom .glow{animation:none}.proton{display:none}}
 h1{font-size:1.35rem;margin:8px 0 2px;text-align:center}#state{color:var(--dim);text-align:center;margin:0 0 16px;min-height:1.5em}
-.bar{height:14px;border-radius:7px;background:#1f2852;overflow:hidden}
+.bar{height:14px;border-radius:7px;background:#5a679c;overflow:hidden}   /* T0931 item 22: track #1f2852 was 1.3:1 on the page; #5a679c is 3.1:1 on the page and 3.2:1 on a card (WCAG 1.4.11 needs 3:1) */
 .bar>i{display:block;height:100%;width:100%;background:linear-gradient(90deg,var(--cyan),var(--orange));transform:scaleX(0);transform-origin:left;transition:transform .3s ease-out}
 .bar.indet>i{width:35%;transition:none;animation:slide 1.2s ease-in-out infinite}@keyframes slide{from{transform:translateX(-100%)}to{transform:translateX(290%)}}
 @media (prefers-reduced-motion:reduce){.bar.indet>i{animation:none;width:100%;transform:none;opacity:.5}}
-#nums{display:flex;justify-content:space-between;color:var(--dim);font-size:.85rem;margin:6px 0 18px;font-variant-numeric:tabular-nums}
+#nums{display:flex;justify-content:space-between;color:var(--dim);font-size:1rem;margin:6px 0 18px;font-variant-numeric:tabular-nums}
 ul{list-style:none;padding:0;margin:0}li{background:var(--card);border-radius:12px;padding:12px 14px;margin:0 0 10px}
 li b{display:block;word-break:break-word}li small{color:var(--dim);display:block}li .bar{height:6px;margin-top:8px}
 li.ok b::before{content:"\2713  ";color:var(--ok)}li.err b::before{content:"\2715  ";color:var(--bad)}
@@ -267,9 +278,9 @@ li small a{display:inline-block;padding:10px 0}
  <circle class=nucleus cx=48 cy=48 r=8 fill="#ff9b3d"/>
 </svg>
 <h1 id=title>Atomic Share</h1><p id=state role=status aria-live=polite>Getting ready…</p>
-<div class=bar id=bar role=progressbar aria-label="Sent so far" aria-valuemin=0 aria-valuemax=100 aria-valuenow=0><i></i></div>
+<div class=bar id=bar role=progressbar aria-label="Sent so far" aria-valuemin=0 aria-valuemax=100 aria-valuenow=0 aria-valuetext="0 percent"><i></i></div>
 <div id=nums aria-hidden=true><span id=pct>0%</span><span id=speed></span><span id=eta></span></div>
-<ul id=list aria-live=polite></ul>
+<ul id=list></ul>   <!-- T0931 item 22: one live region (#state) is enough; a second one read every result twice -->
 <div class=row><a href="./">Back to Drop</a><button id=again hidden>Try again now</button></div>
 </main>
 <script src="atomic.js"></script>
@@ -306,7 +317,8 @@ function spin(t) {
 }
 function mode(m) {
   document.body.className = m; want = SPEED[m] ?? SPEED[''];
-  if (want > 0 && !running) { running = true; last = performance.now(); if (svg.unpauseAnimations) svg.unpauseAnimations(); requestAnimationFrame(spin); }
+  if (want > 0 && !running && !still.matches) {   // T0931 item 20: no requestAnimationFrame at all while reduced motion is on
+    running = true; last = performance.now(); if (svg.unpauseAnimations) svg.unpauseAnimations(); requestAnimationFrame(spin); }
 }
 mode('');
 function say(t) { $('state').textContent = t; }
@@ -317,6 +329,7 @@ function paint() {
   const p = total ? Math.min(100, sent / total * 100) : 0;
   $('bar').firstElementChild.style.transform = 'scaleX(' + (p / 100).toFixed(4) + ')'; $('pct').textContent = p.toFixed(0) + '%';
   $('bar').setAttribute('aria-valuenow', p.toFixed(0));                       // U12
+  $('bar').setAttribute('aria-valuetext', p.toFixed(0) + ' percent');         // T0931 item 22: read as "40 percent", not a bare number
   const secs = (performance.now() - t0) / 1000, rate = secs > 1 ? (sent - sent0) / secs : 0;
   $('speed').textContent = rate ? mb(rate) + '/s' : '';
   $('eta').textContent = rate && sent < total ? Atomic.left((total - sent) / rate) : '';   // U13
@@ -332,41 +345,61 @@ function verdicts(r, results) {                       // U8/U14: plain words, on
   r.bar.remove(); r.li.className = Atomic.bad(results) ? 'err' : 'ok';
   r.s.textContent = results.map(Atomic.plain).join(' ');
 }
+// T0931 item 21: the server answered with an error of its own (5xx): say so, not "Signal lost".
+function busy() { mode('wait'); again(true); say('The server is busy. Trying again… your progress is kept.'); }
 function waiting() { mode('wait'); again(true); say('Signal lost. Waiting to resume… your progress is kept.'); }
-function signedOut(r) { mode('bad'); again(true); say('Sign-in expired. Sign in, then tap Try again now: nothing is lost.');
+function signedOut(r) { working = false; mode('bad'); again(true); say('Sign-in expired. Sign in, then tap Try again now: nothing is lost.');
   r.s.replaceChildren(signinLink()); }
 async function sendFile(rec, f, r) {
   const base = sent, size = f.blob.size;
   return Atomic.send(f, {}, {
     save: () => put(rec),
-    sending: off => { mode('fast'); again(false); say('Sending ' + f.name); r.s.textContent = ''; sent = base + off; paint(); fill(r, off, size); },
+    sending: off => { working = true; mode('fast'); again(false); say('Sending ' + f.name); r.s.textContent = ''; sent = base + off; paint(); fill(r, off, size); },
     progress: n => { sent = base + n; paint(); fill(r, n, size); },
     sorting: more => { mode(''); again(false); say((more ? 'Still sorting ' : 'Sorting ') + f.name + '…');
       r.bar.firstElementChild.style.transform = ''; r.bar.classList.add('indet'); },
-    waiting, signin: () => signedOut(r),
+    waiting, busy, signin: () => signedOut(r),
   });
 }
 async function sendLink(rec, r) {
   r.bar.classList.add('indet'); mode('fast'); say('Reading the page…');
+  // T0931 item 18 (2026-11-20): the answer was used as a list without looking: ONE 403 (or an HTML error page)
+  // made res.json() throw or return an object, and the page then failed on every later try, so a single bad
+  // answer locked the sending page for good. Now: 401/redirect = sign in again (as before); 5xx = busy,
+  // retry; any other non-OK answer or a non-list body = ONE plain error row, and the page goes on.
+  const oops = (code, why) => [{name: rec.url || 'link', status: 'error', code, why}];
+  let busyN = 0;
   for (let tries = 0; ; tries++) {
     try {
       const fd = new FormData(); fd.set('title', rec.title); fd.set('text', rec.text); fd.set('url', rec.url);
       const res = await fetch('share', {method: 'POST', body: fd, headers: {'Accept': 'application/json', 'X-Atomic-Direct': '1'}});
       if (res.redirected || res.status === 401) throw new Atomic.Signin();
-      return await res.json();
+      if (res.status >= 500 && res.status !== 507) throw new Atomic.Busy();
+      if (!res.ok) return oops(res.status, res.status === 403 ? 'you may not add to this library' : 'the server did not accept this link');
+      let j = null; try { j = await res.json(); } catch (_) {}
+      return Array.isArray(j) ? j : oops(res.status, 'the server gave an unexpected answer');
     } catch (e) {
       // U2 (2026-11-19): a link shared while signed out used to be DELETED from the phone. Now it waits,
       // kept, until sign-in and "Try again now", like a file does.
-      if (e instanceof Atomic.Signin) { signedOut(r); await Atomic.pause(2e9); mode('fast'); say('Reading the page…'); continue; }
+      if (e instanceof Atomic.Signin) { signedOut(r); await Atomic.pause(2e9); working = true; mode('fast'); say('Reading the page…'); continue; }
+      if (e instanceof Atomic.Busy) {
+        if (++busyN > 8) return oops(503, 'the server could not take this link right now; share it again later');
+        busy(); await Atomic.pause(Math.min(8000, 1000 * 2 ** Math.min(busyN - 1, 3))); mode('fast'); again(false); continue;
+      }
       waiting(); await Atomic.pause(Math.min(8000, 1000 * 2 ** Math.min(tries, 3))); mode('fast'); again(false);
     }
   }
 }
+// T0931 item 22: leaving while pieces are still going out asks first. (Files wait safely in the phone's own
+// storage, so nothing is lost either way; this only stops an accidental swipe-away mid-send.)
+var working = false;   // var: signedOut() above main() reads it before this line runs
+addEventListener('beforeunload', e => { if (working) { e.preventDefault(); e.returnValue = ''; } });
 async function main() {
+  working = true;
   const k = new URLSearchParams(location.search).get('k');
   let recs = []; try { recs = await getAll(); } catch (_) {}
   recs.sort((a, b) => a.created - b.created);
-  if (!recs.length) { mode('done'); say(k ? 'Already sent.' : 'Nothing waiting to send.'); return; }
+  if (!recs.length) { working = false; mode('done'); say(k ? 'Already sent.' : 'Nothing waiting to send.'); return; }
   total = recs.reduce((n, r) => n + r.files.reduce((m, f) => m + f.blob.size, 0), 0);
   $('bar').classList.toggle('indet', !total); t0 = performance.now(); sent0 = 0;
   $('title').textContent = recs.length > 1 ? 'Sending ' + recs.length + ' shares' : 'Sending';
@@ -382,12 +415,15 @@ async function main() {
       anyBad = anyBad || Atomic.bad(res); }
     await del(rec.key);
   }
+  // T0931 item 19 (2026-11-20): a link-only share has no bytes, so total was 0: the top bar kept its sliding
+  // "indet" state and 0% after "All filed". Now the sliding stops and the bar is full when everything is done.
+  $('bar').classList.remove('indet'); if (!total) total = 1;
   sent = total; paint(); $('speed').textContent = ''; $('eta').textContent = ''; again(false);
   mode(anyBad ? 'bad' : 'done'); say(anyBad ? 'Done, but something needs a look: see below.' : 'All filed.');
-  $('title').textContent = anyBad ? 'Finished' : 'Shared';
+  working = false; $('title').textContent = anyBad ? 'Finished' : 'Shared';
 }
 if (navigator.serviceWorker) navigator.serviceWorker.register('sw.js');
-main().catch(() => { mode('bad'); say('Something went wrong on this page. Tap Back to Drop and share again: files already sent are safe.'); });
+main().catch(() => { working = false; mode('bad'); say('Something went wrong on this page. Tap Back to Drop and share again: files already sent are safe.'); });
 </script>
 """
 

@@ -14,7 +14,10 @@ import sys
 import urllib.error
 import urllib.request
 
-ME = {"X-Auth-Email": "user@example.com", "Content-Type": "application/json"}
+# T0931 item 23 (2026-11-20): sends what Caddy sends: the drop key (env INTAKE_KEY, if the sandbox has one) and
+# X-Auth-Level: full (the gate's second lock, item 8).
+ME = {"X-Auth-Email": "user@example.com", "Content-Type": "application/json", "X-Auth-Level": "full",
+      **({"X-Drop-Key": os.environ["INTAKE_KEY"]} if os.environ.get("INTAKE_KEY") else {})}
 ok_all = True
 
 
@@ -45,7 +48,7 @@ def upload(base, name, data):
 def main():
     base, reserve_base, data_dir = sys.argv[1], sys.argv[2], pathlib.Path(sys.argv[3])
     body = os.urandom(300_000)
-    st, uid = upload(base, "retry-test.bin", body)
+    _, uid = upload(base, "retry-test.bin", body)
     with cf.ThreadPoolExecutor(2) as ex:   # two finishes at once: one files, the other waits or reuses
         a, b = ex.map(lambda _: call(base, "POST", f"/up/{uid}/finish"), range(2))
     codes = sorted([a[0], b[0]])
@@ -58,8 +61,8 @@ def main():
     check("GET after finish: offset == size (phone will not re-send)", st4 == 200 and info["offset"] == len(body))
     filed = list((data_dir / "unsorted").glob("retry-test*.bin"))
     check(f"filed exactly once ({len(filed)} copies)", len(filed) == 1)
-    st, uid2 = upload(base, "..", b"dotdot")
-    st5, res = call(base, "POST", f"/up/{uid2}/finish")
+    _, uid2 = upload(base, "..", b"dotdot")
+    st5, _ = call(base, "POST", f"/up/{uid2}/finish")
     check(f"name '..' is filed as 'shared', not a 500 ({st5})", st5 == 200 and (data_dir / "unsorted" / "shared").exists())
     st6, _ = call(reserve_base, "POST", "/up/start", {"name": "big.bin", "size": 1000})
     check(f"start refused when space is short: {st6} == 507", st6 == 507)

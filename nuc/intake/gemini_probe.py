@@ -1,7 +1,9 @@
 """gemini_probe.py - one-off: what does a Gemini share URL look like to a plain fetch and to gotenberg-web? (2026-11-18)
 Run inside the intake container: python3 /tmp/gemini_probe.py [url ...]. Writes /tmp/probe-N.pdf, prints text size.
 """
+import pathlib
 import sys
+
 import httpx
 
 urls = sys.argv[1:] or ["https://g.co/gemini/share/0a1b2c3d4e5f", "https://gemini.google.com/share/0a1b2c3d4e5f"]
@@ -14,7 +16,7 @@ for n, u in enumerate(urls):
         r = httpx.post("http://gotenberg-web:3000/forms/chromium/convert/url",
                        files={"url": (None, u), "waitDelay": (None, wait)}, timeout=180)
         path = f"/tmp/probe-{n}-{wait}.pdf"
-        open(path, "wb").write(r.content)
+        pathlib.Path(path).write_bytes(r.content)
         txt = ""
         try:
             import pypdf
