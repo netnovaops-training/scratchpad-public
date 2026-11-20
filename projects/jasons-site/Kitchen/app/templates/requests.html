@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Recipe requests{% endblock %}
+{% block sub %}<p class="small muted">Ask a family member to write one down</p>{% endblock %}
+
+{% block body %}
+
+<div class="card">
+  <h2 class="sans">Ask for a recipe</h2>
+  <p class="small muted" style="margin:0 0 .9rem">
+    This makes a link. Send it to whoever you're asking — texting it works
+    fine — and when they open it, sign in, and fill it in, it shows up
+    below as done.
+  </p>
+  <form method="post" action="{{ root }}/requests">
+    <label for="title">What are you asking for?
+      <span class="hint">e.g. “Mama's fried chicken”, “Casey's Alfredo”.</span></label>
+    <input id="title" name="title" required autocomplete="off"
+           placeholder="Mama's fried chicken">
+
+    <label for="for_email">Who's it for?
+      <span class="hint">Optional — just for your own reference on this page.</span></label>
+    <input id="for_email" name="for_email" type="email" autocomplete="off"
+           placeholder="mama@example.com">
+
+    <label for="note">Anything to add?
+      <span class="hint">Optional. Shown to them above the form, e.g. which
+        version you mean.</span></label>
+    <input id="note" name="note" autocomplete="off"
+           placeholder="The one with the buttermilk soak, not the Alabama one">
+
+    <button class="big" type="submit">Make the link</button>
+  </form>
+</div>
+
+{% if not requests %}
+  <div class="card">
+    <p style="margin:0" class="muted">No requests yet.</p>
+  </div>
+{% else %}
+  <div class="card">
+    <ul class="plain">
+      {% for r in requests %}
+        <li style="padding:.8rem 0;border-top:1px solid var(--line)">
+          <div class="row" style="justify-content:space-between;align-items:start;gap:.6rem">
+            <div>
+              <strong>{{ r.title }}</strong>
+              {% if r.for_email %}<span class="small muted"> — {{ r.for_email }}</span>{% endif %}
+              {% if r.note %}<div class="small muted">{{ r.note }}</div>{% endif %}
+            </div>
+            {% if r.fulfilled %}
+              <span class="pill made">done</span>
+            {% else %}
+              <span class="pill">waiting</span>
+            {% endif %}
+          </div>
+          {% if r.fulfilled and r.draft_id %}
+            <p class="small" style="margin:.5rem 0 0">
+              <a href="{{ root }}/r/{{ r.draft_id }}">See the recipe &rarr;</a>
+            </p>
+          {% else %}
+            <p class="small" style="margin:.5rem 0 0">
+              <label class="muted" style="font-size:.8rem;display:block;margin-bottom:.2rem">
+                The link to send:
+              </label>
+              <input type="text" readonly value="{{ r.link }}"
+                     onclick="this.select()" style="font-size:.82rem">
+            </p>
+          {% endif %}
+        </li>
+      {% endfor %}
+    </ul>
+  </div>
+{% endif %}
+
+{% endblock %}

@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Answers — {{ site_name }}{% endblock %}
+{% block body %}
+<h1>Answers</h1>
+<p class="muted">Things {{ helper }} has written down for you, plus anything
+  we've sorted out together. Have a look here first &mdash; it's probably
+  already in here.</p>
+
+<div class="card">
+  <form method="get" action="{{ root }}/guides">
+    <label for="q" style="margin-top:0">Search
+      <span class="hint">One or two words is plenty &mdash; "chicken", "burn", "wifi"</span></label>
+    <div class="row">
+      <input type="text" id="q" name="q" value="{{ q }}" style="flex:1;min-width:10rem">
+      <button type="submit">Look</button>
+      {% if q or category %}<a class="btn secondary" href="{{ root }}/guides">Show all</a>{% endif %}
+    </div>
+  </form>
+</div>
+
+{% if recent %}
+<h2>Recently sorted out</h2>
+<div class="card">
+  <p class="small muted" style="margin-top:0">Things that went wrong lately, and
+    what fixed them.</p>
+  <ul class="threads">
+    {% for t in recent %}
+    <li><a href="{{ root }}/history/{{ t.id }}">{{ t.title }}
+      <span class="when">{{ (t.closed_at or t.updated_at)|fmt_ts }}</span></a></li>
+    {% endfor %}
+  </ul>
+  <p class="small" style="margin-bottom:0"><a href="{{ root }}/history">Everything we've fixed &rarr;</a></p>
+</div>
+{% endif %}
+
+{% if total %}
+<div class="cats">
+  <a href="{{ root }}/guides" class="cat {% if not category %}on{% endif %}">
+    All <span>{{ total }}</span></a>
+  {% for key, items in groups %}
+  <a href="{{ root }}/guides?category={{ key }}"
+     class="cat {% if category == key %}on{% endif %}">
+    {{ categories.get(key, key) }} <span>{{ items|length }}</span></a>
+  {% endfor %}
+</div>
+
+{% for key, items in groups %}
+<h2>{{ categories.get(key, key) }}</h2>
+<div class="card">
+  <ul class="threads">
+    {% for g in items %}
+    <li><a href="{{ root }}/guides/{{ g.id }}">
+      {% if g.pinned %}&#11088; {% endif %}{{ g.title }}
+      {% if g.summary %}<span class="when">{{ g.summary[:70] }}</span>{% endif %}
+    </a></li>
+    {% endfor %}
+  </ul>
+</div>
+{% endfor %}
+{% else %}
+<div class="card"><p class="muted" style="margin:0">
+  {% if q %}Nothing matches that. Try a different word, or just ask me instead.
+  {% else %}Nothing written down yet.{% endif %}</p></div>
+{% endif %}
+
+<div class="notice warn">
+  <strong>If it's an emergency</strong> &mdash; someone can't breathe, chest pain,
+  bad bleeding, a fire &mdash; put this down and dial <strong>911</strong>. Don't
+  look it up first.
+</div>
+
+<style>
+.cats{display:flex;gap:.5rem;flex-wrap:wrap;margin:1.2rem 0}
+.cat{display:inline-flex;align-items:center;gap:.45rem;padding:.6rem 1rem;
+  border:2px solid var(--line);border-radius:999px;text-decoration:none;
+  color:var(--ink);font-weight:700;font-size:1rem;background:var(--panel)}
+.cat.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.cat span{font-size:.85rem;opacity:.75}
+</style>
+{% endblock %}

@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Learned — {{ site_name }}{% endblock %}
+{% block body %}
+{% set page = 'learned' %}{% include "admin_nav.html" %}
+<h1>Learned</h1>
+{% if msg %}<div class="notice ok">{{ msg }}</div>{% endif %}
+
+<div class="card">
+  <p style="margin-top:0">Every night the assistant reads the day's solved problems
+    and writes notes for itself. This is the whole of what it has taught itself —
+    nothing is hidden anywhere else.</p>
+  <p class="small muted" style="margin-bottom:0">
+    These are <strong>observations, not rules</strong>. They are loaded underneath
+    your hand-written rules in <span class="mono">knowledge/</span> and can never
+    override them, and the safety checks run in code regardless of anything
+    written here. Files live in <span class="mono">{{ learned_dir }}</span>.</p>
+</div>
+
+<div class="card">
+  <h2 style="margin-top:0">Run it now</h2>
+  <p class="small muted" style="margin-top:0">Wakes the desktop and takes a few
+    minutes. It normally runs by itself overnight.</p>
+  <form method="post" action="{{ root }}/admin/learned/run">
+    <button type="submit">Run the nightly job</button></form>
+
+  {% if runs %}
+  <table class="grid" style="margin-top:1rem">
+    <tr><th>When</th><th>Tickets</th><th>Notes</th><th>Facts</th><th>Indexed</th><th></th></tr>
+    {% for r in runs %}
+    <tr>
+      <td class="small muted">{{ r.started_at|fmt_ts }}</td>
+      <td>{{ r.tickets }}</td><td>{{ r.notes }}</td>
+      <td>{{ r.facts }}</td><td>{{ r.indexed }}</td>
+      <td>{% if r.error %}<span class="pill bad" title="{{ r.error }}">failed</span>
+          {% elif r.finished_at %}<span class="pill ok">ok</span>
+          {% else %}<span class="pill open">running</span>{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </table>
+  {% endif %}
+</div>
+
+<form method="get" action="{{ root }}/admin/learned" class="filters">
+  <div style="flex:1;min-width:12rem">
+    <label for="q" style="margin-top:0">Search the notes</label>
+    <input type="text" id="q" name="q" value="{{ q }}">
+  </div>
+  <button type="submit">Search</button>
+  {% if q %}<a class="btn secondary" href="{{ root }}/admin/learned">Clear</a>{% endif %}
+</form>
+
+{% for n in notes %}
+<div class="card">
+  <h3 style="margin-top:0">{{ n.title }}
+    {% if not n.approved %}<span class="pill open">switched off</span>{% endif %}</h3>
+  <p class="small muted" style="margin:0 0 .6rem">
+    <span class="mono">{{ n.ticket_no or '—' }}</span> &middot;
+    {{ n.category }} &middot; {{ n.created_at|fmt_ts }}</p>
+  <div style="white-space:pre-wrap">{{ n.body }}</div>
+  <div class="row" style="margin-top:.9rem">
+    <form method="post" action="{{ root }}/admin/learned/{{ n.id }}/toggle">
+      <button type="submit" class="secondary">
+        {{ 'Switch off' if n.approved else 'Switch on' }}</button></form>
+    <form method="post" action="{{ root }}/admin/learned/{{ n.id }}/delete"
+          onsubmit="return confirm('Delete this note?')">
+      <button type="submit" class="secondary"
+              style="border-color:var(--danger);color:var(--danger)">Delete</button></form>
+  </div>
+</div>
+{% else %}
+<div class="card"><p class="muted">
+  {% if q %}Nothing matches.{% else %}
+  Nothing learned yet. Notes appear after the first night with a solved ticket.{% endif %}
+</p></div>
+{% endfor %}
+
+<div class="card" style="border-color:var(--danger)">
+  <h2 style="margin-top:0;color:var(--danger)">Start over</h2>
+  <p class="small">Deletes every note, fact-vector and learned file the assistant
+    wrote for itself. Your own rules in <span class="mono">knowledge/</span>, the
+    tickets, and the answers are all untouched — and because the tickets are the
+    real record, rebuilding the index restores the memory.</p>
+  <form method="post" action="{{ root }}/admin/learned/reset">
+    <label for="confirm">Type <strong>RESET</strong> to confirm</label>
+    <input type="text" id="confirm" name="confirm" autocomplete="off" style="max-width:12rem">
+    <button type="submit" style="background:var(--danger);margin-top:.8rem">
+      Delete everything it taught itself</button>
+  </form>
+</div>
+{% endblock %}

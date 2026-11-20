@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% block title %}{{ thread.title }} — {{ site_name }}{% endblock %}
+{% block body %}
+
+<p class="small"><a href="{{ root }}/">&larr; Back</a></p>
+<h1>{{ thread.title }}</h1>
+
+{% if work.state not in ("done", "error") %}
+{% with scene = "cats", thread_id = thread.id %}
+  {% include "_waking.html" %}
+{% endwith %}
+{% endif %}
+<div id="messages">
+{% for m in messages %}
+  {% if m.role == 'user' %}
+  <div class="bubble me">
+    <div class="who">You asked</div>
+    <div>{{ m.content }}</div>
+  </div>
+  {% elif m.role == 'assistant' %}
+  <div class="bubble them {% if 'scam_story' in m.flags or 'payment' in m.flags or 'remote_access' in m.flags or 'credentials' in m.flags %}danger{% endif %}">
+    <div class="who">Answer</div>
+    <textarea class="raw" hidden>{{ m.content }}</textarea>
+    <div class="md"></div>
+    {% if m.image_path %}
+    <img class="answer-pic" src="{{ root }}/generated/{{ m.image_path }}" alt="a drawing of this">
+    {% elif not user.is_read_only %}
+    <form method="post" action="{{ root }}/t/{{ thread.id }}/msg/{{ m.id }}/draw"
+          style="margin-top:.6rem">
+      <button type="submit" class="secondary">🖼 Show me a picture</button></form>
+    {% endif %}
+  </div>
+  {% endif %}
+{% endfor %}
+</div>
+
+{% if work.state in ('done','error') and user.is_read_only %}
+<div class="card"><p class="muted">This is a read-only guest account -- you
+  can read this conversation, but adding to it or marking it resolved needs a
+  full account. Ask Jason.</p></div>
+{% endif %}
+
+{% if work.state in ('done','error') and not user.is_read_only %}
+<div class="card">
+  <p style="margin-top:0"><strong>Anything to add?</strong></p>
+  <p class="small muted">Send another picture, or tell me what happened when you
+    tried it. It helps most when you show me the screen.</p>
+  {% with followup = true, thread_id = thread.id %}
+    {% include "_composer.html" %}
+  {% endwith %}
+</div>
+{% endif %}
+
+{% if messages and work.state in ('done','error') and not user.is_read_only %}
+<div class="card">
+  <p style="margin-top:0"><strong>Did that sort it out?</strong></p>
+  <form method="post" action="{{ root }}/t/{{ thread.id }}/resolve" class="row">
+    <button type="submit" name="worked" value="yes">Yes, all good</button>
+    <button type="submit" name="worked" value="no" class="secondary">No, still stuck</button>
+  </form>
+</div>
+
+<div class="card">
+  <form method="post" action="{{ root }}/ask" enctype="multipart/form-data">
+    <input type="hidden" name="thread_id" value="{{ thread.id }}">
+    <label for="more">Add something<span class="hint">Tell me what you saw on the screen, or ask the next thing.</span></label>
+    <textarea id="more" name="question" required placeholder="It says the printer is not connected"></textarea>
+    <button class="big" type="submit">Send</button>
+  </form>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function inline(s){
+  return esc(s).replace(/`([^`]+)`/g,'<code>$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>')
+    .replace(/(^|[^*])\*([^*\n]+)\*/g,'$1<em>$2</em>');
+}
+function renderMd(src){
+  const out=[]; let list=null, para=[];
+  const flush=()=>{ if(para.length){out.push('<p>'+inline(para.join(' '))+'</p>');para=[];} };
+  const close=()=>{ if(list){out.push('</'+list+'>');list=null;} };
+  for(const raw of src.split('\n')){
+    const line=raw.replace(/\s+$/,'');
+    const h=line.match(/^(#{1,6})\s+(.*)$/);
+    if(h){flush();close();const l=Math.min(h[1].length+2,6);out.push('<h'+l+'>'+inline(h[2])+'</h'+l+'>');continue;}
+    if(/^\s*>\s?/.test(line)){flush();close();out.push('<blockquote>'+inline(line.replace(/^\s*>\s?/,''))+'</blockquote>');continue;}
+    if(/^\s*([-*_])\s*\1\s*\1[\s\-*_]*$/.test(line)){flush();close();out.push('<hr>');continue;}
+    const ol=line.match(/^\s*\d+[.)]\s+(.*)$/), ul=line.match(/^\s*[-*•]\s+(.*)$/);
+    if(ol||ul){flush();const w=ol?'ol':'ul';if(list&&list!==w)close();if(!list){out.push('<'+w+'>');list=w;}
+      out.push('<li>'+inline((ol||ul)[1])+'</li>');continue;}
+    if(!line.trim()){flush();close();continue;}
+    if(/^\*\*[^*]+\*\*/.test(line)){flush();close();}
+    para.push(line.trim());
+  }
+  flush();close();return out.join('\n');
+}
+document.querySelectorAll('.bubble.them').forEach(function(b){
+  const raw=b.querySelector('.raw'); if(!raw) return;
+  b.querySelector('.md').innerHTML=renderMd(raw.value);
+});
+
+{% if work.state not in ('done','error') %}
+(function(){
+  const LABELS={queued:'Getting started…',waking:'Waking up the computer…',
+    listening:'Listening to your recording…',thinking:'Working out the answer…'};
+  const box=document.getElementById('working');
+  const lab=document.getElementById('workLabel');
+  const det=document.getElementById('workDetail');
+  const t=setInterval(async function(){
+    try{
+      const r=await fetch('{{ root }}/api/thread/{{ thread.id }}',{cache:'no-store'});
+      const s=await r.json();
+      lab.textContent=LABELS[s.state]||'Working on it…';
+      if(s.state==='waking'&&s.waking_seconds){
+        det.textContent='The computer was asleep. About '+
+          Math.max(5,60-s.waking_seconds)+' more seconds.';
+      }
+      if(s.state==='done'||s.state==='error'){clearInterval(t);location.reload();}
+    }catch(e){}
+  },3000);
+})();
+{% endif %}
+</script>
+{% endblock %}

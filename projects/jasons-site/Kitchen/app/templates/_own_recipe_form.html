@@ -1,0 +1,134 @@
+{# The write-your-own-recipe form, shared by mine.html (full nav, for Jason)
+   and your_own_recipe.html (bookmark page, no nav, for Mama) -- same form,
+   same handler (POST /mine either way), two different frames around it. #}
+{% if not can_write %}
+  <div class="notice warn">
+    Only Jason, Casey, or Mama can add a recipe here.
+  </div>
+{% else %}
+<style>
+  .cuisines{display:flex;flex-wrap:wrap;gap:.4rem;margin:.15rem 0 .1rem}
+  .cuisines .pick input{position:absolute;opacity:0;width:0;height:0}
+  .cuisines .pick span{display:inline-block;padding:.42rem .8rem;border-radius:999px;
+    border:1px solid var(--line,#d9d2c5);cursor:pointer;font-size:.95rem;line-height:1.2}
+  /* :has() so the whole pill highlights, not a tick box beside it. Falls back
+     to an ordinary unstyled radio group on anything that lacks it, which is
+     ugly but still works — nobody is locked out of choosing. */
+  .cuisines .pick:has(input:checked) span{border-color:currentColor;font-weight:600}
+  .cuisines .pick:has(input:focus-visible) span{outline:2px solid currentColor;outline-offset:2px}
+  details.elsewhere{margin-top:.5rem}
+  details.elsewhere summary{cursor:pointer;font-size:.85rem;opacity:.75}
+</style>
+
+{% if req %}
+<div class="card" style="border-color:var(--accent)">
+  <p style="margin:0"><strong>{{ req.created_by_name }} asked you to write down:</strong></p>
+  <p style="margin:.4rem 0 0;font-size:1.1rem">{{ req.title }}</p>
+  {% if req.note %}<p class="small muted" style="margin:.5rem 0 0">{{ req.note }}</p>{% endif %}
+</div>
+{% endif %}
+
+<div class="card">
+  <p style="margin:0">
+    This is for the ones that were never on a website — what you cook from
+    memory, or off a card, or the way your mother made it.
+  </p>
+  <p class="small muted" style="margin:.7rem 0 0">
+    Nothing here gets rewritten. It is saved exactly as you type it, in your
+    words and your order, and it goes on the shelf with your name on it.
+  </p>
+</div>
+
+<form class="card" method="post" action="{{ root }}/mine">
+  {% if req %}<input type="hidden" name="request_id" value="{{ req.id }}">{% endif %}
+  <label for="title">What do you call it?
+    <span class="hint">Whatever you'd say. “Mama's greens” is a name.</span></label>
+  <input id="title" name="title" required autocomplete="off"
+         value="{{ req.title if req else '' }}"
+         placeholder="Mama's smothered chicken">
+
+  <label for="serves">How many does it feed?
+    <span class="hint">Optional — but putting a number here is what lets the
+      portions be scaled up and down later.</span></label>
+  <input id="serves" name="serves" inputmode="numeric" placeholder="6">
+
+  <div class="row">
+    <div>
+      <label for="course">What kind of thing is it?
+        <span class="hint">Optional.</span></label>
+      <select id="course" name="course">
+        <option value="">— not said —</option>
+        {% for c in courses %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
+      </select>
+    </div>
+    <div>
+      <label for="cuisine">Where is it from?
+        <span class="hint">The ones you cook are first. Anything else is
+          underneath, and you can always type your own.</span></label>
+
+      <!-- BUTTONS, NOT A FORTY-ITEM DROPDOWN. On a phone, a list this long is
+           forty chances to scroll past the one you meant — and it is nearly
+           always the same handful, because people cook what they cook.
+           Nothing is removed: the rest is one tap away below. -->
+      <div class="cuisines">
+        {% for c in home_cuisines %}
+        <label class="pick">
+          <input type="radio" name="cuisine" value="{{ c }}"
+                 {% if loop.first %}checked{% endif %}>
+          <span>{{ c }}</span>
+        </label>
+        {% endfor %}
+        <label class="pick">
+          <input type="radio" name="cuisine" value="">
+          <span class="muted">not said</span>
+        </label>
+      </div>
+
+      <details class="elsewhere">
+        <summary>somewhere else</summary>
+        <p class="small muted" style="margin:.5rem 0 .4rem">
+          Type it, or pick from the rest. A tradition this list does not name
+          is the list&rsquo;s failing, not yours — what you type is kept as
+          you typed it.
+        </p>
+        <input name="cuisine_other" list="cuisinelist" autocomplete="off"
+               placeholder="somewhere else">
+        <datalist id="cuisinelist">
+          {% for c in other_cuisines %}<option value="{{ c }}">{% endfor %}
+        </datalist>
+      </details>
+    </div>
+  </div>
+
+  <label for="needs">What do you need?
+    <span class="hint">One thing per line, with the amount. Write it how you'd
+      say it out loud.</span></label>
+  <textarea id="needs" name="needs" required style="min-height:180px"
+placeholder="6 chicken thighs
+1 big onion, sliced
+2 cups chicken broth
+half a stick of butter
+salt, pepper, garlic powder"></textarea>
+
+  <label for="steps">How do you make it?
+    <span class="hint">One step per line. Don't worry about numbering them —
+      the page does that.</span></label>
+  <textarea id="steps" name="steps" required style="min-height:220px"
+placeholder="Season the chicken good on both sides and let it sit a while.
+Brown it in the butter, both sides, then take it out.
+Cook the onions down in the same pan until soft.
+Put the chicken back, pour the broth over, cover it.
+Let it go low for about an hour, until it falls apart."></textarea>
+
+  <label for="notes">Anything else?
+    <span class="hint">Optional. What it goes with, what to watch for, who
+      taught you.</span></label>
+  <textarea id="notes" name="notes" style="min-height:70px"
+            placeholder="Goes with rice and greens. Don't rush the onions."></textarea>
+
+  <button class="big" type="submit">Save it</button>
+  <p class="small muted" style="margin:.7rem 0 0">
+    You can add photos once it's saved — of the dish and of any step.
+  </p>
+</form>
+{% endif %}

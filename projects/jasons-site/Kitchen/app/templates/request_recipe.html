@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}{{ req.title }}{% endblock %}
+{% block sub %}<p class="small muted">The way you actually make it</p>{% endblock %}
+{% block nav %}{% endblock %}
+
+{% block body %}
+{% include "_own_recipe_form.html" %}
+{% include "_back_to_mealie.html" %}
+{% endblock %}

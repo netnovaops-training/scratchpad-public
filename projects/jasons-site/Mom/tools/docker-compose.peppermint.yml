@@ -1,0 +1,79 @@
+# Peppermint — your helpdesk console. Optional.
+#
+#     cd /var/www/Mom
+#     sudo docker compose -f docker-compose.yml -f docker-compose.peppermint.yml up -d
+#
+# WHAT THIS IS FOR
+# ----------------
+# A real ticket queue with statuses, assignment, notes and filtering, so you
+# have somewhere to manage the record. Mom never sees it and has no account on
+# it. Her app pushes a copy of every closed ticket here through the API.
+#
+# It is a MIRROR. The authoritative record stays in the app's SQLite database on
+# this Pi. If this stack is down, stopped, or broken after an update, nothing
+# about Mom's experience changes and nothing is lost -- queued tickets sync when
+# it comes back. See app/peppermint.py for why it is built that way.
+#
+# ARM64
+# -----
+# pepperlabs/peppermint publishes both amd64 and arm64 images, so this runs on
+# the Pi 5 as-is and will keep working when you move to the x64 box.
+#
+# SECURITY
+# --------
+# Both services bind to 127.0.0.1 ONLY. Peppermint ships with published default
+# credentials (person12@example.com / 1234, SECRET 'peppermint4life'), which makes an
+# exposed instance a genuinely bad day. Reach it through Caddy behind your
+# login, never by opening a port.
+#
+# First thing after it comes up: sign in, change the admin password, then create
+# an API key under Settings and put it in .env as MOM_PEPPERMINT_API_KEY.
+services:
+  peppermint_postgres:
+    image: postgres:16-alpine
+    container_name: peppermint_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${PEPPER_DB_USER:-peppermint}
+      POSTGRES_PASSWORD: ${PEPPER_DB_PASSWORD:?set PEPPER_DB_PASSWORD in .env}
+      POSTGRES_DB: peppermint
+    volumes:
+      - peppermint-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PEPPER_DB_USER:-peppermint}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  peppermint:
+    image: pepperlabs/peppermint:latest
+    container_name: peppermint
+    restart: unless-stopped
+    depends_on:
+      peppermint_postgres:
+        condition: service_healthy
+    environment:
+      DB_USERNAME: ${PEPPER_DB_USER:-peppermint}
+      DB_PASSWORD: ${PEPPER_DB_PASSWORD:?set PEPPER_DB_PASSWORD in .env}
+      DB_HOST: peppermint_postgres
+      # Signs session tokens. If this stays at the published default, anyone who
+      # can reach the port can mint a valid admin session.
+      SECRET: ${PEPPER_SECRET:?set PEPPER_SECRET in .env — openssl rand -hex 32}
+    ports:
+      - "127.0.0.1:3000:3000"   # the web UI, proxied by Caddy
+      - "127.0.0.1:5003:5003"   # the API, which momhelp talks to
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  # Keep watchtower away from all of this. An unattended major-version bump of a
+  # helpdesk with a Postgres schema behind it is how a working system becomes a
+  # weekend. Update these deliberately.
+  #   labels:
+  #     com.centurylinklabs.watchtower.enable: "false"
+
+volumes:
+  peppermint-db:

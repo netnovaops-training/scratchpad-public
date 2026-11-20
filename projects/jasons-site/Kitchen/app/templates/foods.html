@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Foods{% endblock %}
+{% block sub %}<p class="small muted">Everything Mealie knows about, in one searchable list</p>{% endblock %}
+{% block mainclass %}wide{% endblock %}
+
+{% block body %}
+
+<div class="card">
+  <form method="get" action="{{ root }}/foods">
+    <input type="search" name="q" value="{{ q }}" placeholder="Search foods…"
+           autofocus style="width:100%">
+  </form>
+  <p class="small muted" style="margin:.6rem 0 0">
+    {% if q %}{{ rows|length }} of {{ total }} match "{{ q }}"
+    {% else %}{{ total }} foods, sorted by how many kept recipes use each one{% endif %}
+  </p>
+</div>
+
+{% if not rows %}
+<div class="card"><p class="muted" style="margin:0">
+  {% if q %}Nothing matches "{{ q }}".{% else %}No foods yet.{% endif %}</p></div>
+{% else %}
+<div class="card">
+  <div class="foodlist">
+    {% for r in rows %}
+    <div class="foodrow">
+      <div class="foodpic">
+        {% if r.image %}
+          <img src="{{ r.image.url }}" alt="{{ r.image.alt or r.name }}" loading="lazy">
+        {% else %}
+          <span class="foodpic-none" aria-hidden="true">&#127859;</span>
+        {% endif %}
+      </div>
+      <div class="foodmain">
+        <span>{{ r.name }}</span>
+        {% if r.image and r.image.source == "ai-drawn" %}
+          <span class="small muted">(AI-drawn, not a real photo)</span>
+        {% endif %}
+      </div>
+      <span class="small muted">{% if r.count %}in {{ r.count }} recipe{{ '' if r.count == 1 else 's' }}
+        {% else %}not used yet{% endif %}</span>
+      {% if owner %}
+      <a class="small" href="{{ root }}/foods/{{ r.id }}/photos">
+        {% if r.image %}change picture{% else %}find a picture{% endif %}</a>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<style>
+.foodlist{display:flex;flex-direction:column}
+.foodrow{display:flex;justify-content:flex-start;align-items:center;gap:.8rem;
+  padding:.6rem 0;border-top:1px solid var(--line)}
+.foodrow:first-child{border-top:0}
+.foodmain{display:flex;flex-direction:column;flex:1;min-width:0}
+/* A small icon, not a thumbnail -- Jason's own distinction between the two
+   organizers ("ingredients can be smaller icons, tools can be bigger
+   thumbnails"). See tools.html's .foodpic for the bigger version. */
+.foodpic{width:6rem;height:6rem;flex:none;border-radius:5px;overflow:hidden;
+  display:flex;align-items:center;justify-content:center;background:var(--line)}
+.foodpic img{width:100%;height:100%;object-fit:cover;display:block}
+.foodpic-none{font-size:3rem;opacity:.6}
+</style>
+
+{% endblock %}

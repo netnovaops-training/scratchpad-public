@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Edit — {{ draft.recipe.title }}{% endblock %}
+
+{% block body %}
+<div class="card">
+  <p style="margin:0">
+    Change what this recipe actually says. Unlike "refresh from source"
+    (which only fills in what's missing) or the substitution tool (which
+    only suggests), this replaces the title, ingredients, and steps with
+    exactly what you type.
+  </p>
+</div>
+
+<form class="card" method="post" action="{{ root }}/r/{{ id }}/edit">
+  <label for="title">Title</label>
+  <input id="title" name="title" required autocomplete="off"
+         value="{{ draft.recipe.title }}">
+
+  <label for="ingredients">Ingredients
+    <span class="hint">One per line, with the amount.</span></label>
+  <textarea id="ingredients" name="ingredients" required style="min-height:220px"
+  >{% for line in draft.recipe.ingredients or [] %}{{ line }}
+{% endfor %}</textarea>
+
+  <label for="steps">Steps
+    <span class="hint">One per line. The page numbers them for you.</span></label>
+  <textarea id="steps" name="steps" required style="min-height:260px"
+  >{% for line in draft.recipe.steps or [] %}{{ line }}
+{% endfor %}</textarea>
+
+  <button class="big" type="submit">Save changes</button>
+  {% if draft.tandoor_id %}
+  <p class="small muted" style="margin:.7rem 0 0">
+    This recipe is already in the library — saving here updates it there
+    too, and puts any step pictures back afterward.
+  </p>
+  {% endif %}
+</form>
+{% endblock %}

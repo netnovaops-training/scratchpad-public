@@ -1,0 +1,847 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Tickets</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=IBM+Plex+Mono:wght@400;600&family=Public+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: a work-order desk. Each ticket kind keeps the color of its carbon copy
+   (canary = fix, pink = note, blue = project); one narrow column for writing. */
+:root {
+  color-scheme: light;
+  --paper: #f5f4ee; --card: #ffffff; --ink: #1c2220; --muted: #5a645f; --line: #d8d7cd;
+  --accent: #2c5a4c; --accent-ink: #ffffff;
+  --fix: #e8c22c; --fix-bg: #fbf2c4; --note: #dc7b98; --note-bg: #fbe2e9; --proj: #4f86cf; --proj-bg: #dfe9f7;
+  --ok: #2d7a4c; --warn: #a8581a; --bad: #b03a32;
+  --f-display: "Archivo", "Arial Narrow", system-ui, sans-serif;
+  --f-body: "Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #141816; --card: #1c211f; --ink: #e6e9e4; --muted: #9aa49f; --line: #2e3532;
+    --accent: #7cc2aa; --accent-ink: #0f1a16;
+    --fix: #e2bf3a; --fix-bg: #37311a; --note: #e690aa; --note-bg: #3a2029; --proj: #79a7e6; --proj-bg: #1b2a3e;
+    --ok: #6cc28f; --warn: #e3a066; --bad: #ef8a80; color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+html { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+body { margin: 0; background: var(--paper); color: var(--ink); font: 15px/1.55 var(--f-body); }
+a { color: var(--accent); }
+[hidden] { display: none !important; }
+.wrap { max-width: 860px; margin: 0 auto; padding-block: 0 64px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+
+.bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--paper); border-bottom: 1px solid var(--line); }
+.bar .wrap { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; padding-block: 10px; }
+.brand { font: 800 18px/1 var(--f-display); letter-spacing: .01em; color: var(--ink); text-decoration: none; margin-right: auto; }
+.nav { display: flex; flex-wrap: wrap; gap: 4px; }
+.nav a { text-decoration: none; color: var(--muted); font: 600 13px/1 var(--f-body); padding: 8px 10px; border-radius: 6px; }
+.nav a:hover, .nav a[aria-current="page"] { color: var(--ink); background: var(--card); }
+.banner { margin-top: 14px; padding: 10px 12px; border-radius: 6px; background: var(--fix-bg); font-size: 14px; }
+
+h1, h2, h3 { font-family: var(--f-display); text-wrap: balance; margin: 0; }
+h1 { font-size: 30px; font-weight: 800; line-height: 1.1; }
+h2 { font-size: 13px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.lede { color: var(--muted); max-width: 60ch; margin: 6px 0 0; }
+section { margin-top: 28px; display: grid; gap: 12px; }
+
+.starts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.start { display: grid; gap: 6px; padding: 16px; border-radius: 8px; text-decoration: none; color: var(--ink);
+  background: var(--card); border: 1px solid var(--line); border-top: 8px solid var(--k); transition: transform .12s ease; }
+.start:hover { transform: translateY(-2px); }
+.start:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.start b { font: 800 22px/1.1 var(--f-display); }
+.start span { color: var(--muted); font-size: 14px; }
+.start code { font: 600 12px/1 var(--f-mono); color: var(--muted); margin-top: 4px; }
+.k-fix { --k: var(--fix); --kbg: var(--fix-bg); }
+.k-note { --k: var(--note); --kbg: var(--note-bg); }
+.k-project { --k: var(--proj); --kbg: var(--proj-bg); }
+
+.systems { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.sys { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; display: grid; gap: 8px; align-content: start; }
+.sys h3 { font-size: 17px; }
+.sys p { margin: 0; color: var(--muted); font-size: 14px; }
+.sys ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+.dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--muted); margin-right: 6px; }
+.dot.on { background: var(--ok); } .dot.off { background: var(--bad); }
+
+.rows { display: grid; gap: 6px; }
+.row { display: grid; grid-template-columns: 6px 70px minmax(0, 1fr) auto; align-items: center; gap: 10px;
+  background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 9px 12px 9px 0; text-decoration: none; color: var(--ink); }
+.row:hover { border-color: var(--k); }
+.row .stripe { align-self: stretch; background: var(--k); border-radius: 6px 0 0 6px; margin: -9px 0; }
+.row .id { font: 600 13px/1 var(--f-mono); }
+.row .t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row .meta { display: flex; gap: 8px; align-items: center; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.empty { padding: 18px; border: 1px dashed var(--line); border-radius: 8px; color: var(--muted); }
+
+.pill { font: 600 11px/1 var(--f-mono); text-transform: uppercase; letter-spacing: .06em; padding: 4px 6px; border-radius: 4px; border: 1px solid currentColor; white-space: nowrap; }
+.s-open { color: var(--muted); } .s-in-progress { color: var(--accent); } .s-blocked { color: var(--bad); }
+.s-resolved, .s-done { color: var(--ok); }
+
+.filters { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.chip { font: 600 13px/1 var(--f-body); padding: 8px 11px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); color: var(--ink); cursor: pointer; }
+.chip[aria-pressed="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.search { flex: 1 1 180px; min-width: 0; }
+
+.sheet { margin-top: 18px; background: var(--card); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.sheet-head { background: var(--kbg); border-bottom: 1px solid var(--line); padding: 14px 16px; display: grid; gap: 10px; border-top: 8px solid var(--k); }
+.stamp { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.num { font: 600 15px/1 var(--f-mono); letter-spacing: .04em; }
+.kind { font: 800 13px/1 var(--f-display); letter-spacing: .12em; text-transform: uppercase; }
+.saved { margin-left: auto; font: 400 12px/1.3 var(--f-mono); color: var(--muted); }
+.saved.err { color: var(--bad); }
+.title-in { width: 100%; font: 700 22px/1.25 var(--f-display); border: 0; background: transparent; color: var(--ink); padding: 2px 0; border-bottom: 2px dashed transparent; }
+.title-in:focus { outline: none; border-bottom-color: var(--k); }
+.title-in::placeholder { color: var(--muted); opacity: .7; }
+.meta-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px 12px; }
+.sheet-body { padding: 16px; display: grid; gap: 18px; }
+.group { display: grid; gap: 14px; }
+.group > h2 { padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+.f { display: grid; gap: 4px; min-width: 0; }
+.f label, .lbl { font: 600 13px/1.2 var(--f-body); display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; }
+.req { font: 600 10px/1 var(--f-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--warn); }
+.hint { font-size: 12.5px; color: var(--muted); margin: 0; }
+input[type="text"], input[type="search"], select, textarea {
+  width: 100%; font: 400 15px/1.5 var(--f-body); color: var(--ink); background: var(--paper);
+  border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; min-width: 0; }
+textarea { resize: vertical; min-height: 64px; overflow: hidden; }
+textarea.mono, input.mono { font: 400 13.5px/1.55 var(--f-mono); }
+input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.btn { font: 600 14px/1 var(--f-body); padding: 10px 14px; border-radius: 6px; border: 1px solid var(--line); background: var(--card); color: var(--ink); cursor: pointer; text-decoration: none; display: inline-block; }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn.small { padding: 7px 10px; font-size: 13px; }
+.btn.danger { color: var(--bad); }
+.btn:disabled { opacity: .55; cursor: progress; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.msg { font-size: 13px; color: var(--muted); }
+.msg.err { color: var(--bad); }
+.results { display: grid; gap: 4px; font-size: 13px; }
+.results .bad { color: var(--bad); } .results .good { color: var(--ok); }
+.checks { display: grid; gap: 6px; }
+.checks label { font-weight: 400; display: flex; gap: 8px; align-items: center; }
+input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent); flex: none; }
+.types { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.progress { height: 8px; background: var(--paper); border: 1px solid var(--line); border-radius: 99px; overflow: hidden; }
+.progress i { display: block; height: 100%; background: var(--proj); width: 0; transition: width .2s ease; }
+.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.step { display: grid; grid-template-columns: auto 28px minmax(0, 1fr) auto; gap: 8px; align-items: start;
+  padding: 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--paper); }
+.step .n { font: 600 13px/34px var(--f-mono); color: var(--muted); text-align: right; }
+.step > input[type="checkbox"] { margin-top: 8px; }
+.step.done .step-text { text-decoration: line-through; color: var(--muted); }
+.step .tools { display: flex; gap: 2px; }
+.step .tools button { width: 32px; height: 34px; border: 1px solid transparent; background: transparent; color: var(--muted); border-radius: 4px; cursor: pointer; font-size: 14px; }
+.step .tools button:hover { border-color: var(--line); color: var(--ink); }
+.step .detail { grid-column: 3 / -1; }
+.step input[type="text"] { background: var(--card); }
+.step textarea { background: var(--card); min-height: 48px; font-size: 14px; }
+
+.confirm { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px; border: 1px solid var(--bad); border-radius: 6px; }
+.foot { display: grid; gap: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+.foot-row { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; }
+
+@media (max-width: 640px) {
+  .starts, .systems { grid-template-columns: 1fr; }
+  h1 { font-size: 25px; }
+  .row { grid-template-columns: 6px 60px minmax(0, 1fr); }
+  .row .meta { grid-column: 3; }
+  .step { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .step .n { display: none; }
+  .step .detail { grid-column: 2 / -1; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="bar">
+  <div class="wrap">
+    <a class="brand" href="#home">Tickets</a>
+    <nav class="nav" aria-label="Tickets">
+      <a href="#fix" data-nav="fix">+ Fix</a>
+      <a href="#note" data-nav="note">+ Note</a>
+      <a href="#project" data-nav="project">+ Project</a>
+      <a href="#list" data-nav="list">All tickets</a>
+      <a href="#settings" data-nav="settings">Settings</a>
+    </nav>
+  </div>
+</div>
+<div class="wrap">
+  <div class="banner" id="banner" hidden></div>
+  <main id="view"></main>
+</div>
+
+<script>
+'use strict';
+// The older trial tickets (T-001 to T-010) stay in Google Docs; these links reach them.
+const DOC = id => 'https://docs.google.com/document/d/' + id + '/edit';
+const TRIAL = {
+  folder: 'https://drive.google.com/drive/folders/1hxT32kG6J1X2J6IeG6eGrcdH85Ju_a-N',
+  list: DOC('16XvIziRis3nYKEVJ0WIbLpMezascCP1y0-gbvNqA5yM'),
+  how: DOC('1zZCLsNKjDxIi2Zrr5GhnBPUM4OtR3N_r-fga3NpkdTI'),
+};
+const PAGE = location.origin + location.pathname;
+const KINDS = {
+  fix:     { label: 'Fix',     statuses: ['open', 'in-progress', 'blocked', 'resolved'], closed: 'resolved' },
+  note:    { label: 'Note',    statuses: ['open', 'done'], closed: 'done' },
+  project: { label: 'Project', statuses: ['open', 'in-progress', 'blocked', 'done'], closed: 'done' },
+};
+const NOTE_TYPES = ['todo', 'idea', 'script', 'command', 'link'];
+const SCRUB = [
+  ['noSecrets', 'No passwords, keys, tokens, backup files'],
+  ['noIds', 'No MAC addresses, public IPs, account names'],
+  ['genericIps', 'Private IPs generic (the repo is public)'],
+  ['aiCredit', 'AI help credited if used'],
+];
+// Set by the server; a save from this page never changes them.
+const SERVER_FIELDS = ['id', 'num', 'kind', 'created', 'createdBy', 'updated', 'updatedBy', 'githubUrl', 'githubRepo', 'githubAt', 'driveId', 'driveUrl', 'driveAt', 'driveSyncedAt'];
+
+let tickets = new Map(), loaded = false, waiters = [], status = null;
+let cur = null, curId = null;
+let saveTimer = null, saving = false, again = false, creating = null;
+
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const today = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+const isClosed = t => t.status === KINDS[t.kind]?.closed;
+const who = e => String(e || '').split('@')[0];
+function banner(text) { const b = $('#banner'); b.textContent = text || ''; b.hidden = !text; }
+function whenLoaded() { return loaded ? Promise.resolve() : new Promise(r => waiters.push(r)); }
+
+/* ---------- server ---------- */
+// The SSO sits in front of every call. When the sign-in has run out, Caddy answers with the
+// sign-in page instead of JSON; that is reported as "signed out" so the page can say so.
+async function api(method, path, body) {
+  let r;
+  try {
+    r = await fetch('api/' + path, {
+      method, credentials: 'same-origin', redirect: 'manual',
+      headers: body ? { 'Content-Type': 'application/json' } : {},
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  } catch { throw Object.assign(new Error('offline'), { code: 'offline' }); }
+  const json = (r.headers.get('content-type') || '').includes('application/json');
+  if (r.type === 'opaqueredirect' || r.status === 401 || (!json && r.status !== 204)) {
+    banner('Your sign-in ran out. Reload the page to sign in again; nothing you typed is lost until you reload.');
+    throw Object.assign(new Error('signed out'), { code: 'signed_out' });
+  }
+  const data = r.status === 204 ? {} : await r.json();
+  if (!r.ok) throw Object.assign(new Error(data.error || r.statusText), { code: 'http', status: r.status, data });
+  return data;
+}
+async function loadAll() {
+  try {
+    const data = await api('GET', 'tickets');
+    tickets = new Map(data.tickets.map(t => [t.id, t]));
+    banner('');
+  } catch (e) { if (e.code === 'offline') banner('Can\'t reach the Tickets server. Check the connection and reload.'); }
+  if (!loaded) { loaded = true; waiters.splice(0).forEach(r => r()); }
+  if (!cur) { fillRecent(); fillList(); }
+}
+async function loadStatus() { try { status = await api('GET', 'status'); } catch { status = null; } }
+
+/* ---------- routing: #home, #fix, #note, #project, #list, #settings, #T-011 ---------- */
+function route() { return (location.hash || '#home').slice(1); }
+function setHash(id) { try { history.replaceState(null, '', '#' + id); } catch { location.hash = id; } }
+function render() {
+  const r = route();
+  document.querySelectorAll('[data-nav]').forEach(a => { if (a.dataset.nav === r) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
+  if (KINDS[r]) return openDraft(r);
+  if (/^T-\d{3,}$/.test(r)) return openTicket(r);
+  cur = null; curId = null;
+  if (r === 'list') return renderList();
+  if (r === 'settings') return renderSettings();
+  renderHome();
+}
+window.addEventListener('hashchange', () => {
+  if (curId && route() === curId) return;
+  flushSave();
+  render();
+});
+// someone else (or another tab) may have saved: refresh lists when coming back to the page
+document.addEventListener('visibilitychange', () => { if (!document.hidden && !cur) loadAll(); });
+
+/* ---------- home ---------- */
+function renderHome() {
+  const gh = status?.github, dr = status?.drive;
+  $('#view').innerHTML = `
+    <section>
+      <div><h1>Start a ticket</h1>
+      <p class="lede">Pick the kind first. Each one asks for a different amount of detail. It saves as you type, and gets its number when you start.</p></div>
+      <div class="starts">
+        <a class="start k-fix" href="#fix"><b>Fix</b><span>Something broke. Full write-up: problem, what you tried, cause, fix, what you learned.</span><code>#fix</code></a>
+        <a class="start k-note" href="#note"><b>Note</b><span>A quick todo, script, command or idea. A title and a few lines.</span><code>#note</code></a>
+        <a class="start k-project" href="#project"><b>Project</b><span>Something to build. A goal, then numbered steps you tick off.</span><code>#project</code></a>
+      </div>
+    </section>
+    <section>
+      <h2>Open tickets</h2>
+      <div class="rows" id="recent"></div>
+    </section>
+    <section>
+      <h2>Where tickets are kept</h2>
+      <div class="systems">
+        <div class="sys">
+          <h3>Saved copies</h3>
+          <p>Save to GitHub + Drive puts each ticket in both places.</p>
+          <ul>
+            ${gh?.configured ? gh.repos.map(r => `<li><a href="${esc(r.folderUrl)}" target="_blank" rel="noopener">GitHub: ${esc(r.repo)}, ${esc(r.branch)} branch</a></li>`).join('') : '<li>GitHub: not set up yet</li>'}
+            <li>${dr?.folderUrl ? `<a href="${esc(dr.folderUrl)}" target="_blank" rel="noopener">Google Drive: Tickets folder</a>` : '<a href="#settings">Google Drive: set it up in Settings</a>'}</li>
+          </ul>
+        </div>
+        <div class="sys">
+          <h3>Trial tickets (Google Docs)</h3>
+          <p>T-001 to T-010, written by hand before this page existed. New tickets carry on from T-011.</p>
+          <ul>
+            <li><a href="${TRIAL.list}" target="_blank" rel="noopener">01 · Ticket List</a></li>
+            <li><a href="${TRIAL.folder}" target="_blank" rel="noopener">Trial folder</a></li>
+            <li><a href="${TRIAL.how}" target="_blank" rel="noopener">How Tickets Work</a></li>
+          </ul>
+        </div>
+      </div>
+    </section>
+    <section>
+      <h2>Bookmarks</h2>
+      <p class="lede">Bookmark these to start a ticket in one click: <a href="#fix">${esc(PAGE)}#fix</a>, <a href="#note">#note</a>, <a href="#project">#project</a>.</p>
+    </section>`;
+  fillRecent();
+}
+function fillRecent() {
+  const box = $('#recent'); if (!box) return;
+  if (!loaded) { box.innerHTML = `<div class="empty">Loading tickets…</div>`; return; }
+  const open = [...tickets.entries()].filter(([, t]) => !isClosed(t)).sort((a, b) => (b[1].updated || '').localeCompare(a[1].updated || '')).slice(0, 8);
+  box.innerHTML = open.length ? open.map(rowHtml).join('') : `<div class="empty">No open tickets. Pick Fix, Note or Project above to start one.</div>`;
+}
+function rowHtml([id, t]) {
+  let extra = '';
+  if (t.kind === 'project' && Array.isArray(t.steps) && t.steps.length) extra = `<span>${t.steps.filter(s => s.d).length}/${t.steps.length}</span>`;
+  if (t.kind === 'note' && t.noteType) extra = `<span>${esc(t.noteType)}</span>`;
+  return `<a class="row k-${esc(t.kind)}" href="#${esc(id)}"><span class="stripe"></span><span class="id">${esc(id)}</span>
+    <span class="t">${esc(t.title || '(untitled)')}</span>
+    <span class="meta">${extra}<span class="pill s-${esc(t.status)}">${esc(t.status)}</span><span>${esc((t.updated || '').slice(0, 10))}</span></span></a>`;
+}
+
+/* ---------- list ---------- */
+let listKind = 'all', listShow = 'open', listQ = '';
+function renderList() {
+  $('#view').innerHTML = `
+    <section>
+      <h1>All tickets</h1>
+      <div class="filters" role="group" aria-label="Filter">
+        ${['all', 'fix', 'note', 'project'].map(k => `<button class="chip" data-kind="${k}" aria-pressed="${listKind === k}">${k === 'all' ? 'All kinds' : KINDS[k].label}</button>`).join('')}
+        <span style="width:8px"></span>
+        ${['open', 'closed', 'everything'].map(s => `<button class="chip" data-show="${s}" aria-pressed="${listShow === s}">${s[0].toUpperCase() + s.slice(1)}</button>`).join('')}
+        <input type="search" id="q" class="search" placeholder="Search titles and text" value="${esc(listQ)}">
+      </div>
+      <div class="rows" id="all"></div>
+    </section>`;
+  document.querySelectorAll('[data-kind]').forEach(b => b.onclick = () => { listKind = b.dataset.kind; renderList(); });
+  document.querySelectorAll('[data-show]').forEach(b => b.onclick = () => { listShow = b.dataset.show; renderList(); });
+  $('#q').oninput = e => { listQ = e.target.value; fillList(); };
+  fillList();
+}
+function fillList() {
+  const box = $('#all'); if (!box) return;
+  if (!loaded) { box.innerHTML = `<div class="empty">Loading tickets…</div>`; return; }
+  const q = listQ.trim().toLowerCase();
+  const rows = [...tickets.entries()].filter(([, t]) =>
+    (listKind === 'all' || t.kind === listKind) &&
+    (listShow === 'everything' || (listShow === 'open') !== isClosed(t)) &&
+    (!q || JSON.stringify(t).toLowerCase().includes(q))
+  ).sort((a, b) => (b[1].updated || '').localeCompare(a[1].updated || ''));
+  box.innerHTML = rows.length ? rows.map(rowHtml).join('') : `<div class="empty">Nothing matches. Try "Everything" or another kind.</div>`;
+}
+
+/* ---------- settings ---------- */
+async function renderSettings() {
+  $('#view').innerHTML = `<div class="empty" style="margin-top:18px">Checking…</div>`;
+  await loadStatus();
+  if (route() !== 'settings') return;
+  const s = status;
+  if (!s) { $('#view').innerHTML = `<div class="empty" style="margin-top:18px">Couldn't reach the Tickets server.</div>`; return; }
+  const gh = s.github, dr = s.drive;
+  $('#view').innerHTML = `
+    <section><h1>Settings</h1><p class="lede">Signed in as ${esc(s.me)}.</p></section>
+    <section><div class="systems">
+      <div class="sys">
+        <h3><span class="dot ${gh.configured ? 'on' : 'off'}"></span>GitHub</h3>
+        ${gh.configured
+          ? `<p>Each ticket picks one of these in its "GitHub repo" menu (one Markdown file per ticket):</p>
+             <ul>${gh.repos.map(r => `<li><a href="${esc(r.folderUrl)}" target="_blank" rel="noopener">${esc(r.repo)}</a>, branch <b>${esc(r.branch)}</b></li>`).join('')}</ul>
+             <p class="hint">Toolbox is public: anyone can read tickets saved there. Projects is private.</p>`
+          : `<p>Not set up. Put a GitHub token in <code>tickets.env</code> on the NUC and restart the container.</p>`}
+      </div>
+      <div class="sys">
+        <h3><span class="dot ${dr.folderUrl ? 'on' : 'off'}"></span>Google Drive</h3>
+        ${dr.folderUrl ? `<p>Working. Docs go in the <a href="${esc(dr.folderUrl)}" target="_blank" rel="noopener">Tickets folder</a>. The script can only see files it made.</p>`
+          : dr.configured ? `<p class="msg err">Set up, but the Drive script didn't answer. Check the web app link and secret in <code>tickets.env</code>, and that it's deployed with access "Anyone".</p>`
+          : `<p>Not set up yet. Follow the steps below.</p>`}
+      </div>
+    </div></section>
+    <section>
+      <h2>Set up Google Drive (once, about 5 minutes)</h2>
+      <p class="lede">A small script in your own Google account does the Drive work. No Google Cloud project and no billing.</p>
+      <ol class="rows" style="padding-left:20px;gap:12px">
+        <li>Open <a href="https://script.google.com/home/projects/create" target="_blank" rel="noopener">script.google.com → New project</a>. Rename it <b>Tickets Drive</b> (click "Untitled project").</li>
+        <li>Press <b>Copy Code.gs</b>, then in the editor select everything in <b>Code.gs</b> and paste over it.
+          <div class="actions" style="margin-top:6px"><button type="button" class="btn small" data-copy="Code.gs">Copy Code.gs</button><span class="msg" data-copied="Code.gs"></span></div></li>
+        <li>Open <b>Project Settings</b> (the ⚙ gear on the left) and tick <b>Show "appsscript.json" manifest file in editor</b>. Back in the editor, open <b>appsscript.json</b>, select everything and paste this over it:
+          <div class="actions" style="margin-top:6px"><button type="button" class="btn small" data-copy="appsscript.json">Copy appsscript.json</button><span class="msg" data-copied="appsscript.json"></span></div></li>
+        <li>Press <b>Save</b> (the disk icon). Pick <b>setup</b> in the function menu next to Run, press <b>Run</b>, and allow access when Google asks. (It may say "Google hasn't verified this app": it's your own script, so press Advanced → Go to Tickets Drive.)</li>
+        <li>The <b>Execution log</b> shows a line starting with <code>APPS_SCRIPT_SECRET=</code>. Save it in Proton Pass and copy it into <code>tickets.env</code> on the NUC.</li>
+        <li><b>Deploy → New deployment</b> → type <b>Web app</b>. Execute as: <b>Me</b>. Who has access: <b>Anyone</b>. Press Deploy and copy the <b>Web app URL</b> (ends in <code>/exec</code>) into <code>tickets.env</code> as <code>APPS_SCRIPT_URL=</code>.</li>
+        <li>On the NUC: <code>cd ~/tickets-src &amp;&amp; bash deploy-nuc.sh</code>, then reload this page. The dot above turns green.</li>
+      </ol>
+      <p class="hint">"Anyone" is safe here: the link does nothing without the secret, and the script can only touch the files it made.</p>
+    </section>`;
+  document.querySelectorAll('[data-copy]').forEach(b => b.onclick = async () => {
+    const name = b.dataset.copy, msg = document.querySelector(`[data-copied="${name}"]`);
+    try {
+      const r = await fetch('api/apps-script/' + name, { credentials: 'same-origin' });
+      await navigator.clipboard.writeText(await r.text());
+      msg.textContent = 'Copied. Paste it in the editor.';
+    } catch { msg.textContent = 'Couldn\'t copy. Open it here instead: '; msg.innerHTML += `<a href="api/apps-script/${name}" target="_blank" rel="noopener">${name}</a>`; }
+  });
+}
+
+/* ---------- editor ---------- */
+function blank(kind) {
+  const t = { kind, title: '', status: 'open', opened: '', closed: '', tech: '' };
+  if (kind === 'fix') Object.assign(t, { parent: '', showcase: 'no', problem: '', symptoms: '', tried: '', cause: '', fix: '', learned: '', oneLine: '', worklog: '', scrub: {} });
+  if (kind === 'note') Object.assign(t, { noteType: 'todo', body: '', tags: '' });
+  if (kind === 'project') Object.assign(t, { parent: '', goal: '', doneWhen: '', steps: [], worklog: '' });
+  return t;
+}
+function openDraft(kind) { curId = null; cur = blank(kind); renderEditor(); }
+async function openTicket(id) {
+  $('#view').innerHTML = `<div class="empty" style="margin-top:18px">Opening ${esc(id)}…</div>`;
+  await whenLoaded();
+  if (route() !== id) return;
+  let t = tickets.get(id);
+  try { t = await api('GET', 'tickets/' + id); } catch {}
+  if (route() !== id) return;
+  if (!t) { $('#view').innerHTML = `<div class="empty" style="margin-top:18px">There's no ticket ${esc(id)}. <a href="#list">See all tickets</a>.</div>`; return; }
+  curId = id; cur = structuredClone(t);
+  renderEditor();
+}
+
+const field = (k, label, hint, o = {}) => `
+  <div class="f"><label for="f-${k}">${label}${o.req ? ' <span class="req">required to close</span>' : ''}</label>
+  ${hint ? `<p class="hint">${hint}</p>` : ''}
+  ${o.line ? `<input type="text" id="f-${k}" data-k="${k}" class="${o.mono ? 'mono' : ''}" spellcheck="${o.mono ? 'false' : 'true'}" placeholder="${esc(o.ph || '')}" value="${esc(cur[k])}">`
+           : `<textarea id="f-${k}" data-k="${k}" rows="${o.rows || 3}" class="${o.mono ? 'mono' : ''}" spellcheck="${o.mono ? 'false' : 'true'}" placeholder="${esc(o.ph || '')}">${esc(cur[k])}</textarea>`}
+  </div>`;
+
+function savedLabel() {
+  if (!curId) return 'Gets its number when you start typing';
+  const at = cur.updated ? new Date(cur.updated).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
+  return 'Saved ' + at + (cur.updatedBy ? ' by ' + who(cur.updatedBy) : '');
+}
+
+function renderEditor() {
+  const K = KINDS[cur.kind];
+  const statusOpts = K.statuses.map(s => `<option ${cur.status === s ? 'selected' : ''}>${s}</option>`).join('');
+  let body = '';
+  if (cur.kind === 'fix') body = `
+    <div class="group"><h2>Required</h2>
+      ${field('problem', 'Problem', 'What broke, and what it stopped from working. Describe the symptom: it\'s what you\'ll search for later.', { req: 1, rows: 3 })}
+      ${field('fix', 'Fix', 'What actually worked, as steps someone else could repeat.', { req: 1, rows: 4 })}
+      ${field('learned', 'Learned', 'Your own words: what you know now, and what you\'d check first next time.', { req: 1, rows: 3 })}
+    </div>
+    <div class="group"><h2>Optional</h2>
+      ${field('symptoms', 'Symptoms / evidence', 'Exact errors, command output, log lines. No secrets.', { mono: 1, rows: 3 })}
+      ${field('tried', 'What I tried', 'One line per attempt: tried → result. Include dead ends.', { rows: 3, ph: 'tried … → …' })}
+      ${field('cause', 'Cause', 'The root cause, kept separate from the fix.', { rows: 2 })}
+      ${field('oneLine', 'One line (for interviews)', 'Write this last: "___ broke. I ___, and ___."', { rows: 2 })}
+    </div>
+    ${worklogHtml()}
+    <div class="group"><h2>Scrub check</h2><p class="hint">Saved tickets go to a public repo. Tick these before you press Save to GitHub + Drive.</p><div class="checks">
+      ${SCRUB.map(([k, l]) => `<label><input type="checkbox" data-scrub="${k}" ${cur.scrub?.[k] ? 'checked' : ''}> ${l}</label>`).join('')}
+    </div></div>`;
+  if (cur.kind === 'note') body = `
+    <div class="group">
+      <div class="f"><span class="lbl">What kind of note</span><div class="types" role="group" aria-label="Note type">
+        ${NOTE_TYPES.map(n => `<button type="button" class="chip" data-ntype="${n}" aria-pressed="${cur.noteType === n}">${n}</button>`).join('')}
+      </div></div>
+      ${field('body', 'Note', '', { rows: 5, mono: ['script', 'command'].includes(cur.noteType), ph: 'Write it down before it slips away.' })}
+      <div class="actions"><button type="button" class="btn small" id="copyBody">Copy note text</button><span class="msg" id="copyMsg"></span></div>
+      ${field('tags', 'Tags', '', { line: 1, ph: 'e.g. pfsense, powershell, later' })}
+    </div>`;
+  if (cur.kind === 'project') body = `
+    <div class="group">
+      ${field('goal', 'Goal', 'What you want to end up with, in a sentence or two.', { rows: 2 })}
+      ${field('doneWhen', 'Done when', 'How you\'ll know it\'s finished.', { rows: 2 })}
+    </div>
+    <div class="group"><h2>Steps</h2>
+      <div class="progress" aria-hidden="true"><i id="prog"></i></div><p class="hint" id="progText"></p>
+      <ol class="steps" id="steps"></ol>
+      <div class="f"><label for="newStep">Add a step</label>
+        <div class="actions" style="flex-wrap:nowrap"><input type="text" id="newStep" placeholder="Type a step, press Enter"><button type="button" class="btn small" id="addStep">Add</button></div></div>
+    </div>
+    ${worklogHtml()}`;
+
+  $('#view').innerHTML = `
+    <article class="sheet k-${cur.kind}">
+      <header class="sheet-head">
+        <div class="stamp">
+          <span class="kind">${K.label}</span>
+          <span class="num" id="num">${curId ? esc(curId) : 'T-···'}</span>
+          <span class="saved" id="saved">${esc(savedLabel())}</span>
+        </div>
+        <input class="title-in" id="f-title" data-k="title" spellcheck="true" placeholder="${cur.kind === 'fix' ? 'Short title that names the problem' : cur.kind === 'note' ? 'What is it?' : 'What are you building?'}" value="${esc(cur.title)}" aria-label="Title">
+        <div class="meta-grid">
+          <div class="f"><label for="f-status">Status</label><select id="f-status">${statusOpts}</select></div>
+          ${cur.kind !== 'note' ? `<div class="f"><label for="f-tech">Tech</label><input type="text" id="f-tech" data-k="tech" spellcheck="false" placeholder="pfsense, dhcp…" value="${esc(cur.tech)}"></div>` : ''}
+          ${cur.kind !== 'note' ? `<div class="f"><label for="f-parent">Parent</label><input type="text" id="f-parent" data-k="parent" spellcheck="false" placeholder="T-001, or none" value="${esc(cur.parent)}"></div>` : ''}
+          ${cur.kind === 'fix' ? `<div class="f"><label for="f-showcase">Showcase?</label><select id="f-showcase"><option ${cur.showcase !== 'yes' ? 'selected' : ''}>no</option><option ${cur.showcase === 'yes' ? 'selected' : ''}>yes</option></select></div>` : ''}
+          <div class="f"><span class="lbl">Opened · Closed</span><span class="num" id="dates" style="font-size:13px;line-height:38px">${esc(cur.opened || today())} · ${esc(cur.closed || '—')}</span></div>
+        </div>
+        <p class="hint" id="closeWarn" hidden></p>
+      </header>
+      <div class="sheet-body">
+        ${body}
+        <div class="foot">
+          <div class="actions">
+            <label for="f-repo" class="lbl">GitHub repo</label>
+            <select id="f-repo" style="width:auto">${repoOptions()}</select>
+            <button type="button" class="btn primary" id="publish">Save to GitHub + Drive</button>
+            <button type="button" class="btn" id="pull" ${cur.driveId ? '' : 'hidden'}>Pull from Doc</button>
+          </div>
+          <div class="results" id="results">${linksHtml()}</div>
+          <div class="foot-row"><span></span><div class="actions" id="delBox">${curId ? '<button type="button" class="btn small danger" id="delBtn">Delete ticket</button>' : ''}</div></div>
+        </div>
+      </div>
+    </article>`;
+
+  document.querySelectorAll('[data-k]').forEach(el => {
+    el.addEventListener('input', () => { cur[el.dataset.k] = el.value; grow(el); changed(); });
+    if (el.tagName === 'TEXTAREA') grow(el);
+  });
+  $('#f-status').onchange = e => setStatus(e.target.value);
+  const sc = $('#f-showcase'); if (sc) sc.onchange = e => { cur.showcase = e.target.value; changed(); };
+  document.querySelectorAll('[data-scrub]').forEach(el => el.onchange = () => { cur.scrub = { ...(cur.scrub || {}), [el.dataset.scrub]: el.checked }; changed(); });
+  document.querySelectorAll('[data-ntype]').forEach(b => b.onclick = () => {
+    cur.noteType = b.dataset.ntype; changed();
+    document.querySelectorAll('[data-ntype]').forEach(x => x.setAttribute('aria-pressed', x === b));
+    const ta = $('#f-body'); ta.classList.toggle('mono', ['script', 'command'].includes(cur.noteType));
+    ta.spellcheck = !['script', 'command'].includes(cur.noteType);
+  });
+  const cb = $('#copyBody'); if (cb) cb.onclick = copyBody;
+  const wl = $('#addLog'); if (wl) wl.onclick = addLogLine;
+  if (cur.kind === 'project') { renderSteps(); $('#addStep').onclick = addStep; $('#newStep').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); addStep(); } }; }
+  $('#f-repo').onchange = e => { cur.githubTarget = e.target.value; changed(); };
+  $('#publish').onclick = () => publish(false);
+  $('#pull').onclick = pullFromDoc;
+  const del = $('#delBtn'); if (del) del.onclick = askDelete;
+  checkClose();
+  if (!curId) $('#f-title').focus();
+}
+
+// The ticket's chosen repo: what it was set to, else where it was last saved, else the first one.
+function repoChoice() {
+  const repos = (status?.github?.repos || []).map(r => r.repo);
+  return [cur?.githubTarget, cur?.githubRepo].find(r => r && repos.includes(r)) || repos[0] || '';
+}
+function repoOptions() {
+  const repos = (status?.github?.repos || []).map(r => r.repo);
+  if (!repos.length) return '<option value="">not set up</option>';
+  const pick = repoChoice();
+  return repos.map(r => `<option value="${esc(r)}" ${r === pick ? 'selected' : ''}>${esc(r.split('/')[1])}</option>`).join('');
+}
+function linksHtml() {
+  const out = [];
+  if (cur?.githubUrl) out.push(`<span>GitHub (${esc((cur.githubRepo || '').split('/')[1] || 'repo')}): <a href="${esc(cur.githubUrl)}" target="_blank" rel="noopener">${esc(curId)}.md</a> (saved ${esc((cur.githubAt || '').slice(0, 10))})</span>`);
+  if (cur?.driveUrl) out.push(`<span>Google Doc: <a href="${esc(cur.driveUrl)}" target="_blank" rel="noopener">open it</a> (saved ${esc((cur.driveAt || '').slice(0, 10))}). Edit or spell-check it there, then press Pull from Doc.</span>`);
+  return out.join('');
+}
+function worklogHtml() {
+  return `<div class="group"><h2>Work log</h2>
+    ${field('worklog', 'One line per session', 'date · what you did or found. Newest at the bottom.', { rows: 3, mono: 1 })}
+    <div class="actions"><button type="button" class="btn small" id="addLog">+ Add a line for today</button></div></div>`;
+}
+function grow(el) { if (el.tagName !== 'TEXTAREA') return; el.style.height = 'auto'; el.style.height = el.scrollHeight + 2 + 'px'; }
+function addLogLine() {
+  const ta = $('#f-worklog');
+  ta.value = ta.value.replace(/\s+$/, '') + (ta.value.trim() ? '\n' : '') + today() + ' · ';
+  cur.worklog = ta.value; grow(ta); changed();
+  ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length);
+}
+async function copyBody() {
+  const msg = $('#copyMsg');
+  try { await navigator.clipboard.writeText(cur.body || ''); msg.textContent = 'Copied'; }
+  catch { const ta = $('#f-body'); ta.focus(); ta.select(); msg.textContent = 'Selected: press Ctrl+C'; }
+}
+function setStatus(s) {
+  cur.status = s;
+  if (s === KINDS[cur.kind].closed) { if (!cur.closed) cur.closed = today(); } else cur.closed = '';
+  const d = $('#dates'); if (d) d.textContent = (cur.opened || today()) + ' · ' + (cur.closed || '—');
+  checkClose(); changed();
+}
+function checkClose() {
+  const w = $('#closeWarn'); if (!w) return;
+  if (cur.kind === 'fix' && cur.status === 'resolved') {
+    const missing = ['problem', 'fix', 'learned'].filter(k => !String(cur[k] || '').trim());
+    w.hidden = !missing.length;
+    w.textContent = missing.length ? 'Still blank before this counts as resolved: ' + missing.map(m => m[0].toUpperCase() + m.slice(1)).join(', ') + '.' : '';
+  } else w.hidden = true;
+}
+
+/* project steps */
+function renderSteps() {
+  const list = $('#steps'); const steps = cur.steps || [];
+  list.innerHTML = steps.map((s, i) => `
+    <li class="step ${s.d ? 'done' : ''}" data-i="${i}">
+      <input type="checkbox" aria-label="Step ${i + 1} done" ${s.d ? 'checked' : ''} data-sd>
+      <span class="n">${i + 1}.</span>
+      <input type="text" class="step-text" aria-label="Step ${i + 1}" spellcheck="true" value="${esc(s.t)}" data-st>
+      <span class="tools">
+        <button type="button" title="Notes" aria-label="Notes for step ${i + 1}" data-sn>✎</button>
+        <button type="button" title="Move up" aria-label="Move step ${i + 1} up" data-up ${i === 0 ? 'disabled' : ''}>↑</button>
+        <button type="button" title="Move down" aria-label="Move step ${i + 1} down" data-down ${i === steps.length - 1 ? 'disabled' : ''}>↓</button>
+        <button type="button" title="Remove" aria-label="Remove step ${i + 1}" data-rm>✕</button>
+      </span>
+      <div class="detail" ${s.n ? '' : 'hidden'}><textarea rows="2" aria-label="Notes for step ${i + 1}" placeholder="Commands, links, what happened" data-snote>${esc(s.n || '')}</textarea></div>
+    </li>`).join('');
+  list.querySelectorAll('.step').forEach(li => {
+    const i = +li.dataset.i, s = cur.steps[i];
+    li.querySelector('[data-sd]').onchange = e => {
+      s.d = e.target.checked; li.classList.toggle('done', s.d);
+      if (s.d && cur.status === 'open') { cur.status = 'in-progress'; $('#f-status').value = 'in-progress'; }
+      progress(); changed();
+    };
+    li.querySelector('[data-st]').oninput = e => { s.t = e.target.value; changed(); };
+    li.querySelector('[data-sn]').onclick = () => { const d = li.querySelector('.detail'); d.hidden = !d.hidden; if (!d.hidden) d.querySelector('textarea').focus(); };
+    const ta = li.querySelector('[data-snote]'); grow(ta);
+    ta.oninput = e => { s.n = e.target.value; grow(ta); changed(); };
+    li.querySelector('[data-up]').onclick = () => moveStep(i, -1);
+    li.querySelector('[data-down]').onclick = () => moveStep(i, 1);
+    li.querySelector('[data-rm]').onclick = () => { cur.steps.splice(i, 1); renderSteps(); changed(); };
+  });
+  progress();
+}
+function moveStep(i, by) { const s = cur.steps; const j = i + by; if (j < 0 || j >= s.length) return; [s[i], s[j]] = [s[j], s[i]]; renderSteps(); changed(); }
+function addStep() {
+  const inp = $('#newStep'); const t = inp.value.trim(); if (!t) return;
+  cur.steps = [...(cur.steps || []), { t, d: false, n: '' }];
+  inp.value = ''; renderSteps(); changed(); inp.focus();
+}
+function progress() {
+  const s = cur.steps || []; const done = s.filter(x => x.d).length;
+  $('#prog').style.width = s.length ? (done / s.length * 100) + '%' : '0';
+  $('#progText').textContent = s.length ? `${done} of ${s.length} steps done` : 'No steps yet. Add the first one below.';
+}
+
+/* ---------- saving (to the NUC, as you type) ---------- */
+function savedText(t, err) { const el = $('#saved'); if (el) { el.textContent = t; el.classList.toggle('err', !!err); } }
+function changed() {
+  savedText('Saving…');
+  clearTimeout(saveTimer); saveTimer = setTimeout(doSave, 700);
+}
+function flushSave() { if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; doSave(); } }
+const pageFields = t => Object.fromEntries(Object.entries(t).filter(([k]) => !SERVER_FIELDS.includes(k) || k === 'kind'));
+function takeServerFields(t, from) { for (const k of SERVER_FIELDS) if (k in from) t[k] = from[k]; }
+async function ensureCreated() {
+  if (curId) return;
+  if (creating) return creating;
+  creating = (async () => {
+    const t = cur;
+    t.opened = t.opened || today();
+    const made = await api('POST', 'tickets', pageFields(t));
+    takeServerFields(t, made);
+    tickets.set(made.id, structuredClone(t));
+    if (t !== cur) return;
+    curId = made.id;
+    if (route() === t.kind) setHash(made.id);
+    $('#num').textContent = made.id;
+    const box = $('#delBox'); if (box && !$('#delBtn')) { box.innerHTML = '<button type="button" class="btn small danger" id="delBtn">Delete ticket</button>'; $('#delBtn').onclick = askDelete; }
+  })();
+  try { await creating; } finally { creating = null; }
+}
+async function doSave() {
+  saveTimer = null;
+  if (!cur) return;
+  const t = cur;
+  if (saving) { again = true; return; }
+  saving = true;
+  try {
+    const fresh = !curId;
+    await ensureCreated();
+    if (!fresh || t !== cur) {
+      const saved = await api('PUT', 'tickets/' + t.id, pageFields(t));
+      takeServerFields(t, saved);
+      tickets.set(t.id, structuredClone(t));
+    }
+    if (t === cur) savedText(savedLabel());
+  } catch (e) {
+    if (t === cur) savedText(e.code === 'signed_out' ? 'Not saved: signed out' : e.code === 'offline' ? 'Not saved: no connection. It retries on your next change.' : 'Not saved: ' + e.message, true);
+  } finally {
+    saving = false;
+    if (again) { again = false; doSave(); }
+  }
+}
+
+/* ---------- delete ---------- */
+function askDelete() {
+  const box = $('#delBox');
+  box.innerHTML = `<div class="confirm"><span>Delete ${esc(curId)}? It moves to the server's deleted folder. Copies on GitHub and Drive stay.</span>
+    <button type="button" class="btn small danger" id="delYes">Delete</button><button type="button" class="btn small" id="delNo">Keep it</button></div>`;
+  $('#delNo').onclick = () => { box.innerHTML = '<button type="button" class="btn small danger" id="delBtn">Delete ticket</button>'; $('#delBtn').onclick = askDelete; };
+  $('#delYes').onclick = async () => {
+    clearTimeout(saveTimer); saveTimer = null;
+    try { await api('DELETE', 'tickets/' + curId); tickets.delete(curId); cur = null; curId = null; location.hash = 'list'; }
+    catch { box.innerHTML = '<span class="msg err">Couldn\'t delete it. Try again in a moment.</span>'; }
+  };
+}
+
+/* ---------- Save to GitHub + Drive ---------- */
+const cell = s => String(s || '—').replace(/\|/g, '\\|').replace(/\s*\n\s*/g, ' ');
+// Google Docs joins single line breaks into one paragraph, so each line becomes its own paragraph.
+const para = s => String(s || '').split('\n').map(x => x.trim()).filter(Boolean).join('\n\n') || '_(blank)_';
+const lines = s => String(s || '').split('\n').map(x => x.trim()).filter(Boolean);
+const docTitle = (id, t) => `${id} · ${KINDS[t.kind].label}: ${String(t.title || '').trim() || '(untitled)'}`;
+function toMarkdown(id, t) {
+  const head = [['Ticket', id], ['Type', t.kind], ['Status', t.status], ['Opened', t.opened], ['Closed', t.closed]];
+  if (t.kind !== 'note') head.push(['Tech', t.tech], ['Parent', t.parent || 'none']);
+  if (t.kind === 'fix') head.push(['Showcase?', t.showcase]);
+  if (t.kind === 'note') head.push(['Note type', t.noteType], ['Tags', t.tags]);
+  let md = `# ${docTitle(id, t)}\n\nEdit this ticket: ${PAGE}#${id}\n\n| Field | Value |\n|---|---|\n` + head.map(([a, b]) => `| **${a}** | ${cell(b)} |`).join('\n') + '\n\n';
+  if (t.kind === 'fix') {
+    md += `## One line (for interviews)\n\n${para(t.oneLine)}\n\n## Required\n\n### Problem\n\n${para(t.problem)}\n\n### Fix\n\n${para(t.fix)}\n\n### Learned\n\n${para(t.learned)}\n\n## Optional\n\n`;
+    md += `### Symptoms / evidence\n\n${lines(t.symptoms).length ? '```\n' + t.symptoms.trim() + '\n```' : '_(blank)_'}\n\n`;
+    md += `### What I tried\n\n${lines(t.tried).map(l => '- ' + l.replace(/^[-*]\s*/, '')).join('\n') || '_(blank)_'}\n\n### Cause\n\n${para(t.cause)}\n\n`;
+  }
+  if (t.kind === 'note') {
+    md += '## Note\n\n';
+    md += ['script', 'command'].includes(t.noteType) && String(t.body || '').trim() ? '```\n' + t.body.trim() + '\n```\n\n' : para(t.body) + '\n\n';
+  }
+  if (t.kind === 'project') {
+    const s = t.steps || [];
+    md += `## Goal\n\n${para(t.goal)}\n\n## Done when\n\n${para(t.doneWhen)}\n\n## Steps (${s.filter(x => x.d).length} of ${s.length} done)\n\n`;
+    // step notes go in as a sub-list so they stay separate from the step text
+    md += s.map((x, i) => `${i + 1}. ${x.d ? '☑' : '☐'} ${x.t}` + lines(x.n).map(n => '\n    - ' + n).join('')).join('\n') || '_(no steps yet)_';
+    md += '\n\n';
+  }
+  if (t.kind !== 'note') md += `## Work log\n\n${lines(t.worklog).map(l => '- ' + l).join('\n') || '_(blank)_'}\n\n`;
+  if (t.kind === 'fix') md += `## Before it goes to git (scrub check)\n\n${SCRUB.map(([k, l]) => `- ${t.scrub?.[k] ? '☑' : '☐'} ${l}`).join('\n')}\n`;
+  return md;
+}
+async function publish(force) {
+  const btn = $('#publish'), out = $('#results');
+  if (!String(cur.title || '').trim()) { out.innerHTML = '<span class="bad">Give it a title first.</span>'; return; }
+  const t = cur;
+  btn.disabled = true; out.innerHTML = '<span>Saving to GitHub and Drive…</span>';
+  try {
+    clearTimeout(saveTimer); saveTimer = null;
+    await doSave();
+    if (!curId) throw new Error('The ticket isn\'t saved yet.');
+    const id = curId;
+    const r = await api('POST', `tickets/${id}/publish`, { markdown: toMarkdown(id, t), title: docTitle(id, t), force, repo: repoChoice() });
+    if (r.ticket) takeServerFields(t, r.ticket);
+    if (t !== cur) return;
+    $('#pull').hidden = !t.driveId;
+    const line = (name, x) => x.ok ? `<span class="good">${name}: saved.</span>`
+      : x.skipped ? `<span>${name}: ${esc(x.error)}${name === 'Google Drive' ? ' <a href="#settings">Settings</a>' : ''}</span>`
+      : x.conflict ? `<span class="bad">${name}: ${esc(x.error)} <button type="button" class="btn small" id="overwrite">Overwrite the Doc</button></span>`
+      : `<span class="bad">${name}: ${esc(x.error)}</span>`;
+    out.innerHTML = line('GitHub', r.github) + line('Google Drive', r.drive) + linksHtml();
+    const ow = $('#overwrite'); if (ow) ow.onclick = () => publish(true);
+  } catch (e) {
+    if (t === cur) out.innerHTML = `<span class="bad">${esc(e.code === 'offline' ? 'Couldn\'t reach the Tickets server.' : e.message)}</span>` + linksHtml();
+  } finally { btn.disabled = false; }
+}
+
+/* ---------- Pull from Doc: read the Google Doc back into the ticket's fields ---------- */
+// Drive sends the Doc as Markdown with some escapes (\*\*, \#); headings name the fields.
+const SECTION_KEYS = {
+  'one line (for interviews)': 'oneLine', 'problem': 'problem', 'fix': 'fix', 'learned': 'learned',
+  'symptoms / evidence': 'symptoms', 'what i tried': 'tried', 'cause': 'cause', 'work log': 'worklog',
+  'goal': 'goal', 'done when': 'doneWhen', 'note': 'body',
+};
+const FIELD_LABELS = { title: 'Title', status: 'Status', tech: 'Tech', parent: 'Parent', showcase: 'Showcase', noteType: 'Note type',
+  tags: 'Tags', oneLine: 'One line', problem: 'Problem', fix: 'Fix', learned: 'Learned', symptoms: 'Symptoms', tried: 'What I tried',
+  cause: 'Cause', worklog: 'Work log', goal: 'Goal', doneWhen: 'Done when', body: 'Note', steps: 'Steps', scrub: 'Scrub check' };
+const unmd = s => s.replace(/\\(.)/g, '$1').replace(/\*\*/g, '').replace(/ /g, ' ').replace(/\s+$/, '');
+const isBlankMark = l => /^[_*]?\((blank|no steps yet)\)[_*]?$/i.test(l.trim());
+function sectionKey(h) {
+  const k = h.trim().toLowerCase();
+  if (k.startsWith('steps')) return 'steps';
+  if (k.startsWith('before it goes to git') || k.startsWith('scrub')) return 'scrub';
+  return SECTION_KEYS[k] || null;
+}
+function parseDoc(text, kind) {
+  const out = {}, secs = {};
+  let sec = null;
+  for (const raw of String(text).split('\n')) {
+    const l = unmd(raw); let m;
+    if ((m = l.match(/^#\s+(.*)$/))) { out.title = m[1].replace(/^[TB]-[FNP]?\d+\s*·\s*\w+:\s*/, '').trim(); sec = null; continue; }
+    if ((m = l.match(/^#{2,6}\s+(.*)$/))) { sec = sectionKey(m[1]); if (sec) secs[sec] = []; continue; }
+    if (!sec && (m = l.match(/^\|\s*(.+?)\s*\|\s*(.*?)\s*\|$/))) {
+      const name = m[1].toLowerCase(), v = m[2] === '—' ? '' : m[2];
+      if (name === 'status' && KINDS[kind].statuses.includes(v)) out.status = v;
+      else if (name === 'tech') out.tech = v;
+      else if (name === 'parent') out.parent = v === 'none' ? '' : v;
+      else if (name === 'showcase?') out.showcase = v === 'yes' ? 'yes' : 'no';
+      else if (name === 'note type' && NOTE_TYPES.includes(v)) out.noteType = v;
+      else if (name === 'tags') out.tags = v;
+      continue;
+    }
+    if (sec) secs[sec].push(l);
+  }
+  const clean = arr => arr.filter(l => l.trim() && !isBlankMark(l) && !/^\s*```/.test(l));
+  for (const [k, arr] of Object.entries(secs)) {
+    if (k === 'steps') {
+      const steps = [];
+      for (const l of clean(arr)) {
+        const m = l.match(/^\s*\d+[.)]\s+(?:([☑☐✅✓]|\[[ xX]\])\s*)?(.*)$/);
+        if (m) steps.push({ t: m[2].trim(), d: !!m[1] && !/☐|\[ \]/.test(m[1]), n: '' });
+        else if (steps.length) { const s = steps[steps.length - 1]; s.n = (s.n ? s.n + '\n' : '') + l.replace(/^\s*[-*•]\s+/, '').trim(); }
+      }
+      out.steps = steps;
+    } else if (k === 'scrub') {
+      const scrub = {}, ls = clean(arr);
+      for (const [key, label] of SCRUB) { const l = ls.find(x => x.includes(label.slice(0, 18))); scrub[key] = !!l && /☑|✅|✓|\[[xX]\]/.test(l); }
+      out.scrub = scrub;
+    } else if (k === 'tried' || k === 'worklog') {
+      out[k] = clean(arr).map(l => l.replace(/^\s*[-*•]\s+/, '').trim()).join('\n');
+    } else {
+      out[k] = clean(arr).map(l => l.trim()).join('\n');
+    }
+  }
+  return Object.fromEntries(Object.entries(out).filter(([k]) => k in blank(kind)));
+}
+async function pullFromDoc() {
+  const btn = $('#pull'), out = $('#results');
+  const t = cur;
+  btn.disabled = true; out.innerHTML = '<span>Reading the Doc…</span>';
+  try {
+    const r = await api('POST', `tickets/${curId}/pull`);
+    if (r.ticket) takeServerFields(t, r.ticket);
+    if (t !== cur) return;
+    const got = parseDoc(r.markdown || '', t.kind);
+    const changedKeys = Object.keys(got).filter(k => JSON.stringify(got[k] ?? '') !== JSON.stringify(t[k] ?? ''));
+    if (!changedKeys.length) { out.innerHTML = '<span>The Doc matches this ticket. Nothing to pull.</span>' + linksHtml(); return; }
+    const before = structuredClone(t);
+    Object.assign(t, got);
+    if (got.status) { if (got.status === KINDS[t.kind].closed) t.closed = t.closed || today(); else t.closed = ''; }
+    renderEditor(); changed();
+    $('#results').innerHTML = `<span class="good">Pulled from the Doc: ${changedKeys.map(k => FIELD_LABELS[k] || k).join(', ')}. <button type="button" class="btn small" id="undoPull">Undo</button></span>` + linksHtml();
+    $('#undoPull').onclick = () => { if (cur !== t) return; cur = before; renderEditor(); changed(); $('#results').innerHTML = '<span>Undone. The ticket is back to how it was before the pull.</span>' + linksHtml(); };
+  } catch (e) {
+    if (t === cur) out.innerHTML = `<span class="bad">${esc(e.code === 'offline' ? 'Couldn\'t reach the Tickets server.' : e.message)}</span>` + linksHtml();
+  } finally { const b = $('#pull'); if (b) b.disabled = false; }
+}
+
+/* ---------- start ---------- */
+render();
+Promise.all([loadAll(), loadStatus()]).then(() => {
+  if (!cur && route() === 'home') renderHome();
+  const sel = $('#f-repo'); if (sel && cur) sel.innerHTML = repoOptions(); // status arrived after the editor drew
+});
+</script>
+</body>
+</html>

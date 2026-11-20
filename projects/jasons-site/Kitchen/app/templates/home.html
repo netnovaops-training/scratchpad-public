@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% block title %}{{ business }}{% endblock %}
+
+{% block body %}
+
+<div class="status sans">
+  <span><span class="dot {{ 'up' if llm_ok[0] }}"></span>
+    models: {{ llm_ok[1] }}</span>
+  <span><span class="dot {{ 'up' if library_ok[0] }}"></span>
+    library: {{ library_ok[1] }}</span>
+</div>
+
+{% if not llm_ok[0] %}
+  <div class="notice warn">
+    The model router is not answering, so pages without machine-readable recipe
+    data cannot be read right now. Pages that publish their recipe properly —
+    which is most of them — still import fine.
+  </div>
+{% endif %}
+
+{% if not can_write %}
+  <div class="notice warn">
+    You can look through everything here, but only Jason, Casey, or Mama can add
+    a recipe, keep one, or change the shopping list.
+  </div>
+{% endif %}
+
+{% if can_write %}
+<form class="card" method="post" action="{{ root }}/import">
+  <h2>Paste a link</h2>
+  <label for="url">The recipe's web address
+    <span class="hint">Any recipe page. The blog post with eleven paragraphs
+      about someone's grandmother is fine — the recipe gets pulled out of it.</span>
+  </label>
+  <input id="url" name="url" type="url" inputmode="url" autocomplete="off"
+         placeholder="https://…">
+
+  <label for="serves">How many people? <span class="hint">Optional. Leave it
+    blank to keep the recipe's own portions.</span></label>
+  <input id="serves" name="serves" type="number" min="1" max="24"
+         inputmode="numeric" placeholder="as written">
+
+  <details style="margin-top:1.1rem">
+    <summary class="sans small muted" style="cursor:pointer">
+      Or paste the text instead
+    </summary>
+    <label for="text" style="margin-top:.6rem">The recipe, typed or pasted
+      <span class="hint">For sites that block us, and for a card you have
+        copied out by hand.</span></label>
+    <textarea id="text" name="text" placeholder="Ingredients…&#10;Method…"></textarea>
+  </details>
+
+  <button class="big" type="submit">Read it</button>
+</form>
+
+<form class="card" method="post" action="{{ root }}/import/bulk" id="bulkForm">
+  <h2>A whole pile at once</h2>
+  {% if bulk_error %}
+  <div class="notice warn">{{ bulk_error }}</div>
+  {% endif %}
+  <label for="urls">One link per line
+    <span class="hint">Up to 40. Paste from anywhere — a numbered list or a
+      chat is fine, the links get picked out of it.</span></label>
+  <textarea id="urls" name="urls" style="min-height:120px"
+            placeholder="https://…&#10;https://…&#10;https://…">{{ bulk_prefill or '' }}</textarea>
+  <p id="bulkCount" class="small muted" style="margin:.4rem 0 0">0 links</p>
+  <button class="big ghost" type="submit" id="bulkSend">Read them all</button>
+  <p class="small muted" style="margin:.7rem 0 0">
+    They are read one at a time, on purpose — several at once would each want
+    the model and queue behind the phone line. You get a page that refreshes
+    itself, so you can close it and come back.
+  </p>
+</form>
+{% endif %}
+
+{# The pantry picker moved to the standalone /recipe app (2026-08-24,
+   Jason's own words: "I don't want extra links to click into, I want it
+   all there on /recipe") -- same matcher (basket.py), same result, just
+   one canonical place for it now instead of here too. #}
+
+{% if recent %}
+<div class="card">
+  <h2>Lately</h2>
+  <div class="cards">
+    {% for item in recent %}{% with c = item %}{% include "_card.html" %}{% endwith %}{% endfor %}
+  </div>
+  <p class="small muted" style="margin:.8rem 0 0">
+    Anything you do not keep is swept after 30 days.
+  </p>
+</div>
+{% endif %}
+
+{% if not library_ok[0] %}
+<div class="card">
+  <h2 class="sans">The library is not connected</h2>
+  <p class="small muted">
+    {{ library_ok[1] }}. Importing and guides all still work — they do not need
+    Tandoor. Only <strong>Keep</strong> does. Kitchen signs itself in as the
+    Tandoor admin account and re-logs in on its own if the session expires, so
+    this almost always means Tandoor itself is down or unreachable, not a
+    credentials problem — check <code>docker compose ps tandoor</code> first.
+    If the admin account or password actually changed, update
+    <code>KITCHEN_TANDOOR_ADMIN_USER</code> / <code>KITCHEN_TANDOOR_ADMIN_PASSWORD</code>
+    in <code>ai-stack/.env</code>, then <code>docker compose restart kitchen</code>.
+  </p>
+</div>
+{% endif %}
+
+{% if can_write %}
+<script>
+/* Counts links live so 40 is a number you see coming, not one you hit
+   blind and lose your pasted list to. Same "https?://\S+ per line" idea
+   as the server's own count in bulk_start -- close enough for a live
+   number; the server has the final say. */
+(function(){
+  var BULK_MAX = 40;
+  var box = document.getElementById('urls');
+  var out = document.getElementById('bulkCount');
+  var send = document.getElementById('bulkSend');
+  if (!box || !out) return;
+  function count(){
+    var n = (box.value.match(/https?:\/\/\S+/g) || []).length;
+    out.textContent = n + (n === 1 ? ' link' : ' links') +
+      (n > BULK_MAX ? ' -- over the limit of ' + BULK_MAX + ', trim before sending' : '');
+    out.style.color = n > BULK_MAX ? 'var(--warn)' : '';
+    if (send) send.disabled = n > BULK_MAX;
+  }
+  box.addEventListener('input', count);
+  count();
+})();
+</script>
+{% endif %}
+
+{% endblock %}

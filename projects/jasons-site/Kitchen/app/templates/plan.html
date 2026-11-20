@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Meal plan{% endblock %}
+{% block sub %}<p class="small muted">Shared with the household through the library</p>{% endblock %}
+
+{% block body %}
+
+<div style="text-align:center;margin-bottom:1rem" class="sans">
+  <a class="btn ghost small" href="{{ root }}/plan?start={{ prev_start }}">&larr; Previous week</a>
+  <a class="btn ghost small" href="{{ root }}/plan?start={{ next_start }}">Next week &rarr;</a>
+</div>
+
+{% for day in days %}
+  <div class="card{{ ' today' if day.is_today else '' }}" style="margin-bottom:.8rem">
+    <h2 class="sans" style="margin:0 0 .5rem;font-size:1.05rem">
+      {{ day.label }}{% if day.is_today %} <span class="small muted">— today</span>{% endif %}
+    </h2>
+
+    {% if day.entries %}
+      <ul class="plain">
+        {% for e in day.entries %}
+          <li style="display:flex;justify-content:space-between;align-items:center;gap:.6rem">
+            <span>
+              <span class="small muted sans">{{ e.entryType }}</span> —
+              {% if e.kitchen_id %}
+                <a href="{{ root }}/r/{{ e.kitchen_id }}">{{ e.title }}</a>
+              {% elif e.public_link %}
+                <a href="{{ e.public_link }}">{{ e.title }}</a>
+              {% else %}
+                {{ e.title }}
+              {% endif %}
+            </span>
+            {% if can_write %}
+            <form method="post" action="{{ root }}/plan/{{ e.id }}/remove" style="margin:0">
+              <input type="hidden" name="start" value="{{ days[0].date }}">
+              <button class="small ghost" type="submit" title="Take this off the plan">&times;</button>
+            </form>
+            {% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="small muted" style="margin:0">Nothing planned.</p>
+    {% endif %}
+  </div>
+{% endfor %}
+
+<p class="small muted" style="text-align:center">
+  To plan a meal, open a kept recipe and use its <strong>Add to meal plan</strong> box.
+</p>
+
+{% endblock %}

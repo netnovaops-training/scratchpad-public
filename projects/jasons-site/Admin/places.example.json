@@ -1,0 +1,58 @@
+{
+  "_readme": [
+    "An example patch for the admin's Places slipstream page.",
+    "",
+    "Paste this into the box, or attach this file, and the two entries below are",
+    "added to Admin/data/places.json. Nothing else in that file is touched.",
+    "",
+    "You do not have to send a whole file like this. A bare list of entries works,",
+    "and so does a single entry on its own. Only 'remove' ever deletes anything.",
+    "",
+    "Keys starting with _ are ignored by everything that reads these files, so",
+    "notes to yourself are safe to leave in.",
+    "",
+    "CATEGORY decides which section of the directory it joins, and that matters",
+    "more than it looks: the phone line treats parks as outdoors and hides them",
+    "in the Las Vegas summer. Use one of these:",
+    "  senior_centers  libraries  parks  indoor_summer  pharmacies  dialysis",
+    "  physical_therapy  hospice  care_homes  adult_day_and_respite  transport",
+    "  helplines",
+    "A spoken word is understood too - 'pharmacy' becomes 'pharmacies'. An entry",
+    "with no category at all lands in indoor_summer, which is the safe default.",
+    "",
+    "GOOD_FOR is what the matching actually runs on. Words worth using, because",
+    "the phone agent scores against them: quiet, indoor, shade, no_stairs,",
+    "benches, seating, accessible_parking, free_wheelchairs, drive_up_picnic,",
+    "cards, classes, fitness, summer_refuge, early_morning.",
+    "",
+    "SOURCE is where you found it. Every researched entry in places.yaml cites",
+    "one, and the reason is not tidiness: a wrong address sends a frail person to",
+    "the wrong building, and the source is how anyone checks."
+  ],
+
+  "add": [
+    {
+      "name": "Walnut Recreation Center",
+      "category": "senior_centers",
+      "address": "3075 N. Walnut Rd., Las Vegas, NV 89115",
+      "phone": "555-0101",
+      "hours": "Mon-Fri 8am-8pm, Sat 8am-4pm, closed Sunday",
+      "good_for": ["indoor", "cards", "classes", "summer_refuge", "no_stairs"],
+      "cost": "free",
+      "notes": "Air conditioned all day, which is the whole point of it in July.",
+      "source": "https://www.clarkcountynv.gov/residents/parks_recreation/"
+    },
+    {
+      "name": "Sunrise Coffee",
+      "category": "indoor_summer",
+      "address": "3130 E. Sunset Rd., Las Vegas, NV 89120",
+      "phone": "555-0102",
+      "hours": "Daily 6am-6pm",
+      "good_for": ["quiet", "indoor", "seating", "shade"],
+      "notes": "Big tables, unhurried, nobody minds you sitting for two hours.",
+      "source": "https://sunrisecoffeelv.com/"
+    }
+  ],
+
+  "remove": []
+}

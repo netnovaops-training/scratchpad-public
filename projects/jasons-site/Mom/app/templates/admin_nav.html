@@ -1,0 +1,40 @@
+{# Shared sub-navigation for the console. Included by every admin page so
+   there is exactly one place to add a section. #}
+<nav class="subnav">
+  <a href="{{ root }}/admin"           {% if page=='overview' %}class="here"{% endif %}>Overview</a>
+  <a href="{{ root }}/admin/tickets"   {% if page=='tickets'  %}class="here"{% endif %}>Tickets</a>
+  <a href="{{ root }}/admin/categories" {% if page=='cats'    %}class="here"{% endif %}>Categories</a>
+  <a href="{{ root }}/admin/faq"       {% if page=='faq'      %}class="here"{% endif %}>Answers</a>
+  <a href="{{ root }}/admin/guides"    {% if page=='guides'   %}class="here"{% endif %}>Handbook</a>
+  <a href="{{ root }}/admin/kb"        {% if page=='kb'       %}class="here"{% endif %}>Known fixes</a>
+  <a href="{{ root }}/admin/models"    {% if page=='models'   %}class="here"{% endif %}>Models</a>
+  <a href="{{ root }}/admin/learned"   {% if page=='learned'  %}class="here"{% endif %}>Learned</a>
+</nav>
+<style>
+.subnav{display:flex;gap:.4rem;flex-wrap:wrap;margin:0 0 1.2rem;
+  border-bottom:2px solid var(--line);padding-bottom:.6rem}
+.subnav a{padding:.5rem .9rem;border-radius:10px;text-decoration:none;
+  font-weight:700;font-size:.95rem;color:var(--muted)}
+.subnav a.here{background:var(--accent-soft);color:var(--accent)}
+.subnav a:hover{background:var(--accent-soft)}
+table.grid{width:100%;border-collapse:collapse;font-size:.92rem}
+table.grid th{text-align:left;padding:.5rem .4rem;border-bottom:2px solid var(--line);
+  font-size:.85rem;text-transform:uppercase;letter-spacing:.03em;color:var(--muted)}
+table.grid td{padding:.55rem .4rem;border-bottom:1px solid var(--line);vertical-align:top}
+table.grid tr:hover td{background:var(--accent-soft)}
+.pill{display:inline-block;padding:.15rem .55rem;border-radius:999px;
+  font-size:.78rem;font-weight:700;white-space:nowrap}
+.pill.open{background:var(--warn-bg);color:var(--warn)}
+.pill.closed{background:var(--accent-soft);color:var(--accent)}
+.pill.escalated{background:var(--danger-bg);color:var(--danger)}
+.pill.ok{background:var(--accent-soft);color:var(--accent)}
+.pill.bad{background:var(--danger-bg);color:var(--danger)}
+.stat{display:flex;gap:1.4rem;flex-wrap:wrap;margin:.4rem 0 0}
+.stat div{min-width:5.5rem}
+.stat b{display:block;font-size:1.6rem;line-height:1.1}
+.stat span{font-size:.82rem;color:var(--muted)}
+.filters{display:flex;gap:.5rem;flex-wrap:wrap;align-items:flex-end;margin-bottom:1rem}
+.filters input,.filters select{width:auto;min-width:9rem;padding:.6rem;font-size:1rem}
+.filters button{min-height:44px;padding:.6rem 1.1rem}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.85rem}
+</style>

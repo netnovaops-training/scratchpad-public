@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Admin{% endblock %}
+
+{% block body %}
+<div class="card">
+  <p style="margin:0"><strong>Vision model</strong>
+    {% if vision_loaded %}<span class="small" style="color:var(--ok)">on</span>
+    {% else %}<span class="small muted">off</span>{% endif %}
+  </p>
+  <p class="small muted" style="margin:.3rem 0 .7rem">
+    Real photo understanding for reference pictures. Frees the household's
+    other models to turn on, and restores them when you turn it back off
+    -- only you can see or use this.
+  </p>
+  <form method="post" action="{{ root }}/vision/{{ 'off' if vision_loaded else 'on' }}">
+    <button class="btn" type="submit">Turn {{ 'off' if vision_loaded else 'on' }}</button>
+  </form>
+</div>
+
+<div class="card">
+  <p style="margin:0">
+    Ingredient warnings are managed from the real admin panel now
+    (<code>/admin/pictures</code>), not here -- Jason's own call
+    (2026-08-24): "I want to manage it in my admin panel." This page keeps
+    only the vision toggle, which has no other home yet.
+  </p>
+</div>
+{% endblock %}

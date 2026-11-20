@@ -1,0 +1,389 @@
+/* Layout specific to this app -- palette/type all come from /theme.css. */
+
+/* Sticky chrome, stacked: the topbar pins first, the search bar (rendered
+   only on Browse, inside #app) pins directly under it -- Jason's own
+   request (2026-08-24): "can we make the search on top." A FIXED topbar
+   height is what lets the search bar's own `top` be a plain number
+   instead of something measured in JS -- nav no longer wraps to a second
+   line (it scrolls sideways instead, see below), so this height never
+   changes across screen widths. */
+:root{--topbar-h:3.6rem}
+.topbar{position:sticky;top:0;z-index:20;height:var(--topbar-h);
+  display:flex;align-items:center;justify-content:space-between;gap:1rem;
+  padding:0 clamp(1rem,4vw,2rem);border-bottom:1px solid var(--line);
+  background:var(--panel);backdrop-filter:blur(11px) saturate(1.25);
+  -webkit-backdrop-filter:blur(11px) saturate(1.25)}
+.topbar .brand{font-weight:700;font-size:1.1rem;color:var(--ink);text-decoration:none;flex:none}
+.topbar nav{display:flex;align-items:center;gap:1rem;min-width:0;
+  overflow-x:auto;scrollbar-width:none;-ms-overflow-style:none}
+.topbar nav::-webkit-scrollbar{display:none}
+.topbar nav a{color:var(--muted);text-decoration:none;font-size:.9rem;white-space:nowrap;flex:none}
+.topbar nav a:hover{color:var(--ink)}
+.topbar button{background:var(--accent);color:#04101f;border:0;border-radius:99px;
+  padding:.45rem 1rem;font-size:.85rem;font-weight:600;cursor:pointer;white-space:nowrap;flex:none}
+
+main{width:min(1000px,100%);margin:0 auto;padding:clamp(1.2rem,4vw,2rem) 1.25rem 3rem}
+.muted{color:var(--muted)}
+
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(15rem,1fr));gap:1rem}
+.rcard{display:block;text-decoration:none;color:inherit;border:1px solid var(--line);
+  border-radius:var(--radius);overflow:hidden;background:var(--panel);position:relative}
+.rcard img{width:100%;height:9rem;object-fit:cover;display:block;background:var(--line)}
+.rcard .noimg{height:9rem;background:var(--line)}
+.rcard .body{padding:.7rem .8rem}
+.rcard h3{margin:0;font-size:.95rem;font-weight:600}
+/* "Made this" -- Jason's own request (2026-08-25): "add checkboxes to
+   the recipes." Sits over the top-right corner of the image; dim until
+   checked, so an unmade recipe's grid doesn't read as cluttered with
+   badges. */
+.madecheck{position:absolute;top:.5rem;right:.5rem;display:flex;align-items:center;gap:.3rem;
+  padding:.3rem .55rem;border-radius:99px;background:rgba(5,10,18,.72);
+  backdrop-filter:blur(4px);font-size:.72rem;color:var(--muted);cursor:pointer}
+.madecheck input{width:1rem;height:1rem;accent-color:var(--ok)}
+.madecheck.on{color:var(--ok)}
+.madecheck span{white-space:nowrap}
+.rcard .course{font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+
+/* Phone LANDSCAPE only (short viewport, wide) -- Jason's own request
+   (2026-08-24): "cards that fit better on landscape with all the links
+   to the left." A grid of square tiles wastes the little vertical room
+   landscape leaves; a single column of compact rows (thumbnail left,
+   text left-aligned beside it) shows more recipes per scroll and reads
+   the way a list is supposed to on a short screen. Scoped by max-height,
+   not just orientation, so a tall desktop window in "landscape" (every
+   desktop window) never gets pulled into a phone-only layout. */
+@media (max-height:500px) and (orientation:landscape){
+  .grid{grid-template-columns:1fr;gap:.6rem}
+  .rcard{display:flex;flex-direction:row;align-items:stretch}
+  .rcard img,.rcard .noimg{width:6.5rem;height:6.5rem;flex:none}
+  .rcard .body{padding:.5rem .8rem;display:flex;flex-direction:column;justify-content:center;flex:1;min-width:0}
+}
+
+.searchbar{position:sticky;top:var(--topbar-h);z-index:15;margin:0 -1.25rem;
+  padding:.7rem 1.25rem;background:var(--bg);border-bottom:1px solid var(--line)}
+.searchbar input[type=search]{width:100%;font-size:1rem;padding:.6rem .8rem}
+.pills{display:flex;flex-wrap:wrap;gap:.4rem;margin:.9rem 0 1rem}
+.pill{border:1px solid var(--line);background:none;border-radius:99px;padding:.3rem .8rem;
+  font-size:.82rem;color:var(--ink);cursor:pointer}
+.pill.on{background:var(--accent);border-color:var(--accent);color:#04101f;font-weight:600}
+.pill .n{color:var(--muted);margin-left:.25rem}
+.pill.on .n{color:#04101f;opacity:.7}
+
+/* Infinite scroll -- Jason's own request (2026-08-24): "make it lazy
+   load." A sentinel row at the bottom of the results, watched by an
+   IntersectionObserver in app.js -- scrolling it into view fetches and
+   appends the next page instead of a Prev/Next click. */
+.scroll-sentinel{display:flex;justify-content:center;padding:1.4rem 0;color:var(--muted);font-size:.85rem}
+
+.rhero{width:100%;max-height:18rem;object-fit:cover;border-radius:var(--radius);margin-bottom:1rem}
+.rmeta{display:flex;gap:1rem;flex-wrap:wrap;color:var(--muted);font-size:.85rem;margin-bottom:1rem}
+.rsection{margin-top:1.4rem}
+.rsection h2{margin-bottom:.6rem}
+/* Icons 3x their original size -- Jason's own request (2026-08-24): "the
+   icons need to be larger... like 3x." Was 2.2rem/1.1rem throughout.
+   A real grid, not flex -- Jason's own request (2026-08-26), Tandoor's
+   own screen shown as the reference: "I wanted all recipes to have this
+   layout[,] the food items[,] neatly stacked." Four columns (icon,
+   amount, unit, name) so the QUANTITIES line up down the page the way
+   Tandoor's own do, not just each row internally consistent with itself.
+   Amount/unit columns size to their own content across every row
+   (minmax with an auto max), so a recipe with no long quantities doesn't
+   carry a wide empty gutter it never needed. */
+.itemrow{display:grid;grid-template-columns:auto auto minmax(2rem,auto) minmax(2.4rem,auto) 1fr;
+  align-items:center;gap:.7rem .9rem;padding:.6rem 0;border-top:1px solid var(--line)}
+.itemrow:first-child{border-top:0}
+.iconwrap{position:relative}
+.iconwrap img{width:6.5rem;height:6.5rem;border-radius:10px;object-fit:cover;display:block}
+.itemtext{min-width:0}
+.ingamt{text-align:right;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
+.ingunit{color:var(--muted);font-size:.88rem;white-space:nowrap}
+.ingnote{color:var(--muted);font-weight:400;font-size:.88rem}
+/* Jason's own request (2026-08-26): "can everyone have a checkbox for
+   the food item[,] or add it to a shopping cart so they can make sure
+   they have the ingredients." Checkbox: personal, "I already have
+   this" -- crosses the row out, same visual language .step.done already
+   uses for a finished cooking step. Cart button: shared, adds this one
+   line to the household shopping list. */
+.ingcheckwrap{display:flex;align-items:center}
+.ingcheck{width:1.3rem;height:1.3rem;accent-color:var(--accent);cursor:pointer}
+.itemrow.done .itemtext,.itemrow.done .ingamt,.itemrow.done .ingunit{
+  color:var(--muted);text-decoration:line-through}
+.itemrow.done .iconwrap{opacity:.5}
+.cartlink{background:none;border:0;color:var(--accent);font-size:.9rem;
+  cursor:pointer;padding:0 .2rem;vertical-align:middle}
+.cartlink:disabled{opacity:.6;cursor:default}
+/* A section divider inside the ingredient list ("For the sauce:") --
+   spans the full row rather than sitting in the name column like a
+   stray ingredient with no amount. */
+.ingheader{font-weight:700;font-size:.92rem;margin:.9rem 0 .2rem;
+  padding-top:.6rem;border-top:1px solid var(--line)}
+.ingheader:first-child{margin-top:0;padding-top:0;border-top:0}
+
+/* An ingredient with a real food id but no picture yet -- Jason's own
+   report (2026-08-26): "recipe 30 is missing one ingredient... I would
+   like to be able to go back in and edit those kinds of ingredients."
+   Same footprint as a real photo so the row doesn't jump once one is
+   added, dashed rather than solid so it reads as "nothing here yet"
+   rather than a broken image. */
+.iconwrap-empty .iconplaceholder{width:6.5rem;height:6.5rem;border-radius:10px;
+  display:flex;align-items:center;justify-content:center;
+  border:2px dashed var(--line);color:var(--muted);font-size:1.6rem}
+
+/* The pencil badge on a food/tool/step picture -- Jason's own request
+   (2026-08-25): "I would still like to go back and edit saved pictures
+   already made... allow person1@example.com to directly add images... like on
+   /kitchen in /recipe." Only rendered server-side when r.owner is true
+   (see editPicBadge() in app.js), so this CSS never needs its own
+   visibility check. A <button>, not a link -- opens #photo-modal inline
+   (see wirePhotoEdit()) rather than navigating away. .picwrap is added
+   alongside .stepicon/.toolchip (already position:static) so the badge
+   can sit in a corner without restructuring either one. */
+.picedit{position:absolute;bottom:-.3rem;right:-.3rem;width:1.7rem;height:1.7rem;
+  border-radius:50%;background:var(--accent);color:#04101f;display:flex;
+  align-items:center;justify-content:center;font-size:.9rem;text-decoration:none;
+  border:2px solid var(--bg);line-height:1;cursor:pointer;padding:0;font-family:inherit}
+.picwrap{position:relative}
+
+/* Inline picture search/draw panel -- Jason's own choice (AskUserQuestion,
+   2026-08-25) was to embed this flow directly in /recipe rather than link
+   out to Kitchen's own page. Reuses .install-panel's overlay/animation via
+   #photo-modal's shared .install-overlay class in index.html; only the
+   panel's own contents are styled here. */
+.photo-panel{max-width:30rem;text-align:left}
+.photo-panel h2{margin-bottom:.6rem;font-size:1.05rem}
+.photo-current{display:flex;align-items:center;gap:.6rem;margin-bottom:.8rem}
+.photo-current img{width:4rem;height:4rem;border-radius:8px;object-fit:cover;flex:none}
+.photo-search-form{display:flex;gap:.5rem;margin-bottom:.6rem}
+.photo-search-form input{flex:1;padding:.5rem .7rem;border-radius:8px;
+  border:1px solid var(--line);background:var(--bg);color:var(--ink);font-size:.9rem}
+.photo-results{display:grid;grid-template-columns:repeat(auto-fill,minmax(4.6rem,1fr));
+  gap:.5rem;margin-bottom:.8rem}
+.photo-result{border:2px solid transparent;border-radius:8px;padding:0;cursor:pointer;
+  background:none;overflow:hidden;aspect-ratio:1}
+.photo-result:hover,.photo-result:focus-visible{border-color:var(--accent)}
+.photo-result img{width:100%;height:100%;object-fit:cover;display:block}
+#photo-draw-btn{width:100%}
+#photo-draw-btn:disabled{opacity:.5;cursor:not-allowed}
+#photo-status{min-height:1.2em;margin-top:.5rem}
+
+/* "Generate step photos" -- Jason's own request (2026-08-25): "like in
+   /kitchen when I can generate a photo for step by step... for a recipe
+   in /recipe." Same button treatment as .cookbtn, deliberately, so both
+   owner-only recipe-level actions read as one family. */
+.drawbtn{display:inline-flex;align-items:center;gap:.5rem;margin:0 0 .8rem;
+  padding:.5rem 1rem;border-radius:99px;border:1px solid var(--accent);
+  background:none;color:var(--accent);font-size:.88rem;cursor:pointer}
+.drawbtn:disabled{opacity:.5;cursor:not-allowed}
+
+/* Substitution suggestions -- Jason's own request (2026-08-25): "with
+   the models i'd like to also suggest substitutions with tools and food
+   items." A small link per ingredient/tool, expanding in place. */
+.swaplink{background:none;border:0;color:var(--accent);font-size:.76rem;
+  cursor:pointer;padding:0 0 0 .5rem;text-decoration:underline}
+.swapresult{margin-top:.4rem;padding:.6rem .7rem;border:1px solid var(--line);
+  border-radius:8px;font-size:.85rem;background:var(--panel)}
+.swapresult .src{font-size:.72rem;color:var(--muted);text-transform:uppercase;
+  letter-spacing:.04em;margin-bottom:.3rem}
+.swapresult ul{margin:.2rem 0;padding-left:1.2rem}
+.swapresult .warn-note{color:var(--warn);font-size:.78rem;margin-top:.4rem}
+/* Jason's own report (2026-08-26): "swap in a recipe does nothing" --
+   it wasn't broken, it was a real ~45s model call (subs.suggest() always
+   runs the model alongside the lookup table, on purpose -- see its own
+   docstring) with nothing but static "Thinking..." text the whole time,
+   which reads as dead rather than slow. A spinner plus honest timing on
+   the same line as the text it's spinning next to. */
+.swap-spinner{display:inline-block;width:.75rem;height:.75rem;border-radius:50%;
+  border:2px solid var(--line);border-top-color:var(--accent);
+  margin-right:.4rem;vertical-align:-1px;animation:swap-spin .8s linear infinite}
+@keyframes swap-spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.swap-spinner{animation:none}}
+/* "Missing something?" / "Don't have the equipment?" -- Jason's own
+   request (2026-08-26): "I want to add these features back into
+   /recipe," Kitchen's own guide.html card as the reference. Forms use
+   the site's shared label/input styling (theme.css); this just adds
+   what's specific to these three forms. */
+.swapcard{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+  padding:1rem 1.1rem}
+.swapcard form{display:flex;flex-direction:column;gap:.5rem;max-width:26rem}
+.swapcard .hint{display:block;font-weight:400;color:var(--muted);font-size:.78rem;margin-top:.1rem}
+.swapcard button{align-self:start}
+.quickswaps{display:flex;flex-wrap:wrap;gap:.5rem;margin:0 0 1rem}
+.swapcard .swapresult{max-width:26rem;margin-top:.6rem}
+.toolwrap .swapresult{width:16rem;max-width:80vw}
+.step{padding:.9rem 0;border-top:1px solid var(--line)}
+.step:first-child{border-top:0}
+.step .n{color:var(--accent);font-weight:700;margin-right:.4rem}
+/* A step's own illustration (a real photo, or one drawn for it) -- Jason's
+   own report (2026-08-25): "I made the photos. they don't appear with the
+   recipe." Same visual treatment as the ingredient/tool icons directly
+   below it, just bigger, since this is the main picture for the step
+   rather than a small call-out. */
+.stepart{margin:0 0 .7rem}
+.stepart img{width:100%;max-height:22rem;object-fit:cover;border-radius:12px;display:block}
+.stepart-diagram svg{width:100%;max-width:14rem;display:block;margin:0 auto}
+.drawnote{font-size:.72rem;text-align:center;margin:.35rem 0 0}
+/* Step checkboxes -- Jason's own request (2026-08-25): "add checkboxes
+   to the recipes and steps." The whole step is the tap target (a
+   <label> wrapping the checkbox and its text), not just a small square
+   -- easier to hit one-handed, flour on your fingers, mid-cook. */
+.stepline{display:flex;align-items:flex-start;gap:.6rem;cursor:pointer}
+.stepcheck{width:1.3rem;height:1.3rem;flex:none;margin-top:.15rem;accent-color:var(--accent)}
+/* Listen -- Jason's own request (2026-08-25): the same cached read-aloud
+   button Kitchen's own guide page has, here too. */
+.listenbtn{margin:.4rem 0 0 2rem;padding:.3rem .8rem;border-radius:99px;
+  border:1px solid var(--line);background:none;color:var(--ink);
+  font-size:.8rem;cursor:pointer}
+.listenbtn:disabled{opacity:.6;cursor:default}
+.steptext{flex:1}
+.step.done .steptext{color:var(--muted);text-decoration:line-through}
+.step.done .n{color:var(--muted)}
+/* Cooking mode's bigger text -- Jason's own request (2026-08-26): "the
+   text steps to prepare should be made bigger... the same size as the
+   food items text." Same 1.35rem Kitchen's own cooking mode already
+   uses (base.html's `body.cooking .step p`) -- not picked fresh here,
+   reused so the two apps agree on what "bigger" means for the exact
+   same feature. Toggled on document.body by wireCookingMode()/
+   releaseCookingMode() in app.js. */
+body.cooking .steptext{font-size:1.35rem;line-height:1.5}
+body.cooking .step .n{font-size:1.1rem}
+
+/* Cooking mode -- Jason's own request (2026-08-25): "a cooking mode
+   that keeps the phone on while making a recipe." */
+.cookbtn{display:inline-flex;align-items:center;gap:.5rem;margin:.7rem 0 .2rem;
+  padding:.5rem 1rem;border-radius:99px;border:1px solid var(--line);
+  background:none;color:var(--ink);font-size:.88rem;cursor:pointer}
+.cookbtn .dot{width:.6rem;height:.6rem;border-radius:50%;background:var(--muted);flex:none}
+.cookbtn.on{border-color:var(--ok);color:var(--ok)}
+.cookbtn.on .dot{background:var(--ok);box-shadow:0 0 .4rem var(--ok)}
+.cookbtn:disabled{opacity:.5;cursor:not-allowed}
+/* Portion picker -- Jason's own request (2026-08-26): "converted with
+   the ability to adjust the portions," Tandoor's own servings stepper
+   shown as the reference. */
+.portions{display:flex;align-items:center;gap:.7rem;margin:0 0 .8rem}
+.portion-btn{width:2.1rem;height:2.1rem;border-radius:50%;border:1px solid var(--line);
+  background:none;color:var(--ink);font-size:1.2rem;line-height:1;cursor:pointer;
+  display:flex;align-items:center;justify-content:center}
+.portion-btn:disabled{opacity:.4;cursor:not-allowed}
+.portion-count{font-weight:600;min-width:6rem}
+.portion-reset{background:none;border:0;color:var(--accent);font-size:.8rem;
+  text-decoration:underline;cursor:pointer;padding:0}
+.chips{display:flex;flex-wrap:wrap;gap:.6rem}
+.chip{border:1px solid var(--line);border-radius:99px;padding:.25rem .7rem;font-size:.8rem}
+/* CAUGHT LIVE (2026-08-25), Jason's own report: tool chips and step icons
+   were 3.3rem while the ingredient list right above them was 6.5rem --
+   "make the food items the size they are in the ingredients as well as
+   the tools." All three now share one size var so they can't drift
+   apart again. */
+.toolchip{display:inline-flex;align-items:center;gap:.9rem;border:1px solid var(--line);
+  border-radius:14px;padding:.5rem 1.1rem .5rem .5rem;font-size:.95rem}
+.toolchip img{width:6.5rem;height:6.5rem;border-radius:10px;object-fit:cover;flex:none}
+.stepicons{display:flex;flex-wrap:wrap;gap:.9rem;margin-bottom:.6rem}
+.stepicon{display:flex;flex-direction:column;align-items:center;gap:.3rem;font-size:.78rem;
+  color:var(--muted);width:7rem;text-align:center}
+.stepicon img{width:6.5rem;height:6.5rem;border-radius:10px;object-fit:cover}
+
+/* Timer/temp/measurement diagrams -- Kitchen draws these in code
+   (diagram.py, svg.dgm is ITS class name, carried over verbatim so a
+   copied SVG needs no rewriting) and this app never had the CSS for
+   that class before now (only base.html, the OLD Kitchen UI, did).
+   Same 6.5rem box as a food/tool step icon so all three sit in one row
+   at one size -- Jason's own request. */
+svg.dgm{width:6.5rem;height:6.5rem;color:var(--muted);display:block;
+  border:1px solid var(--line);border-radius:10px;background:var(--bg)}
+svg.dgm text{fill:currentColor;stroke:none;text-anchor:middle;
+  font-family:inherit}
+svg.dgm text.big{font-size:22px;font-weight:700;dominant-baseline:middle}
+svg.dgm text.small{font-size:15px;font-weight:600}
+svg.dgm .thin{stroke-width:1.5;opacity:.65}
+.badge-trigger{cursor:pointer;background:none;border:0;padding:0;font:inherit}
+.badge-trigger:hover svg.dgm,.badge-trigger:focus-visible svg.dgm{border-color:var(--accent)}
+.badge-panel svg.dgm{width:min(70vw,16rem);height:min(70vw,16rem);margin:0 auto}
+
+.nutri h2{margin-bottom:.3rem}
+.nutri-tabs{display:flex;gap:.4rem;margin-bottom:.6rem}
+.nutri-tabs button{border:1px solid var(--ok);background:none;color:var(--ok);
+  border-radius:99px;padding:.3rem .9rem;font-size:.82rem;cursor:pointer}
+.nutri-tabs button.on{background:var(--ok);color:#04101f;font-weight:600}
+.nutri table{width:100%;border-collapse:collapse}
+.nutri td{padding:.3rem .2rem;border-top:1px solid var(--line);font-size:.88rem}
+.nutri tr:first-child td{border-top:0}
+/* Traffic-light by %DV -- Jason's own request (2026-08-25), same
+   convention as UK/EU front-of-pack labels: green under a fifth of a
+   day's worth, amber up to half, red past that. The whole-recipe table
+   carries no %DV (a day's-value reference means nothing for an entire
+   multi-serving dish), so it gets no class and stays neutral, not green. */
+.nutri td.amt{color:var(--ink);font-weight:600;text-align:right;
+  font-variant-numeric:tabular-nums}
+.nutri td.amt.good{color:var(--ok)}
+.nutri td.amt.warn{color:var(--warn)}
+.nutri td.amt.bad{color:var(--bad)}
+.nutri td.pct{color:var(--muted);text-align:right;width:3.5rem;font-variant-numeric:tabular-nums}
+.nutri ul{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:.4rem 1rem}
+
+.planform{display:flex;gap:.5rem;flex-wrap:wrap;align-items:end;margin-top:.6rem}
+.planform label{font-size:.72rem;text-transform:uppercase;color:var(--muted);display:block}
+.planform button{background:var(--accent);color:#04101f;border:0;border-radius:8px;
+  padding:.5rem 1rem;font-weight:600;cursor:pointer}
+
+.importform{display:flex;flex-direction:column;gap:.6rem;max-width:34rem}
+.importform input[type=url],.importform textarea{width:100%;font-size:1rem;padding:.6rem .8rem}
+.importform textarea{min-height:8rem}
+.importform button{align-self:start;background:var(--accent);color:#04101f;border:0;
+  border-radius:8px;padding:.55rem 1.2rem;font-weight:600;cursor:pointer}
+.importform button:disabled{opacity:.5;cursor:default}
+.importreview{margin-top:1.6rem}
+.importreview .actions{display:flex;gap:.6rem;margin-top:1rem}
+.importreview .actions button,.importreview .actions a{background:var(--accent);color:#04101f;
+  border:0;border-radius:8px;padding:.55rem 1.2rem;font-weight:600;cursor:pointer;
+  text-decoration:none;display:inline-block}
+.importreview .actions a.secondary{background:none;border:1px solid var(--line);color:var(--ink)}
+.err{color:var(--bad)}
+
+.day{margin-bottom:1rem}
+.day h3{margin:0 0 .4rem}
+.day.today h3{color:var(--accent)}
+.planentry{display:flex;justify-content:space-between;align-items:center;
+  padding:.4rem 0;border-top:1px solid var(--line)}
+.planentry:first-child{border-top:0}
+.planentry button{background:none;border:0;color:var(--bad);cursor:pointer;font-size:1.1rem}
+.weeknav{display:flex;justify-content:space-between;margin-bottom:1rem}
+.weeknav a{color:var(--muted);text-decoration:none}
+
+/* Install-as-an-app prompt -- Jason's own request (2026-08-24): "a pop-up
+   ... to check to see if they would like to install the website as a
+   desktop app... once they install it... don't check again." Sheet-from-
+   the-bottom on a phone (the native "add to home screen" convention),
+   centered dialog once there's room for one -- see app.js for when this
+   actually shows (never more than once a session, never again post-
+   install). */
+/* CAUGHT LIVE (2026-08-25), Jason's own report: "the notification comes
+   down to install but it doesn't install or go away... I can't click
+   off it." Root cause: `display:flex` on .install-overlay is an AUTHOR
+   rule, and an author rule beats the browser's own `[hidden]{display:
+   none}` UA rule regardless of specificity -- so app.js's own
+   `overlay.hidden = true` on decline/success was never actually hiding
+   anything, the panel just sat there forever. The `[hidden]` line below
+   is the actual fix; the backdrop's own click-to-dismiss (app.js) and
+   the new X button are the second, belt-and-suspenders fix for "I can't
+   click off it" -- there was never a way to do that at all before. */
+.install-overlay{position:fixed;inset:0;z-index:50;display:flex;align-items:flex-end;
+  justify-content:center;padding:1rem;background:rgba(3,7,13,.6)}
+.install-overlay[hidden]{display:none}
+.install-panel{max-width:26rem;width:100%;text-align:center;position:relative;
+  animation:install-in .32s cubic-bezier(.2,.8,.3,1)}
+.install-close{position:absolute;top:.4rem;right:.4rem;background:none;border:0;
+  color:var(--muted);font-size:1.3rem;line-height:1;cursor:pointer;padding:.3rem .5rem}
+.install-close:hover{color:var(--ink)}
+.install-icon{width:3.6rem;height:3.6rem;border-radius:14px;margin:0 auto .8rem;
+  display:grid;place-items:center;background:var(--bg);border:1px solid var(--line)}
+.install-icon img{display:block;width:2.1rem;height:2.1rem}
+.install-panel h2{margin-bottom:.4rem}
+.install-panel .sub{margin-bottom:1.1rem}
+.install-actions{display:flex;gap:.6rem;justify-content:center}
+.install-actions button{flex:1;max-width:11rem}
+@keyframes install-in{from{transform:translateY(16px);opacity:0}to{transform:translateY(0);opacity:1}}
+@media (min-width:640px){
+  .install-overlay{align-items:center}
+  @keyframes install-in{from{transform:translateY(0) scale(.96);opacity:0}to{transform:none;opacity:1}}
+}
+@media (prefers-reduced-motion:reduce){.install-panel{animation:none}}

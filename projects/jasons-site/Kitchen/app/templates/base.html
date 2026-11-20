@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#e58325">
+<title>{% block title %}{{ business }}{% endblock %}</title>
+<!-- The default favicon comes BEFORE head_extra so a page-specific
+     <link rel="icon"> there (see the three installable bookmark pages)
+     is the LAST one in the document and wins -- browsers do not have a
+     real "override" mechanism for this, only "last one in the markup". -->
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='88'>&#127859;</text></svg>">
+{% block head_extra %}{% endblock %}
+<style>
+/* Matched to Mealie's own stock theme (docs.mealie.io's THEME_LIGHT_*/
+   THEME_DARK_* defaults -- nothing here has been customized, so the
+   defaults ARE the theme) so the two read as one product rather than two
+   apps that happen to share a domain. Mealie's is a Material/Vuetify
+   palette: an orange primary, a teal accent, rounded elevated surfaces. */
+:root{--bg:#f2f2f2;--panel:#fff;--ink:#1b1b1b;--muted:#68696b;--line:#e0e0e0;
+ --accent:#e58325;--accent-ink:#fff;--accent2:#007a99;
+ --ok:#2e7d32;--okbg:#e8f5e9;--err:#c62828;--errbg:#fdecea;
+ --warnbg:#fff3e0;--warn:#e56200}
+@media (prefers-color-scheme:dark){:root{--bg:#121212;--panel:#1e1e1e;--ink:#eaeaea;
+ --muted:#a3a3a3;--line:#2e2e2e;--accent:#f0994a;--accent-ink:#1b1200;--accent2:#3fb8d6;
+ --ok:#7fd88a;--okbg:#16281a;--err:#f28b82;--errbg:#2c1615;
+ --warnbg:#2b1d0c;--warn:#f5a35c}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+ font:16px/1.6 "Roboto",ui-sans-serif,-apple-system,"Segoe UI",sans-serif}
+.sans{font-family:ui-sans-serif,-apple-system,"Segoe UI",Roboto,sans-serif}
+header{text-align:center;padding:2rem 1rem .6rem}
+header h1{margin:0;font-size:clamp(1.8rem,6vw,2.4rem);letter-spacing:-.01em}
+header h1 a{color:inherit;text-decoration:none}
+header p{margin:.35rem 0 0;color:var(--muted);font-size:1rem}
+/* --- the shell: a left nav rail beside the content, like Mealie's own
+   sidebar, so the two read as one product rather than two apps that happen
+   to share a domain. Collapses to the fixed bottom bar this site already
+   used on a phone -- that part did not need to change, see the media query
+   at the bottom of this file. */
+.shell{display:flex;min-height:100vh;align-items:flex-start}
+.rail{flex:0 0 220px;display:flex;flex-direction:column;gap:.1rem;
+ padding:1.4rem 1rem;border-right:1px solid var(--line);
+ position:sticky;top:0;height:100vh;overflow-y:auto}
+.rail .brand{display:flex;align-items:center;gap:.5rem;font-weight:700;
+ font-size:1.05rem;color:var(--ink);text-decoration:none;margin-bottom:.9rem;
+ padding:.4rem .6rem}
+.rail a{color:var(--ink);text-decoration:none;padding:.65rem .8rem;
+ border-radius:10px;font-size:.95rem}
+.rail a:hover{background:var(--bg)}
+.rail .raillib{margin-top:auto;color:var(--accent);font-weight:700}
+.railbadge{background:var(--accent);color:var(--accent-ink);border-radius:999px;
+ padding:.05rem .45rem;font-size:.72rem;font-weight:700;margin-left:.3rem}
+.content{flex:1;min-width:0}
+main{max-width:720px;margin:0 auto;padding:0 1.1rem 4rem}
+/* Opt-in per page, by overriding the "mainclass" template block with the
+   value "wide" -- everywhere else stays the narrow, one-handed, "reading
+   this in a shop" width the rest of the site is deliberately built around.
+   Only the catalog benefits from more columns on a wide screen; a shopping
+   list or a guide page does not. Deliberately not written here as literal
+   template markup: Jinja scans for its own delimiters anywhere in the file,
+   comment or not, and a second literal tag here would redefine the real
+   one a few lines down. */
+main.wide{max-width:1400px}
+/* Bigger minimum than the phone-first default, so a wide screen gets fewer,
+   larger cards -- actual bigger pictures, not just more small ones. */
+main.wide .cards{grid-template-columns:repeat(auto-fill,minmax(230px,1fr))}
+/* Elevation, not just a border -- a soft shadow is what makes a card read as
+   a raised Material surface rather than a boxed-off section. Kept faint on
+   purpose: it should read as depth, not a drop shadow around a photo. */
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+ padding:1.3rem;margin-bottom:1.1rem;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+h2{font-size:1.15rem;margin:0 0 .7rem}
+h3{font-size:1rem;margin:1.2rem 0 .4rem}
+label{display:block;font-weight:600;margin:1rem 0 .35rem;font-size:.95rem}
+label .hint{display:block;font-weight:400;color:var(--muted);font-size:.87rem}
+input,select,textarea{width:100%;padding:.8rem;border:1px solid var(--line);
+ border-radius:10px;background:var(--bg);color:var(--ink);font:inherit;font-size:17px}
+textarea{min-height:96px;resize:vertical}
+button,.btn{background:var(--accent);color:var(--accent-ink);border:0;padding:.8rem 1.25rem;
+ border-radius:9px;font:inherit;font-weight:700;cursor:pointer;text-decoration:none;
+ display:inline-block;text-align:center;min-height:48px;
+ box-shadow:0 1px 2px rgba(0,0,0,.16)}
+button.big{width:100%;font-size:1.06rem;margin-top:1.1rem}
+button.ghost,.btn.ghost{background:transparent;color:var(--accent);
+ border:1px solid var(--line);box-shadow:none}
+button.small{min-height:36px;padding:.3rem .7rem;font-size:.85rem;font-weight:600}
+.notice{padding:.85rem 1rem;border-radius:10px;margin-bottom:1rem;font-size:.95rem}
+.notice.err{background:var(--errbg);color:var(--err)}
+.notice.ok{background:var(--okbg);color:var(--ok)}
+.notice.warn{background:var(--warnbg);color:var(--warn)}
+.muted{color:var(--muted)}.small{font-size:.9rem}
+footer{text-align:center;color:var(--muted);font-size:.83rem;padding:0 1rem 2.5rem}
+code{background:var(--bg);border:1px solid var(--line);padding:.12rem .35rem;
+ border-radius:5px;font-size:.85em;word-break:break-all}
+a{color:var(--accent)}
+ul.plain{list-style:none;padding:0;margin:0}
+ul.plain li{padding:.45rem 0;border-bottom:1px solid var(--line)}
+ul.plain li:last-child{border-bottom:0}
+
+/* --- the status line ---------------------------------------------------- */
+.status{display:flex;gap:1.2rem;flex-wrap:wrap;justify-content:center;
+ font-size:.83rem;color:var(--muted);margin:-.2rem 0 1.2rem}
+.dot{display:inline-block;width:.55rem;height:.55rem;border-radius:50%;
+ margin-right:.35rem;vertical-align:baseline;background:var(--err)}
+.dot.up{background:var(--ok)}
+
+/* --- cooking mode --------------------------------------------------------
+   Toggled by a button on the guide page (see guide.html's script). Bigger
+   step text is the point; ingredients and everything above the Method card
+   fade back since your hands are already floury and you are not re-reading
+   the ingredient list, you are looking at step 4. */
+body.cooking .step p{font-size:1.35rem;line-height:1.5}
+body.cooking .step .n{font-size:1.1rem}
+body.cooking .stepdone{font-size:1.05rem;padding:.6rem 1.1rem}
+body.cooking #ingredients,body.cooking #method ~ .card{opacity:.55}
+
+/* --- the guide ---------------------------------------------------------- */
+.step{display:flex;gap:1rem;align-items:flex-start;padding:1rem 0;
+ border-bottom:1px solid var(--line)}
+.step:last-child{border-bottom:0}
+.step .art{flex:0 0 148px;max-width:148px}
+.step .art img{width:100%;border-radius:10px;display:block;
+ border:1px solid var(--line);background:var(--bg)}
+.step p{margin:0}
+.step .n{font-weight:700;color:var(--accent);margin-right:.4rem}
+@media (max-width:520px){
+  .step{flex-direction:column;gap:.6rem}
+  .step .art{flex:none;max-width:220px}
+}
+/* Diagrams. One colour, inherited, so dark mode needs no second palette --
+   see the note at the bottom of diagram.py. */
+svg.dgm{width:100%;height:auto;color:var(--muted);display:block;
+ border:1px solid var(--line);border-radius:10px;background:var(--bg);
+ padding:.3rem}
+svg.dgm text{fill:currentColor;stroke:none;text-anchor:middle;
+ font-family:ui-sans-serif,-apple-system,"Segoe UI",Roboto,sans-serif}
+svg.dgm text.big{font-size:22px;font-weight:700;dominant-baseline:middle}
+svg.dgm text.small{font-size:15px;font-weight:600}
+svg.dgm text.num{font-size:17px;font-weight:700;dominant-baseline:central;
+ fill:var(--panel);stroke:none}
+svg.dgm .thin{stroke-width:1.5;opacity:.65}
+
+/* --- portions ----------------------------------------------------------- */
+.portions{display:flex;gap:.45rem;flex-wrap:wrap;margin-top:.5rem}
+.portions a{padding:.5rem .85rem;border:1px solid var(--line);border-radius:9px;
+ text-decoration:none;color:var(--ink);background:var(--panel);min-width:44px;
+ text-align:center;font-size:.95rem}
+.portions a.on{background:var(--accent);color:var(--accent-ink);
+ border-color:var(--accent);font-weight:700}
+/* --- photo uploads ------------------------------------------------------ */
+/* The file input is hidden and the label around it is the whole control, so
+   the tap target is the sentence rather than a 90px browser button that says
+   "Choose file" and reads as nothing to do with photographs. */
+.shot{position:relative;display:block;margin-top:.4rem;text-align:center;
+ border:1px dashed var(--line);border-radius:9px;padding:.45rem .3rem;
+ cursor:pointer;background:var(--panel)}
+.shot:hover{border-color:var(--accent)}
+.shot input[type=file]{position:absolute;inset:0;width:100%;height:100%;
+ opacity:0;cursor:pointer}
+/* Small, grey, and directly under the picture it is about. It is a caveat,
+   not a badge -- it should be readable and should not shout. */
+.drawnote{margin:.25rem 0 0;font-size:.68rem;color:var(--muted);
+ text-align:center;font-style:italic}
+.ing{display:flex;justify-content:space-between;gap:.8rem;align-items:baseline}
+.ing .was{color:var(--muted);font-size:.82rem;white-space:nowrap}
+.changed{font-weight:600}
+
+/* Two fields side by side on a wide screen, stacked on a phone (the media
+   query at the bottom takes min-width away below 560px). */
+.row{display:flex;gap:.7rem;flex-wrap:wrap}
+.row>div{flex:1;min-width:160px}
+
+/* --- recipe cards -------------------------------------------------------- */
+/* A grid that reflows rather than fixed columns: two up on a phone in
+   landscape, one in portrait, three or four on a laptop, without a breakpoint
+   per case. minmax(150px,1fr) is what makes two fit on a narrow phone. */
+.cards{display:grid;gap:.8rem;grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}
+.rcard{display:flex;flex-direction:column;background:var(--panel);
+ border:1px solid var(--line);border-radius:12px;overflow:hidden;
+ text-decoration:none;color:inherit;box-shadow:0 1px 3px rgba(0,0,0,.08);
+ transition:box-shadow .12s,transform .12s}
+.rcard:hover,.rcard:focus-visible{box-shadow:0 4px 10px rgba(0,0,0,.14);transform:translateY(-2px)}
+.rcard .shot{position:relative;aspect-ratio:4/3;background:var(--bg);
+ display:flex;align-items:center;justify-content:center;overflow:hidden}
+.rcard .shot img{width:100%;height:100%;object-fit:cover;display:block}
+.rcard .noshot svg{width:54px;height:36px;fill:none;stroke:var(--line);
+ stroke-width:1.6}
+/* The tally sits ON the photo, bottom right, so a card is one glance rather
+   than a photo plus a row of numbers underneath it. */
+.rcard .tally{position:absolute;right:.4rem;bottom:.4rem;display:flex;gap:.4rem;
+ background:rgba(0,0,0,.62);border-radius:999px;padding:.15rem .5rem;
+ font-size:.74rem;font-family:ui-sans-serif,-apple-system,"Segoe UI",sans-serif}
+.rcard .tally b{color:#8fe0a8;font-weight:700}
+.rcard .tally i{color:#e79b97;font-style:normal}
+.rcard .body{padding:.6rem .7rem .7rem;display:flex;flex-direction:column;gap:.3rem;flex:1}
+.rcard h3{margin:0;font-size:.98rem;line-height:1.3;font-weight:600}
+.rcard .meta{margin:0;font-size:.74rem;color:var(--muted)}
+.rcard .tags{display:flex;flex-wrap:wrap;gap:.25rem}
+.rcard .tag{font-size:.68rem;padding:.1rem .42rem;border-radius:999px;
+ border:1px solid var(--line);color:var(--muted)}
+.rcard .tag.made{border-color:var(--warn);color:var(--warn);font-weight:700}
+.rcard .foot{margin:auto 0 0;font-size:.7rem;color:var(--muted);
+ display:flex;gap:.5rem;flex-wrap:wrap}
+.rcard .kept{color:var(--ok)} .rcard .waiting{color:var(--warn)}
+
+/* --- thumbs and notes ---------------------------------------------------- */
+.thumbs{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap}
+.thumb{background:none;border:1px solid var(--line);border-radius:10px;
+ padding:.5rem .9rem;font:inherit;font-size:.95rem;cursor:pointer;
+ color:var(--muted);min-height:44px;display:flex;align-items:center;gap:.4rem}
+.thumb.on.up{border-color:var(--ok);color:var(--ok);background:var(--okbg);font-weight:700}
+.thumb.on.down{border-color:var(--err);color:var(--err);background:var(--errbg);font-weight:700}
+.says{list-style:none;padding:0;margin:.8rem 0 0}
+.says li{border-top:1px solid var(--line);padding:.7rem 0;display:flex;gap:.7rem}
+.says li:first-child{border-top:0}
+.says .whoami{flex:0 0 auto;font-weight:700;font-size:.8rem;color:var(--accent);
+ font-family:ui-sans-serif,-apple-system,"Segoe UI",sans-serif}
+.says .what{flex:1;white-space:pre-line}
+.says .when{display:block;font-size:.72rem;color:var(--muted);margin-top:.2rem}
+/* A remove that looks like a link but must be a button, because removing
+   something has to be a POST. Styled down so it does not compete with the
+   note it sits under. */
+.linky{background:none;border:0;padding:0;min-height:0;color:var(--muted);
+ font:inherit;font-size:.72rem;text-decoration:underline;cursor:pointer;
+ font-weight:400}
+.linky:hover{color:var(--err)}
+
+/* --- pills -------------------------------------------------------------- */
+.pills{display:flex;gap:.4rem;flex-wrap:wrap}
+.pill{display:inline-flex;align-items:center;gap:.35rem;padding:.45rem .8rem;
+ border:1px solid var(--line);border-radius:999px;text-decoration:none;
+ color:var(--ink);background:var(--panel);font-size:.92rem;
+ font-family:ui-sans-serif,-apple-system,"Segoe UI",Roboto,sans-serif}
+.pill span{color:var(--muted);font-size:.78rem}
+.pill.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);
+ font-weight:700}
+.pill.on span{color:var(--accent-ink);opacity:.75}
+.pill.quiet{padding:.2rem .55rem;font-size:.78rem;color:var(--muted)}
+/* The made-and-tested pills. Warm and filled rather than outlined, because
+   they mean something different from the rest: not "this is a soup" but
+   "somebody in this house has actually cooked this and it came out right".
+   That deserves to be the thing your eye lands on first. */
+.pill.made{background:var(--warnbg);color:var(--warn);border-color:var(--warn);
+ font-weight:700}
+.pill.addmade{border-style:dashed;color:var(--muted);cursor:pointer;
+ background:none;font-size:.78rem;padding:.25rem .6rem;min-height:0}
+.pill.addmade:hover{color:var(--warn);border-color:var(--warn)}
+
+/* --- ticking things off -------------------------------------------------
+   THE WHOLE ROW IS THE BUTTON, not a plain checkbox -- kept generic (not
+   scoped to .shop any more) because the same big-target reasoning applies
+   everywhere something gets ticked: the shared shopping list, ingredients
+   and tools while gathering them, and marking a step done. On a phone, a
+   20px checkbox next to text you must not miss is a bad target; the row
+   is 48px tall and all of it works. #}
+.shop li{padding:0;border-bottom:1px solid var(--line)}
+.shop form{margin:0}
+.tick{display:flex;align-items:center;gap:.75rem;width:100%;
+ background:none;border:0;padding:.7rem .2rem;text-align:left;font:inherit;
+ color:inherit;cursor:pointer;min-height:48px}
+.box{flex:0 0 26px;height:26px;border:2px solid var(--line);
+ border-radius:7px;display:flex;align-items:center;justify-content:center;
+ font-size:1rem;font-weight:700;color:var(--accent-ink);background:var(--bg)}
+li.got .box{background:var(--accent);border-color:var(--accent)}
+li.got .what{text-decoration:line-through;color:var(--muted)}
+.what{flex:1}
+.shop .from{display:block;font-size:.76rem;color:var(--muted);
+ font-family:ui-sans-serif,-apple-system,"Segoe UI",Roboto,sans-serif}
+
+/* A recipe's own ingredient/tool/step pictures -- ONE size everywhere on
+   the guide page (Jason's own correction: no more small-icon/big-
+   thumbnail split between foods and tools). Same 96px /foods already
+   uses, so a picture reads as the same size wherever it shows up on
+   this site. */
+.itempic{width:6rem;height:6rem;flex:none;object-fit:cover;
+ border-radius:8px;border:1px solid var(--line)}
+
+/* The checkbox on the Ingredients list specifically, smaller than the
+   default -- Jason's own request ("the orange boxes for Ingredients get
+   smaller"), just for that one list; tools and steps keep the regular
+   size. */
+#ingredient-list .box{flex:0 0 18px;height:18px;font-size:.75rem}
+
+/* --- ticking off a step while you cook ---------------------------------- */
+.step.did p{color:var(--muted);text-decoration:line-through}
+.step.did .art{opacity:.4}
+.step .tick{min-height:44px;margin-top:.5rem;border:1px solid var(--line);
+ border-radius:8px;padding:.5rem .7rem}
+.step.did .tick .box{background:var(--ok);border-color:var(--ok)}
+.step.did .tick .what{color:var(--ok);text-decoration:line-through}
+.stepdone{background:none;border:1px solid var(--line);border-radius:8px;
+ padding:.3rem .7rem;font:inherit;font-size:.8rem;color:var(--muted);
+ cursor:pointer;margin-top:.5rem;min-height:36px;
+ font-family:ui-sans-serif,-apple-system,"Segoe UI",Roboto,sans-serif}
+.step.did .stepdone{background:var(--okbg);color:var(--ok);border-color:var(--ok)}
+
+/* --- bulk import status ------------------------------------------------- */
+.state{display:inline-block;min-width:4.6rem;font-size:.74rem;font-weight:700;
+ text-transform:uppercase;letter-spacing:.06em;color:var(--muted);
+ font-family:ui-sans-serif,-apple-system,"Segoe UI",Roboto,sans-serif}
+.state.ok{color:var(--ok)} .state.bad{color:var(--err)} .state.go{color:var(--accent)}
+
+/* --- ON A PHONE ---------------------------------------------------------
+   This is where it is actually used: standing at a counter, one hand, screen
+   at arm's length, possibly floury. So below 560px everything gets bigger
+   rather than smaller -- type, tap targets, the numbers on the portion
+   buttons -- and the nav becomes a row you can reach with a thumb. */
+@media (max-width:560px){
+  body{font-size:18px}
+  header{padding:1.2rem .8rem .4rem}
+  main{padding:0 .8rem 5.5rem}
+  .card{padding:1rem;border-radius:12px}
+  .shell{display:block}
+  .rail{position:fixed;left:0;right:0;top:auto;bottom:0;height:auto;
+   flex-direction:row;flex-wrap:wrap;gap:0;z-index:20;
+   background:var(--panel);border-right:0;border-top:1px solid var(--line);
+   padding:.35rem .2rem calc(.35rem + env(safe-area-inset-bottom));
+   justify-content:space-around;font-size:.82rem;overflow:visible}
+  .rail .brand{display:none}
+  .rail a{padding:.55rem .3rem;min-height:44px;display:flex;
+   align-items:center;font-size:.78rem}
+  .rail .raillib{margin-top:0}
+  .portions a{padding:.7rem 1rem;font-size:1.05rem;min-width:52px}
+  .pill{padding:.55rem .95rem;font-size:1rem}
+  .ing{flex-direction:column;gap:.1rem}
+  .ing .was{white-space:normal}
+  button,.btn{min-height:52px}
+  .shop .tick{min-height:56px}
+  .shop .box{flex:0 0 30px;height:30px}
+}
+
+/* The %DV nutrition chart on guide.html. One row = one nutrient: a label,
+   a bar filled to its % of a 2000-calorie diet's daily value (capped at
+   100% width even when the true number runs past it -- the text still
+   says the real percent), and the raw amount. */
+.dvchart{display:flex;flex-direction:column;gap:.5rem;margin-top:.8rem}
+.dvrow{display:grid;grid-template-columns:6.5rem 1fr auto;align-items:center;gap:.6rem}
+.dvlabel{font-size:.85rem;color:var(--muted)}
+.dvbar{background:var(--bg);border:1px solid var(--line);border-radius:99px;
+  height:10px;overflow:hidden}
+.dvfill{display:block;height:100%;background:var(--accent);border-radius:99px}
+.dvamount{white-space:nowrap;text-align:right;min-width:5.5rem}
+.dvamount b{color:var(--ink);font-weight:800;font-size:1.05rem}
+.dvamount .raw{display:block;color:var(--muted);font-size:.74rem;margin-top:.05rem}
+@media(max-width:600px){
+  .dvrow{grid-template-columns:5rem 1fr auto}
+  .dvlabel{font-size:.78rem}
+}
+</style>
+    <!-- The person's own theme, chosen once on the start page and
+         following them onto every page of ours. Served per-account
+         by the landing app; see looks_css in rust/landing. -->
+    <link rel="stylesheet" href="/looks.css">
+</head>
+<body>
+<div class="shell">
+  {% block nav %}
+  <nav class="rail sans">
+    <a class="brand" href="{{ root }}/">&#127859; {{ business }}</a>
+    <a href="{{ root }}/">Import</a>
+    <a href="{{ root }}/mine">Write one</a>
+    <a href="{{ root }}/list">Shopping{% if pending %}<span class="railbadge">{{ pending }}</span>{% endif %}</a>
+    <a href="{{ root }}/plan">Plan</a>
+    <a href="{{ root }}/ideas">Ideas</a>
+    <a href="{{ root }}/foods">Foods</a>
+    <a href="{{ root }}/tools">Tools</a>
+    {% if owner %}<a href="{{ root }}/requests">Requests</a>{% endif %}
+    {% if owner %}<a href="{{ root }}/warnings">Admin</a>{% endif %}
+    {# NOT a link straight to Tandoor. It goes through /library, which hands the
+       browser a Tandoor session first -- otherwise the library answers with its
+       own login page, which is the whole thing this is here to avoid. #}
+    {% if tandoor_public and can_write %}<a href="{{ root }}/library" class="raillib">The library</a>{% endif %}
+  </nav>
+  {% endblock %}
+  <div class="content">
+    <header>
+      <h1><a href="{{ root }}/">{{ business }}</a></h1>
+      {% block sub %}<p>{{ tagline }}</p>{% endblock %}
+    </header>
+    <main class="{% block mainclass %}{% endblock %}">
+      {% block body %}{% endblock %}
+    </main>
+    <footer>
+      Recipes are imported from the page you gave. Nothing here is medical or
+      allergy advice.
+    </footer>
+  </div>
+</div>
+</body>
+</html>

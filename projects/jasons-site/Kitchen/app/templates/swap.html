@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Instead of {{ ingredient }}{% endblock %}
+{% block sub %}<p class="small muted">for {{ draft.title }}</p>{% endblock %}
+
+{% block body %}
+
+<div class="card">
+  <h2>Instead of {{ ingredient }}</h2>
+
+  {% if answer.table %}
+  <div style="margin-bottom:1.1rem">
+    <p class="small muted sans" style="margin:0 0 .5rem">
+      Written down — straight from the table, no model involved.
+    </p>
+    <ul class="plain">
+      {% for opt in answer.table.options %}
+        <li>{{ opt }}</li>
+      {% endfor %}
+    </ul>
+    {% if answer.table.note %}
+      <p class="small muted" style="margin:.6rem 0 0">{{ answer.table.note }}</p>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if answer.model %}
+  <div{% if answer.table %} style="padding-top:1rem;border-top:1px solid var(--line)"{% endif %}>
+    <p class="small muted sans" style="margin:0 0 .5rem">
+      Worked out by the model for this dish — sanity-check it against what you know.
+    </p>
+    {% if answer.model.options %}
+      <ul class="plain">
+        {% for opt in answer.model.options %}
+          <li>{{ opt }}</li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="muted">Nothing useful came back for that one.</p>
+    {% endif %}
+    {% if answer.model.note %}
+      <p class="small muted" style="margin:.6rem 0 0">{{ answer.model.note }}</p>
+    {% endif %}
+  </div>
+  {% elif answer.model_error %}
+  <div{% if answer.table %} style="padding-top:1rem;border-top:1px solid var(--line)"{% endif %}>
+    <p class="small muted sans" style="margin:0">
+      The model was unavailable ({{ answer.model_error }}), so this is the table's
+      answer alone.
+    </p>
+  </div>
+  {% endif %}
+
+  {% if answer.warning %}
+    <div class="notice warn" style="margin:1rem 0 0">{{ answer.warning }}</div>
+  {% endif %}
+</div>
+
+<p style="text-align:center">
+  <a class="btn ghost" href="{{ root }}/r/{{ id }}">Back to the recipe</a>
+</p>
+
+{% endblock %}

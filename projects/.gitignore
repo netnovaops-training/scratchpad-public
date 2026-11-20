@@ -1,0 +1,49 @@
+# Never commit secrets: real values live in Proton Pass and in .env files on the machines.
+.env
+.env.*
+*.env
+!*.example
+!*.env.example
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+id_rsa*
+id_ed25519*
+signing.env
+secrets.*
+rclone.conf
+
+# People, sign-in state, data and backups
+*people*.json
+!*people*.example.json
+**/Admin/auth/
+**/uploads/
+*.db
+*.sqlite
+*.sqlite3
+backups/
+_backup/
+*.bak
+*.bak-*
+*.bak.*
+/tickets/data/
+
+# Robin's Garden lives in Robin's own repos
+**/Garden/
+**/garden*/
+**/garden-ingest/
+**/garden-for-all/
+
+# Build output
+node_modules/
+target/
+build/
+.gradle/
+__pycache__/
+.venv/
+venv/
+local.properties

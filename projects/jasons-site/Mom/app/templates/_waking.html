@@ -1,0 +1,626 @@
+{# ============================================================================
+   The screen she watches while her question is being worked on.
+
+   THE PICTURE
+   Two black cats at the far edges, an old beige computer between them. The
+   computer is your desktop: it boots when the Pi wakes it, and its screen shows
+   what is actually happening. The cats react to it.
+
+   Nothing sits on top of a cat, which is why they are pushed to the edges --
+   the middle belongs to the computer.
+
+   THE STATES  (each is one real value in main.py's WORK dict, not a timer)
+       sleeping    desktop hibernating, screen dark
+       waking      magic packet sent; boot lines crawl down the screen
+       listening   Whisper transcribing; ears up, sound coming in
+       looking     vision model on her photo; the cat watches the screen
+       thinking    reasoning model working; thought bubble
+       done        finished
+       error       the cat is unwell and the screen shows a sad face
+
+   TRANSFORMS
+   Every animated group carries transform-box:view-box and an explicit origin in
+   viewBox units. Without it, transform-origin resolves against each element's
+   own bounding box, which is why the head used to slide off the body when the
+   error animation ran -- two groups pivoting about two different accidental
+   points. If you add a group that moves, give it both properties.
+
+   MOBILE
+   One viewBox, width:100%, height:auto, and preserveAspectRatio left at its
+   default. The picture scales whole; it is never cropped. Everything important
+   sits inside the middle 90% so a rounded container cannot clip an ear.
+============================================================================ #}
+{% set scene = scene|default('cats') %}
+<div id="wakeScene" class="wake wake-{{ scene }}" data-state="sleeping"
+     data-root="{{ root }}"{% if thread_id %} data-thread="{{ thread_id }}"{% endif %}>
+
+  <svg viewBox="0 0 360 176" class="wake-art" role="img"
+       aria-labelledby="wakeTitle" preserveAspectRatio="xMidYMid meet">
+    <defs>
+      <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+        <stop class="sky-a" offset="0%"/><stop class="sky-b" offset="100%"/>
+      </linearGradient>
+      <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+        <stop class="glow-a" offset="0%"/><stop class="glow-b" offset="100%"/>
+      </radialGradient>
+    </defs>
+    <rect x="0" y="0" width="360" height="176" fill="url(#sky)"/>
+
+    <g class="stars">
+      {% for s in [(30,28,1.0),(70,16,0.7),(104,36,0.9),(150,20,0.6),(210,30,1.0),
+                   (258,18,0.8),(300,40,0.7),(330,26,0.9),(52,48,0.6),(196,50,0.5)] %}
+      <circle cx="{{ s[0] }}" cy="{{ s[1] }}" r="{{ s[2] }}"
+              style="animation-delay:{{ loop.index0 * 0.4 }}s"/>
+      {% endfor %}
+    </g>
+    <circle class="moon" cx="322" cy="32" r="13"/>
+    <circle class="moon-bite" cx="316" cy="27" r="11"/>
+
+    <rect class="sill" x="0" y="132" width="360" height="44"/>
+    <rect class="sill-edge" x="0" y="132" width="360" height="4"/>
+
+    {# ================= the old computer, in the middle ==================== #}
+    {# Chunky, beige, and clearly from another era: deep bezel, thick base,
+       a floppy slot and one honest power light. It is meant to look like it
+       takes a while, because it does. #}
+    <g class="pc">
+      <rect class="pc-shadow" x="140" y="126" width="80" height="6" rx="3"/>
+      <rect class="pc-base" x="152" y="120" width="56" height="8" rx="2"/>
+      <rect class="pc-neck" x="170" y="112" width="20" height="10"/>
+      <rect class="pc-case" x="132" y="46" width="96" height="70" rx="7"/>
+      <rect class="pc-inner" x="140" y="53" width="80" height="50" rx="4"/>
+      <rect class="pc-screen" x="143" y="56" width="74" height="44" rx="3"/>
+      <rect class="pc-glow" x="143" y="56" width="74" height="44" rx="3" fill="url(#glow)"/>
+
+      {# Boot text: four lines that appear one after another while waking. #}
+      <g class="boot">
+        <rect class="bl b1" x="149" y="62"  width="34" height="3" rx="1.5"/>
+        <rect class="bl b2" x="149" y="69"  width="52" height="3" rx="1.5"/>
+        <rect class="bl b3" x="149" y="76"  width="26" height="3" rx="1.5"/>
+        <rect class="bl b4" x="149" y="83"  width="44" height="3" rx="1.5"/>
+        <rect class="cursor" x="149" y="90" width="6" height="4"/>
+      </g>
+
+      {# Awake: a steady, calm screen. #}
+      <g class="pc-ok">
+        <circle class="ok-eye" cx="167" cy="72" r="3"/>
+        <circle class="ok-eye" cx="193" cy="72" r="3"/>
+        <path class="ok-smile" d="M164 84 q16 12 32 0"/>
+      </g>
+
+      {# Unwell: a flat mouth, X eyes, and broken scanlines. #}
+      <g class="pc-bad">
+        <path class="bad-x" d="M162 68 l8 8 M170 68 l-8 8"/>
+        <path class="bad-x" d="M190 68 l8 8 M198 68 l-8 8"/>
+        <path class="bad-mouth" d="M166 88 h28"/>
+        <rect class="static s1" x="143" y="61" width="74" height="2"/>
+        <rect class="static s2" x="143" y="79" width="74" height="2"/>
+        <rect class="static s3" x="143" y="95" width="74" height="2"/>
+      </g>
+
+      <rect class="pc-slot" x="152" y="106" width="30" height="3" rx="1.5"/>
+      <circle class="pc-led" cx="212" cy="108" r="3"/>
+      <rect class="pc-vent" x="192" y="106" width="12" height="1.6" rx=".8"/>
+      <rect class="pc-vent" x="192" y="109" width="12" height="1.6" rx=".8"/>
+    </g>
+
+    {# ===================== the big cat, far LEFT ========================== #}
+    <g class="cat">
+      <g class="tail-g">
+        <path class="fur tail" d="M20 122 q-16 5 -12 -8 q3 -7 11 -3"/>
+      </g>
+      <ellipse class="fur body" cx="54" cy="120" rx="36" ry="15"/>
+      <g class="head-g">
+        <circle class="fur head" cx="84" cy="108" r="15"/>
+        <g class="ear ear-l">
+          <path class="fur" d="M80.5 96.5 L67.3 86.6 L73.7 101.8 Z"/>
+          <path class="inner-ear" d="M79.5 97.3 L71.0 91.4 L74.7 101.0 Z"/></g>
+        <g class="ear ear-r">
+          <path class="fur" d="M94.3 101.8 L100.7 86.6 L87.5 96.5 Z"/>
+          <path class="inner-ear" d="M93.3 101.0 L97.0 91.4 L88.5 97.3 Z"/></g>
+        <g class="eyes-shut">
+          <path class="eye" d="M76 108 q3.5 3.5 7 0"/>
+          <path class="eye" d="M87 108 q3.5 3.5 7 0"/>
+        </g>
+        <g class="eyes-open">
+          <ellipse class="eyeball" cx="79" cy="107" rx="3.4" ry="4"/>
+          <ellipse class="eyeball" cx="90" cy="107" rx="3.4" ry="4"/>
+          <ellipse class="pupil" cx="79" cy="107" rx="1.4" ry="3.4"/>
+          <ellipse class="pupil" cx="90" cy="107" rx="1.4" ry="3.4"/>
+        </g>
+        <path class="nose" d="M84.5 114 l2.2 2.2 l-2.2 2.2 l-2.2 -2.2 z"/>
+        <path class="mouth" d="M84.5 118 q-3 3 -6 1 M84.5 118 q3 3 6 1"/>
+        <g class="whiskers">
+          <path d="M72 114 l-13 -3 M72 117 l-13 1 M97 114 l13 -3 M97 117 l13 1"/>
+        </g>
+      </g>
+    </g>
+
+    {# ==================== the small cat, far RIGHT ======================== #}
+    {# Curled the other way so the two face each other across the room, and
+       drawn head-first over the body so nothing looks like it is being held. #}
+    <g class="cat2">
+      <g class="tail2-g">
+        <path class="fur alt" d="M336 124 q14 4 10 -7 q-3 -6 -10 -2"/>
+      </g>
+      <ellipse class="fur alt body2" cx="306" cy="124" rx="28" ry="12"/>
+      <circle class="fur alt" cx="280" cy="113" r="11"/>
+      <g class="ear2">
+        <path class="fur alt" d="M277.4 104.6 L267.6 97.1 L272.5 108.5 Z"/>
+        <path class="inner-ear" d="M276.7 105.2 L270.4 100.7 L273.2 107.9 Z"/>
+      </g>
+      <g class="ear2">
+        <path class="fur alt" d="M287.5 108.5 L292.4 97.1 L282.6 104.6 Z"/>
+        <path class="inner-ear" d="M286.8 107.9 L289.6 100.7 L283.3 105.2 Z"/>
+      </g>
+      <path class="eye" d="M274 113 q2.5 2.5 5 0"/>
+      <path class="eye" d="M283 113 q2.5 2.5 5 0"/>
+      <path class="nose" d="M280.5 117.5 l1.6 1.6 l-1.6 1.6 l-1.6 -1.6 z"/>
+    </g>
+
+    {# Sleep letters, above the big cat so they never cross the screen. #}
+    <g class="zzz">
+      <text x="104" y="80" class="z z1">z</text>
+      <text x="114" y="70" class="z z2">z</text>
+      <text x="126" y="58" class="z z3">z</text>
+    </g>
+
+    {# Listening: sound travelling from the computer to the cat's ear. #}
+    <g class="ears-lines">
+      <path class="wavey w1" d="M110 100 q7 8 0 16"/>
+      <path class="wavey w2" d="M119 95 q11 13 0 26"/>
+      <path class="wavey w3" d="M128 90 q15 18 0 36"/>
+    </g>
+
+    {# Thinking: a bubble over the big cat, clear of the computer. #}
+    <g class="thinky">
+      <circle class="bub" cx="102" cy="86" r="3.4"/>
+      <circle class="bub" cx="110" cy="76" r="5"/>
+      <ellipse class="bub" cx="66" cy="58" rx="30" ry="17"/>
+      <circle class="dot d1" cx="54" cy="58" r="3.2"/>
+      <circle class="dot d2" cx="66" cy="58" r="3.2"/>
+      <circle class="dot d3" cx="78" cy="58" r="3.2"/>
+    </g>
+
+    {# Error: the cat is not well. #}
+    <g class="sicky">
+      <ellipse class="sick-pool" cx="106" cy="130" rx="16" ry="4.5"/>
+      <ellipse class="sick-pool small" cx="121" cy="133" rx="6" ry="2.4"/>
+      <path class="sick-line l1" d="M104 88 q5 5 0 10"/>
+      <path class="sick-line l2" d="M114 84 q7 7 0 14"/>
+    </g>
+
+    {# Queued: the computer is off entirely. Her question is in the box. #}
+    <g class="parcel">
+      <rect class="box" x="150" y="106" width="40" height="26" rx="3"/>
+      <rect class="box-lid" x="146" y="100" width="48" height="8" rx="2"/>
+      <rect class="box-tape" x="167" y="106" width="6" height="26"/>
+      <path class="box-tick" d="M158 118 l6 6 l14 -14"/>
+    </g>
+
+    {# Done: a small heart above the big cat. #}
+    <g class="doney">
+      <path class="heart" d="M100 74 a7 7 0 0 1 12 0 a7 7 0 0 1 12 0
+                             q0 10 -12 18 q-12 -8 -12 -18 z"/>
+    </g>
+  </svg>
+
+  <div class="wake-text">
+    <strong id="wakeTitle">Getting started</strong>
+    <p id="wakeBody" class="muted">One moment.</p>
+    <div class="wake-bar"><span id="wakeBar"></span></div>
+    <p class="small muted wake-eta" id="wakeEta">about 45 seconds</p>
+    <p class="small muted" id="wakeHint">
+      You can close this and come back &mdash; it keeps working without you.</p>
+  </div>
+</div>
+
+<style>
+.wake{border:2px solid var(--line);border-radius:16px;overflow:hidden;
+  background:var(--panel);margin-bottom:1.1rem}
+/* height:auto with a viewBox means it scales whole and is never cropped, at
+   any width from a narrow phone to a desktop card. */
+.wake-art{display:block;width:100%;height:auto}
+.wake-text{padding:1.1rem}
+.wake-text strong{display:block;font-size:1.2rem;margin-bottom:.3rem}
+.wake-text p{margin:.2rem 0}
+
+/* ---- night ------------------------------------------------------------- */
+.wake .sky-a{stop-color:#121a35}      .wake .sky-b{stop-color:#2b2350}
+.wake .sill{fill:#2a2440}             .wake .sill-edge{fill:#3b3358}
+/* Black cats with a moonlit rim. A flat black shape on a night sky is a hole
+   in the picture; the rim is what a black cat actually looks like out there. */
+.wake .fur{fill:#191922;stroke:#5b5b86;stroke-width:1.3;stroke-linejoin:round}
+.wake .fur.alt{fill:#14141c;stroke:#4a4a70;stroke-width:1.1}
+.wake .inner-ear{fill:#3a2b3e;stroke:none}
+.wake .eye{stroke:#7d7da8;stroke-width:1.8;fill:none;stroke-linecap:round}
+.wake .mouth{stroke:#7d7da8;stroke-width:1.4;fill:none;stroke-linecap:round;opacity:0}
+.wake .eyeball{fill:#f2c14e}          .wake .pupil{fill:#12121a}
+.wake .nose{fill:#d98fa8}
+.wake .whiskers path{stroke:#8f8fb8;stroke-width:1;fill:none;opacity:.75;stroke-linecap:round}
+.wake .moon{fill:#f5e7b8}             .wake .moon-bite{fill:#121a35}
+.wake .stars circle{fill:#fff;opacity:.85;animation:twinkle 3.4s ease-in-out infinite}
+.wake .z{fill:#cbbdf0;font-size:14px;font-weight:700;opacity:0}
+
+/* ---- the old computer -------------------------------------------------- */
+.wake .pc-case{fill:#c9c2ac;stroke:#8f8875;stroke-width:1.5}
+.wake .pc-inner{fill:#a9a291}
+.wake .pc-screen{fill:#0e1410}
+.wake .pc-base,.wake .pc-neck{fill:#bdb6a0;stroke:#8f8875;stroke-width:1.2}
+.wake .pc-shadow{fill:#00000033}
+.wake .pc-slot{fill:#7d7666}
+.wake .pc-vent{fill:#9a9382}
+.wake .pc-led{fill:#4a4436}
+.wake .pc-glow{opacity:0}
+.wake .glow-a{stop-color:#5ef0a8;stop-opacity:.30}
+.wake .glow-b{stop-color:#5ef0a8;stop-opacity:0}
+.wake .bl{fill:#5ef0a8;opacity:0}
+.wake .cursor{fill:#5ef0a8;opacity:0}
+.wake .pc-ok,.wake .pc-bad{opacity:0}
+.wake .ok-eye{fill:#5ef0a8}
+.wake .ok-smile{stroke:#5ef0a8;stroke-width:3;fill:none;stroke-linecap:round}
+.wake .bad-x{stroke:#ff8b7a;stroke-width:3;fill:none;stroke-linecap:round}
+.wake .bad-mouth{stroke:#ff8b7a;stroke-width:3;fill:none;stroke-linecap:round}
+.wake .static{fill:#ff8b7a;opacity:.35}
+
+/* transform-box:view-box makes every origin below mean viewBox units. Without
+   it each group pivots about its own bounding box, which is exactly what tore
+   the head off the body when the error animation ran. */
+.wake .cat,.wake .cat2,.wake .head-g,.wake .tail-g,.wake .tail2-g,
+.wake .ear,.wake .ear2{transform-box:view-box}
+.wake .cat{transform-origin:54px 128px}
+.wake .cat2{transform-origin:306px 130px;animation:breathe 5.1s ease-in-out .7s infinite}
+.wake .head-g{transform-origin:84px 108px;transition:transform .6s ease}
+.wake .tail-g{transform-origin:22px 122px}
+.wake .tail2-g{transform-origin:334px 124px}
+.wake .ear{transition:transform .5s ease}
+.wake .ear-l{transform-origin:77.1px 99.2px}
+.wake .ear-r{transform-origin:90.9px 99.2px}
+
+.wake .eyes-open,.wake .ears-lines,.wake .thinky,.wake .doney,.wake .sicky{opacity:0}
+.wake .sky-a,.wake .sky-b,.wake .sill,.wake .sill-edge,.wake .fur,.wake .moon,
+.wake .moon-bite,.wake .stars circle,.wake .zzz,.wake .eyes-open,.wake .eyes-shut,
+.wake .ears-lines,.wake .thinky,.wake .doney,.wake .sicky,.wake .mouth,.wake .parcel,
+.wake .pc-glow,.wake .pc-ok,.wake .pc-bad,.wake .pc-led,.wake .inner-ear{
+  transition:stop-color 1.4s ease,fill 1.4s ease,stroke 1.4s ease,opacity .55s ease}
+
+/* ---- sleeping ---------------------------------------------------------- */
+.wake[data-state="sleeping"] .cat,
+.wake[data-state="waking"]   .cat{animation:breathe 4.2s ease-in-out infinite}
+.wake[data-state="sleeping"] .z1{animation:float 3.6s ease-in-out infinite}
+.wake[data-state="sleeping"] .z2{animation:float 3.6s ease-in-out .6s infinite}
+.wake[data-state="sleeping"] .z3{animation:float 3.6s ease-in-out 1.2s infinite}
+.wake[data-state="sleeping"] .ear-l{transform:rotate(-19deg)}
+.wake[data-state="sleeping"] .ear-r{transform:rotate(19deg)}
+
+/* ---- waking: the machine boots ---------------------------------------- */
+.wake[data-state="waking"] .z1{animation:float 3.6s ease-in-out infinite}
+.wake[data-state="waking"] .z2{animation:float 3.6s ease-in-out .6s infinite}
+.wake[data-state="waking"] .ear-l{animation:twitch 1.3s ease-in-out infinite}
+.wake[data-state="waking"] .ear-r{transform:rotate(13deg)}
+.wake[data-state="waking"] .pc-glow{opacity:1;animation:flicker 2.6s ease-in-out infinite}
+.wake[data-state="waking"] .pc-led{fill:#e8a13c;animation:blink 1.1s steps(1) infinite}
+.wake[data-state="waking"] .b1{animation:bootline .6s steps(1) .2s forwards}
+.wake[data-state="waking"] .b2{animation:bootline .6s steps(1) 1.4s forwards}
+.wake[data-state="waking"] .b3{animation:bootline .6s steps(1) 2.6s forwards}
+.wake[data-state="waking"] .b4{animation:bootline .6s steps(1) 3.8s forwards}
+.wake[data-state="waking"] .cursor{animation:blink 1s steps(1) 4.6s infinite}
+
+/* ---- daylight: awake --------------------------------------------------- */
+.wake[data-state="listening"] .sky-a,.wake[data-state="looking"] .sky-a,
+.wake[data-state="thinking"] .sky-a,.wake[data-state="done"] .sky-a{stop-color:#7fb2e8}
+.wake[data-state="listening"] .sky-b,.wake[data-state="looking"] .sky-b,
+.wake[data-state="thinking"] .sky-b,.wake[data-state="done"] .sky-b{stop-color:#ffd9a8}
+.wake[data-state="listening"] .sill,.wake[data-state="looking"] .sill,
+.wake[data-state="thinking"] .sill,.wake[data-state="done"] .sill{fill:#c9a37a}
+.wake[data-state="listening"] .sill-edge,.wake[data-state="looking"] .sill-edge,
+.wake[data-state="thinking"] .sill-edge,.wake[data-state="done"] .sill-edge{fill:#a5825c}
+/* Still black. Only the rim warms up -- lightening the fur at dawn would make
+   them different cats. */
+.wake[data-state="listening"] .fur,.wake[data-state="looking"] .fur,
+.wake[data-state="thinking"] .fur,.wake[data-state="done"] .fur{fill:#23232e;stroke:#7a6647}
+.wake[data-state="listening"] .fur.alt,.wake[data-state="looking"] .fur.alt,
+.wake[data-state="thinking"] .fur.alt,.wake[data-state="done"] .fur.alt{fill:#1c1c26;stroke:#69583d}
+.wake[data-state="listening"] .inner-ear,.wake[data-state="looking"] .inner-ear,
+.wake[data-state="thinking"] .inner-ear,.wake[data-state="done"] .inner-ear{fill:#5c4444}
+.wake[data-state="listening"] .eye,.wake[data-state="looking"] .eye,
+.wake[data-state="thinking"] .eye,.wake[data-state="done"] .eye{stroke:#c9b184}
+.wake[data-state="listening"] .eyeball,.wake[data-state="looking"] .eyeball,
+.wake[data-state="thinking"] .eyeball,.wake[data-state="done"] .eyeball{fill:#ffcf5c}
+.wake[data-state="listening"] .whiskers path,.wake[data-state="looking"] .whiskers path,
+.wake[data-state="thinking"] .whiskers path,.wake[data-state="done"] .whiskers path{
+  stroke:#d8c9a4;opacity:.9}
+.wake[data-state="listening"] .moon-bite,.wake[data-state="looking"] .moon-bite,
+.wake[data-state="thinking"] .moon-bite,.wake[data-state="done"] .moon-bite{fill:#7fb2e8}
+.wake[data-state="listening"] .stars circle,.wake[data-state="looking"] .stars circle,
+.wake[data-state="thinking"] .stars circle,.wake[data-state="done"] .stars circle{opacity:0}
+.wake[data-state="listening"] .zzz,.wake[data-state="looking"] .zzz,
+.wake[data-state="thinking"] .zzz,.wake[data-state="done"] .zzz{opacity:0}
+.wake[data-state="listening"] .eyes-shut,.wake[data-state="looking"] .eyes-shut,
+.wake[data-state="thinking"] .eyes-shut,.wake[data-state="done"] .eyes-shut{opacity:0}
+.wake[data-state="listening"] .eyes-open,.wake[data-state="looking"] .eyes-open,
+.wake[data-state="thinking"] .eyes-open,.wake[data-state="done"] .eyes-open{opacity:1}
+.wake[data-state="listening"] .pc-glow,.wake[data-state="looking"] .pc-glow,
+.wake[data-state="thinking"] .pc-glow,.wake[data-state="done"] .pc-glow{opacity:1}
+.wake[data-state="listening"] .pc-ok,.wake[data-state="looking"] .pc-ok,
+.wake[data-state="thinking"] .pc-ok,.wake[data-state="done"] .pc-ok{opacity:1}
+.wake[data-state="listening"] .pc-led,.wake[data-state="looking"] .pc-led,
+.wake[data-state="thinking"] .pc-led,.wake[data-state="done"] .pc-led{fill:#5ef0a8}
+
+/* ---- listening --------------------------------------------------------- */
+.wake[data-state="listening"] .ears-lines{opacity:1}
+.wake[data-state="listening"] .ear-l{transform:rotate(-5deg)}
+.wake[data-state="listening"] .ear-r{transform:rotate(5deg)}
+.wake[data-state="listening"] .head-g{transform:rotate(-6deg)}
+.wake[data-state="listening"] .w1{animation:ping 1.5s ease-out infinite}
+.wake[data-state="listening"] .w2{animation:ping 1.5s ease-out .25s infinite}
+.wake[data-state="listening"] .w3{animation:ping 1.5s ease-out .5s infinite}
+.wake[data-state="listening"] .tail-g{animation:flick 2.2s ease-in-out infinite}
+
+/* ---- looking: watching the screen ------------------------------------- */
+.wake[data-state="looking"] .head-g{transform:rotate(5deg)}
+.wake[data-state="looking"] .pupil{animation:scan 2.4s ease-in-out infinite}
+.wake[data-state="looking"] .pc-glow{animation:pulse 2.4s ease-in-out infinite}
+.wake[data-state="looking"] .tail-g{animation:flick 1.6s ease-in-out infinite}
+
+/* ---- thinking ---------------------------------------------------------- */
+.wake[data-state="thinking"] .thinky{opacity:1}
+.wake[data-state="thinking"] .d1{animation:bounce 1.2s ease-in-out infinite}
+.wake[data-state="thinking"] .d2{animation:bounce 1.2s ease-in-out .18s infinite}
+.wake[data-state="thinking"] .d3{animation:bounce 1.2s ease-in-out .36s infinite}
+.wake[data-state="thinking"] .tail-g{animation:flick 1.1s ease-in-out infinite}
+.wake[data-state="thinking"] .ear-l{transform:rotate(-9deg)}
+.wake[data-state="thinking"] .ear-r{transform:rotate(9deg)}
+
+/* ---- done -------------------------------------------------------------- */
+.wake[data-state="done"] .doney{opacity:1}
+.wake[data-state="done"] .heart{animation:pop .7s ease-out}
+.wake[data-state="done"] .mouth{opacity:1;stroke:#c9b184}
+.wake[data-state="done"] .cat{animation:stretch 1s ease-out}
+
+/* ---- queued: the desktop is off, not merely asleep --------------------- */
+/* The machine is dark and stays dark. The parcel says her question is kept,
+   which is the one thing she needs to believe -- otherwise she sends it again,
+   and again, and eventually gives up. */
+.wake[data-state="queued_offline"] .pc-case{fill:#8e8878}
+.wake[data-state="queued_offline"] .pc-inner{fill:#6f6a5d}
+.wake[data-state="queued_offline"] .pc-screen{fill:#0a0d09}
+.wake[data-state="queued_offline"] .pc-led{fill:#3a352b}
+.wake[data-state="queued_offline"] .parcel{opacity:1}
+.wake[data-state="queued_offline"] .box-tick{animation:draw 1.4s ease-out forwards}
+.wake[data-state="queued_offline"] .cat{animation:breathe 4.2s ease-in-out infinite}
+.wake[data-state="queued_offline"] .z1{animation:float 3.6s ease-in-out infinite}
+.wake[data-state="queued_offline"] .z2{animation:float 3.6s ease-in-out .6s infinite}
+.wake[data-state="queued_offline"] .ear-l{transform:rotate(-19deg)}
+.wake[data-state="queued_offline"] .ear-r{transform:rotate(19deg)}
+.wake .parcel{opacity:0}
+.wake .box{fill:#b58a5c;stroke:#8a6642;stroke-width:1.4}
+.wake .box-lid{fill:#c69a6a;stroke:#8a6642;stroke-width:1.4}
+.wake .box-tape{fill:#e8dcc8;opacity:.8}
+.wake .box-tick{stroke:#2f7d4f;stroke-width:3.4;fill:none;stroke-linecap:round;
+  stroke-linejoin:round;stroke-dasharray:30;stroke-dashoffset:30}
+
+/* ---- error ------------------------------------------------------------- */
+.wake[data-state="error"] .sky-a{stop-color:#5d6b52}
+.wake[data-state="error"] .sky-b{stop-color:#8a9377}
+.wake[data-state="error"] .sill{fill:#6b6650}
+.wake[data-state="error"] .sill-edge{fill:#847d63}
+.wake[data-state="error"] .fur{fill:#1e2419;stroke:#6d7f57}
+.wake[data-state="error"] .fur.alt{fill:#181d14;stroke:#5b6b48}
+.wake[data-state="error"] .eye{stroke:#9db07f}
+.wake[data-state="error"] .eyeball{fill:#c7d1a8}
+.wake[data-state="error"] .moon-bite{fill:#5d6b52}
+.wake[data-state="error"] .stars circle,.wake[data-state="error"] .zzz{opacity:0}
+.wake[data-state="error"] .eyes-shut{opacity:0}
+.wake[data-state="error"] .eyes-open{opacity:1}
+.wake[data-state="error"] .pupil{opacity:0}
+.wake[data-state="error"] .sicky{opacity:1}
+.wake[data-state="error"] .ear-l{transform:rotate(-28deg)}
+.wake[data-state="error"] .ear-r{transform:rotate(28deg)}
+/* Only the HEAD dips. Animating the whole cat here is what used to slide the
+   body out from under it. */
+.wake[data-state="error"] .head-g{animation:hangdog 1.9s ease-in-out infinite}
+.wake[data-state="error"] .pc-bad{opacity:1}
+.wake[data-state="error"] .pc-led{fill:#ff8b7a;animation:blink 1.4s steps(1) infinite}
+.wake[data-state="error"] .s1{animation:jitter 1.7s steps(2) infinite}
+.wake[data-state="error"] .s2{animation:jitter 1.3s steps(2) infinite}
+.wake[data-state="error"] .s3{animation:jitter 2.1s steps(2) infinite}
+.wake[data-state="error"] .l1{animation:queasy 1.9s ease-in-out infinite}
+.wake[data-state="error"] .l2{animation:queasy 1.9s ease-in-out .3s infinite}
+.wake[data-state="error"] .wake-bar span{background-color:#a3231f}
+.wake .sicky{opacity:0}
+.wake .sick-pool{fill:#b7c98a;opacity:.9}
+.wake .sick-pool.small{fill:#a3b877}
+.wake .sick-line{stroke:#7f9065;stroke-width:2;fill:none;stroke-linecap:round;opacity:0}
+.wake .wavey{stroke:#6b4f2a;stroke-width:2;fill:none;stroke-linecap:round;opacity:0}
+.wake .bub{fill:#fdfbe8;stroke:#a5825c;stroke-width:1.6}
+.wake .dot{fill:#a5825c}
+.wake .heart{fill:#e0607a}
+
+.wake-bar{height:12px;border-radius:99px;background:var(--line);overflow:hidden;
+  margin:.9rem 0 .4rem}
+/* Stripes keep travelling even when the percentage stands still, so a long
+   boot still reads as working rather than frozen. */
+.wake-bar span{display:block;height:100%;width:4%;border-radius:99px;
+  background-color:var(--accent);
+  background-image:linear-gradient(115deg,rgba(255,255,255,.34) 25%,transparent 25%,
+    transparent 50%,rgba(255,255,255,.34) 50%,rgba(255,255,255,.34) 75%,transparent 75%);
+  background-size:28px 28px;animation:barstripe 1s linear infinite;
+  transition:width .9s cubic-bezier(.3,.7,.4,1)}
+.wake-eta{font-variant-numeric:tabular-nums}
+
+@keyframes breathe{0%,100%{transform:scaleY(1)}50%{transform:scaleY(1.045)}}
+@keyframes stretch{0%{transform:scaleY(1)}45%{transform:scaleY(.9) scaleX(1.05)}
+  100%{transform:scaleY(1) scaleX(1)}}
+@keyframes hangdog{0%,100%{transform:rotate(14deg) translateY(3px)}
+  45%{transform:rotate(18deg) translateY(6px)}}
+@keyframes twinkle{0%,100%{opacity:.85}50%{opacity:.25}}
+@keyframes float{0%{opacity:0;transform:translateY(6px)}
+  30%{opacity:.95}100%{opacity:0;transform:translateY(-14px)}}
+@keyframes twitch{0%,70%,100%{transform:rotate(-19deg)}80%{transform:rotate(-3deg)}}
+@keyframes ping{0%{opacity:0}25%{opacity:.9}100%{opacity:0}}
+@keyframes bounce{0%,100%{transform:translateY(0);opacity:.45}
+  50%{transform:translateY(-4px);opacity:1}}
+@keyframes flick{0%,100%{transform:rotate(0)}50%{transform:rotate(-16deg)}}
+@keyframes scan{0%,100%{transform:translateX(0)}50%{transform:translateX(2.4px)}}
+@keyframes pulse{0%,100%{opacity:.7}50%{opacity:1}}
+@keyframes flicker{0%,100%{opacity:.35}12%{opacity:.9}18%{opacity:.2}
+  40%{opacity:.75}52%{opacity:.3}70%{opacity:.85}}
+@keyframes blink{0%,49%{opacity:1}50%,100%{opacity:.15}}
+@keyframes bootline{to{opacity:.95}}
+@keyframes jitter{0%,100%{transform:translateX(0);opacity:.35}
+  50%{transform:translateX(3px);opacity:.6}}
+@keyframes queasy{0%,100%{opacity:0;transform:translateY(0)}
+  40%{opacity:.85}100%{opacity:0;transform:translateY(-6px)}}
+@keyframes draw{to{stroke-dashoffset:0}}
+@keyframes barstripe{from{background-position:0 0}to{background-position:28px 0}}
+@keyframes pop{0%{transform:scale(0);opacity:0}
+  60%{transform:scale(1.25);opacity:1}100%{transform:scale(1);opacity:1}}
+
+@media (prefers-reduced-motion:reduce){
+  .wake *{animation:none !important}
+  .wake .z{opacity:.7}
+  .wake .bl,.wake .cursor{opacity:.9}
+}
+</style>
+
+<script>
+/* Drives the scene from the server's ACTUAL state.
+
+   Every stage shown corresponds to something really happening on the Pi or the
+   desktop. If the desktop never wakes, the cats stay asleep and the text says
+   so -- which is the honest answer, and the one that tells her to call you. */
+(function(){
+  const el = document.getElementById('wakeScene');
+  if (!el) return;
+  const root   = el.dataset.root || '';
+  const thread = el.dataset.thread;
+  const title  = document.getElementById('wakeTitle');
+  const body   = document.getElementById('wakeBody');
+  const hint   = document.getElementById('wakeHint');
+  const bar    = document.getElementById('wakeBar');
+  const eta    = document.getElementById('wakeEta');
+
+  /* pct  -- where the bar sits when this stage starts
+     secs -- how long it typically takes, used to advance the bar smoothly and
+             to count down. An estimate, and it says so when it runs out. */
+  const STAGES = {
+    queued:    {pct:  2, secs:  3, title: 'Getting started',
+                body: 'Just a moment.'},
+    sleeping:  {pct:  4, secs:  5, title: 'The computer is having a nap',
+                body: 'I am about to wake it up. Nothing for you to do.'},
+    waking:    {pct:  8, secs: 45, title: 'Waking up the computer',
+                body: 'It is an old machine and it takes its time. The cats '
+                    + 'will stir once it is ready.'},
+    listening: {pct: 46, secs: 12, title: 'Listening to what you said',
+                body: 'Turning your recording into words.'},
+    looking:   {pct: 60, secs: 15, title: 'Looking at your picture',
+                body: 'Reading what is on the screen you photographed.'},
+    thinking:  {pct: 76, secs: 25, title: 'Working out the answer',
+                body: 'Thinking it through and writing the steps.'},
+    done:      {pct:100, secs:  1, title: 'All done',
+                body: 'Here it is.'},
+    queued_offline: {pct: 100, secs: 1, title: 'Saved \u2014 I will answer shortly',
+                body: 'The computer that does the thinking is switched off just '
+                    + 'now. Everything you sent is saved. The answer will be '
+                    + 'here waiting for you \u2014 you do not need to send it again.'},
+    error:     {pct:100, secs:  1, title: 'That did not work',
+                body: 'Sorry -- something went wrong at my end. It is not '
+                    + 'anything you did. Please try asking again.'}
+  };
+  const ORDER = ['queued','sleeping','waking','listening','looking','thinking','done'];
+
+  let shown = 0, current = null, startedAt = 0, ticker = null;
+
+  function ceilingFor(state){
+    const i = ORDER.indexOf(state);
+    if (i < 0 || i >= ORDER.length - 1) return 100;
+    return STAGES[ORDER[i + 1]].pct;
+  }
+  function words(sec){
+    if (sec <= 0)  return 'nearly there';
+    if (sec < 10)  return 'a few more seconds';
+    if (sec < 90)  return 'about ' + (Math.ceil(sec / 5) * 5) + ' seconds';
+    const m = Math.ceil(sec / 60);
+    return 'about ' + m + ' more minute' + (m === 1 ? '' : 's');
+  }
+  /* Four times a second regardless of polling, so the bar always moves. */
+  function animate(){
+    if (!current || current === 'done' || current === 'error') return;
+    const st = STAGES[current] || STAGES.queued;
+    const elapsed = (Date.now() - startedAt) / 1000;
+    const ceiling = ceilingFor(current);
+    /* Ease toward the ceiling and never reach it -- reaching it would claim
+       the stage had finished when only the estimate had run out. */
+    const frac = 1 - Math.exp(-elapsed / Math.max(st.secs, 1));
+    shown = Math.max(shown, st.pct + (ceiling - st.pct) * frac * 0.94);
+    bar.style.width = shown.toFixed(1) + '%';
+    const left = Math.max(0, st.secs - elapsed);
+    eta.textContent = (current === 'waking' && elapsed > st.secs)
+      ? 'still starting up -- an old machine can take a few minutes'
+      : words(left);
+  }
+  function paint(state){
+    const st = STAGES[state] || STAGES.queued;
+    if (state !== current) {
+      current = state;
+      startedAt = Date.now();
+      shown = Math.max(shown, st.pct);
+      el.dataset.state = (state === 'queued') ? 'sleeping' : state;
+      title.textContent = st.title;
+      body.textContent  = st.body;
+      hint.hidden = (state === 'done' || state === 'error');
+    }
+    if (state === 'done' || state === 'error' || state === 'queued_offline') {
+      bar.style.width = '100%';
+      eta.textContent = (state === 'error')
+        ? 'nothing was lost -- your question is still saved'
+        : (state === 'queued_offline') ? 'safely in the queue' : '';
+      if (ticker) { clearInterval(ticker); ticker = null; }
+      return;
+    }
+    if (!ticker) ticker = setInterval(animate, 250);
+    animate();
+  }
+
+  if (!thread) {
+    (async function tick(){
+      try {
+        const r = await fetch(root + '/api/status', {cache:'no-store'});
+        const d = await r.json();
+        paint(d.backend && d.backend.ready ? 'done' : 'sleeping');
+      } catch (e) { }
+      setTimeout(tick, 15000);
+    })();
+    return;
+  }
+
+  let misses = 0;
+  (async function tick(){
+    try {
+      const r = await fetch(root + '/api/thread/' + thread, {cache:'no-store'});
+      const d = await r.json();
+      misses = 0;
+      if (d.state === 'done')  { paint('done'); setTimeout(function(){ location.reload(); }, 900); return; }
+      if (d.state === 'error') { paint('error'); return; }
+      if (d.state === 'queued_offline') {
+        paint('queued_offline');
+        if (d.queue_position) {
+          eta.textContent = (d.queue_position === 1)
+            ? 'yours is first in the queue'
+            : 'number ' + d.queue_position + ' in the queue';
+        }
+        /* Keep watching, slowly. The desktop may come on in an hour, and when
+           it does she should see the answer appear without touching anything. */
+        setTimeout(tick, 30000);
+        return;
+      }
+      paint(d.state || 'queued');
+    } catch (e) {
+      /* A few missed polls is a phone changing towers, not a failure. */
+      if (++misses > 20) { paint('error'); return; }
+    }
+    setTimeout(tick, 2500);
+  })();
+})();
+</script>

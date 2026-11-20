@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}{{ t.title }} — {{ site_name }}{% endblock %}
+{% block body %}
+<p class="small"><a href="{{ root }}/history">&larr; Everything we've fixed</a></p>
+<h1>{{ t.title }}</h1>
+<p class="muted small">{{ categories.get(t.category, t.category) }} &middot;
+  {{ (t.closed_at or t.updated_at)|fmt_ts }}</p>
+
+{% if t.summary %}
+<div class="card">
+  <h2 style="margin-top:0">What happened</h2>
+  <p style="margin-bottom:0">{{ t.summary }}</p>
+</div>
+{% endif %}
+
+{% if steps %}
+<div class="card">
+  <h2 style="margin-top:0">What fixed it</h2>
+  <ol style="font-size:1.05rem;line-height:1.8">
+    {% for s in steps %}<li style="margin-bottom:.5rem">{{ s }}</li>{% endfor %}
+  </ol>
+  <p class="small muted" style="margin-bottom:0">If it happens again, try these
+    first. If they don't work, just ask me again and say you already tried them.</p>
+</div>
+{% endif %}
+
+{% if related %}
+<div class="card">
+  <h2 style="margin-top:0">Similar things</h2>
+  <p class="small muted" style="margin-top:0">Other problems that looked like this one.</p>
+  <ul class="threads">
+    {% for r in related %}
+    <li><a href="{{ root }}/history/{{ r.t.id }}">{{ r.t.title }}
+      <span class="when">{{ (r.t.closed_at or r.t.updated_at)|fmt_ts }}</span></a></li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+<details class="card">
+  <summary style="cursor:pointer;font-weight:700;font-size:1.05rem">
+    Show the whole conversation</summary>
+  <div style="margin-top:1rem">
+    {% for m in messages %}
+      {% if m.role in ('user','assistant') %}
+      <div style="margin-bottom:1rem;padding-left:.8rem;border-left:4px solid
+           {% if m.role=='user' %}var(--line){% else %}var(--accent){% endif %}">
+        <p class="small muted" style="margin:0 0 .2rem">
+          {{ 'You said' if m.role=='user' else 'Answer' }} &middot; {{ m.created_at|fmt_ts }}</p>
+        <div style="white-space:pre-wrap">{{ m.content }}</div>
+      </div>
+      {% endif %}
+    {% endfor %}
+  </div>
+</details>
+
+<p><a class="btn" href="{{ root }}/">Ask about something new</a></p>
+{% endblock %}

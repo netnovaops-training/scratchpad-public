@@ -1,0 +1,1034 @@
+{% extends "base.html" %}
+{% block title %}{{ recipe.title }}{% endblock %}
+{% block sub %}<p class="small muted">{{ recipe.how }}</p>{% endblock %}
+
+{% block body %}
+
+{% if request.query_params.get('kept') %}
+  <div class="notice ok">Kept in the library.
+    {% if draft.tandoor_id and tandoor_public and can_write %}
+      <a href="{{ root }}/library?next=/view/recipe/{{ draft.tandoor_id }}">Open it in the library</a>.
+    {% endif %}
+  </div>
+{% endif %}
+
+<div class="card">
+  <h2 style="font-size:1.4rem">{{ recipe.title }}
+    {% if can_write %}<a href="{{ root }}/r/{{ id }}/edit" class="small" style="font-weight:normal">edit</a>{% endif %}
+  </h2>
+
+  {# FEEDBACK FROM THE ORIGINAL SITE -- not this household's own rating
+     (that is the thumbs down by the Method card), and labelled as such.
+     See crawl.py's _rating_from_ld()/_reviews_from_ld() -- only ever the
+     site's own structured schema.org data, never scraped HTML comments. #}
+  {% if recipe.source_rating %}
+    <p class="small muted sans" style="margin:-.3rem 0 .8rem">
+      {{ recipe.source_rating.value }}★
+      {% if recipe.source_rating.count %}({{ recipe.source_rating.count }} rating{{ '' if recipe.source_rating.count == 1 else 's' }}){% endif %}
+      {% if recipe.source %}on <a href="{{ recipe.source }}" rel="noreferrer">the original site</a>{% endif %}
+      — not this household's own rating.
+    </p>
+  {% endif %}
+
+  {% if recipe.source and can_write %}
+    <form method="post" action="{{ root }}/r/{{ id }}/refresh-from-source"
+          style="margin:-.2rem 0 .8rem">
+      <button class="small ghost" type="submit"
+              title="Go back to the source page for any nutrition, reviews, or ingredient amounts this import missed">
+        ↻ Check the source for anything missed
+      </button>
+    </form>
+  {% endif %}
+
+  {# Jason's own request (2026-08-25): "share the links to a certain
+     recipe to a random person without a login... 2 day temp access."
+     Only once it is in the library -- see share_recipe()'s own comment
+     for why a draft nobody has Kept has nothing worth sharing yet. #}
+  {% if can_write and draft.tandoor_id %}
+    <p style="margin:-.2rem 0 .8rem">
+      <button class="small ghost" type="button" id="share-btn">🔗 Share this recipe</button>
+      <span id="share-result"></span>
+    </p>
+  {% endif %}
+
+  {# YOUR photo first, the page's second. Same order as everywhere else in
+     this app: what you supplied, then what was found, then a drawing. #}
+  <div id="shero">
+    {% if hero_own %}
+      <img src="{{ root }}/photo/{{ id }}/{{ hero_own }}" alt="Your photo"
+           style="width:100%;border-radius:11px;border:1px solid var(--line);
+                  margin:.3rem 0 .5rem">
+      {% if can_write %}
+      <form method="post" action="{{ root }}/r/{{ id }}/photo/hero/remove">
+        <button class="small ghost" type="submit">Remove my photo</button>
+      </form>
+      {% endif %}
+    {% elif recipe.image %}
+      <img src="{{ recipe.image }}" alt="" referrerpolicy="no-referrer"
+           style="width:100%;border-radius:11px;border:1px solid var(--line);
+                  margin:.3rem 0 .5rem">
+    {% endif %}
+
+    {% if can_write %}
+    <form method="post" action="{{ root }}/r/{{ id }}/photo"
+          enctype="multipart/form-data" class="shot">
+      <input type="hidden" name="slot" value="hero">
+      {# capture="environment" opens the back camera straight from the page on
+         a phone, which is the whole point: you are standing over the dish. #}
+      <input type="file" name="photo" accept="image/*" capture="environment"
+             onchange="this.form.submit()">
+      <span class="small muted sans">
+        {% if hero_own %}Replace with another photo{% else %}Add a photo of the dish{% endif %}
+        {% if draft.tandoor_id %}<br>· goes to the library too{% endif %}
+      </span>
+    </form>
+    {% endif %}
+  </div>
+
+  {% if recipe.notes %}<p class="small">{{ recipe.notes }}</p>{% endif %}
+
+  {# Course and where-it-is-from FIRST and on their own line, because they are
+     the two facts somebody scans for, and because they are editable while the
+     labels are not. #}
+  <div class="pills" style="margin:.7rem 0 .3rem;align-items:center">
+    {% if recipe.course %}
+      <a href="{{ root }}/browse?course={{ recipe.course|urlencode }}"
+         class="pill">{{ recipe.course }}</a>
+    {% endif %}
+    {% if recipe.cuisine %}
+      <a href="{{ root }}/browse?cuisine={{ recipe.cuisine|urlencode }}"
+         class="pill">{{ recipe.cuisine }}</a>
+    {% endif %}
+    {% if can_write %}
+    <details style="display:inline">
+      <summary class="pill addmade" style="list-style:none">
+        {% if recipe.course or recipe.cuisine %}change{% else %}+ say what this is{% endif %}
+      </summary>
+      <form method="post" action="{{ root }}/r/{{ id }}/about"
+            style="margin-top:.6rem">
+        <label for="course">What kind of thing is it?</label>
+        <select id="course" name="course">
+          <option value="">— not said —</option>
+          {% for c in courses %}
+            <option value="{{ c }}" {{ 'selected' if c == recipe.course }}>{{ c }}</option>
+          {% endfor %}
+        </select>
+
+        <label for="cuisine">Where is it from?
+          <span class="hint">Pick one, or type your own — the list is a
+            starting point, not the last word.</span></label>
+        <input id="cuisine" name="cuisine" list="cuisinelist"
+               value="{{ recipe.cuisine or '' }}" autocomplete="off">
+        <datalist id="cuisinelist">
+          {% for c in cuisines %}<option value="{{ c }}">{% endfor %}
+        </datalist>
+
+        <button class="ghost" type="submit" style="margin-top:.8rem">Save that</button>
+        <p class="small muted" style="margin:.5rem 0 0">
+          Once you set these by hand they stay — nothing re-guesses them later.
+        </p>
+      </form>
+    </details>
+    {% endif %}
+  </div>
+
+  <div class="pills" style="margin:.3rem 0 0;align-items:center">
+    {% for name in recipe.labels or [] %}
+      <a href="{{ root }}/browse?label={{ name|urlencode }}"
+         class="pill {{ 'made' if ' made and tested' in name else 'quiet' }}">{{ name }}</a>
+    {% endfor %}
+
+    {# The one pill a person puts on, because it is the one a model cannot
+       know. Toggles YOUR name specifically -- if Casey has already vouched for
+       this, pressing it adds you alongside her rather than taking hers off. #}
+    {% if can_write %}
+    <form method="post" action="{{ root }}/r/{{ id }}/tested" style="display:inline">
+      <button type="submit" class="pill addmade">
+        {% if made_mine %}− I've not made this{% else %}+ I've made this{% endif %}
+      </button>
+    </form>
+    {% endif %}
+  </div>
+
+  <p class="small muted sans" style="margin:.6rem 0 0">
+    {% if serves_now %}Serves {{ serves_now }} as written.{% endif %}
+    {% if recipe.prep %} Prep {{ recipe.prep }}.{% endif %}
+    {% if recipe.cook %} Cook {{ recipe.cook }}.{% endif %}
+    {% if recipe.total %} Total {{ recipe.total }}.{% endif %}
+    {% if recipe.source %}
+      <br><a href="{{ recipe.source }}" rel="noreferrer">the page this came from</a>
+    {% endif %}
+  </p>
+</div>
+
+<!-- ── Portions ──────────────────────────────────────────────────────────
+     Plain links, not JavaScript. Each portion size is its own URL, so it
+     survives a reload, it can be sent to someone, and it works with the page
+     open on a floury phone that has lost its connection halfway through.
+     Nothing here asks the model — see the note at the top of scale.py. -->
+<div class="card">
+  <h2 class="sans">Portions</h2>
+  {% if serves_now %}
+    <div class="portions sans">
+      {% for n in servings_options(serves_now) %}
+        <a href="{{ root }}/r/{{ id }}?serves={{ n }}"
+           class="{{ 'on' if n == want }}">{{ n }}</a>
+      {% endfor %}
+    </div>
+    {% if factor != 1 %}
+      <p class="small muted" style="margin:.7rem 0 0">
+        Everything below is {{ factor_label }}, rounded to what a measuring
+        spoon can actually do.
+      </p>
+    {% endif %}
+  {% else %}
+    <p class="small muted" style="margin:0">
+      This recipe does not say how many it serves, so there is nothing to
+      scale <em>from</em>. Multiplying it would be a guess dressed up as a
+      number, so it is left exactly as written.
+    </p>
+  {% endif %}
+
+  {% if times_note %}
+    <div class="notice warn" style="margin:.9rem 0 0">
+      Cooking times are <strong>not</strong> scaled, and should not be. Half a
+      stew still simmers for an hour. Check it earlier, trust the recipe's
+      description of what done looks like, not the clock.
+    </div>
+  {% endif %}
+
+  {% for f in flags %}
+    <div class="notice warn" style="margin:.6rem 0 0">{{ f }}</div>
+  {% endfor %}
+</div>
+
+{% if daily_values %}
+<div class="card" id="nutrition">
+  <details>
+    <summary><h2 class="sans" style="display:inline">Nutrition</h2>
+      <span class="small muted">per serving &mdash; % of what you need in a whole day</span></summary>
+    <div class="dvchart">
+      {% for n in daily_values %}
+      <div class="dvrow">
+        <span class="dvlabel">{{ n.label }}</span>
+        <span class="dvbar"><span class="dvfill" style="width:{{ [n.pct, 100]|min }}%"></span></span>
+        <span class="dvamount"><b>{{ n.pct }}%</b><span class="raw">{{ n.amount }}{{ n.unit }}</span></span>
+      </div>
+      {% endfor %}
+    </div>
+    {% if nutrition_extra %}
+    <p class="small muted" style="margin-top:.8rem">
+      {% for n in nutrition_extra %}{{ n.label }} {{ n.amount }}{{ n.unit }}{{ ", " if not loop.last }}{% endfor %}
+      &mdash; the FDA does not publish a daily value for these, so no percent for them.</p>
+    {% endif %}
+    <p class="small muted" style="margin-top:.6rem">
+      100% means a whole day's worth in one serving, not a limit to stay under --
+      for sodium, saturated fat and cholesterol lower is generally better; for
+      protein, fiber and the vitamins/minerals higher generally is. Arithmetic
+      from this recipe's own ingredients against USDA measurements (or, where
+      USDA has no match, a clearly-marked model estimate) -- not a lab result.
+      See it as roughly right, not exact. <strong>This chart is per serving on
+      purpose</strong> and does not move when you change the portion buttons
+      above -- a serving is the same size whether you make a small batch or a
+      big one. {% if nutrition_batch %}What changes with the portion buttons
+      is the batch total, below.{% endif %}</p>
+    {% if nutrition_batch %}
+    {% set making = want or serves_now %}
+    <p class="sans" style="margin-top:.9rem;padding-top:.8rem;border-top:1px solid var(--line)">
+      <strong>Making {{ making }}{{ ' serving' if making == 1 else ' servings' }} this
+      time:</strong>
+      {% for n in nutrition_batch %}{{ n.amount }}{{ n.unit }} {{ n.label|lower }}{{ ", " if not loop.last }}{% endfor %}
+      <span class="small muted" style="display:block;margin-top:.2rem">total for the whole batch, not per serving</span>
+    </p>
+    {% endif %}
+  </details>
+</div>
+{% elif daily_values_stated %}
+{# FALLBACK ONLY, shown when this app could not compute its own estimate
+   from the ingredients (too few matched a known USDA food). This is the
+   SOURCE SITE'S OWN published nutrition facts, not this app's arithmetic --
+   see crawl.py's _nutrition_from_ld() and main.py's daily_values_stated. #}
+<div class="card" id="nutrition">
+  <details>
+    <summary><h2 class="sans" style="display:inline">Nutrition</h2>
+      <span class="small muted">per serving, as published
+        {% if nutrition_stated_source %}by {{ nutrition_stated_source }}{% else %}by the source{% endif %}</span></summary>
+    <div class="dvchart">
+      {% for n in daily_values_stated %}
+      <div class="dvrow">
+        <span class="dvlabel">{{ n.label }}</span>
+        <span class="dvbar"><span class="dvfill" style="width:{{ [n.pct, 100]|min }}%"></span></span>
+        <span class="dvamount"><b>{{ n.pct }}%</b><span class="raw">{{ n.amount }}{{ n.unit }}</span></span>
+      </div>
+      {% endfor %}
+    </div>
+    {% if nutrition_stated_extra %}
+    <p class="small muted" style="margin-top:.8rem">
+      {% for n in nutrition_stated_extra %}{{ n.label }} {{ n.amount }}{{ n.unit }}{{ ", " if not loop.last }}{% endfor %}
+      &mdash; the FDA does not publish a daily value for these, so no percent for them.</p>
+    {% endif %}
+    <p class="small muted" style="margin-top:.6rem">
+      This app could not work out its own estimate from the ingredients, so
+      this is the number
+      {% if recipe.source %}<a href="{{ recipe.source }}" rel="noreferrer">the recipe's own page</a>{% else %}the recipe's own page{% endif %}
+      states for one serving, at the recipe's original {{ recipe.yields }} yield --
+      not this household's own arithmetic, and it will not change with the
+      portion buttons above.
+    </p>
+  </details>
+</div>
+{% endif %}
+
+{% if recipe.source_reviews %}
+<div class="card" id="reviews">
+  <details>
+    <summary><h2 class="sans" style="display:inline">What people say on the original site</h2>
+      <span class="small muted">someone else's words, not this household's</span></summary>
+    {% for rv in recipe.source_reviews %}
+    <div style="margin-top:{{ '0' if loop.first else '.9rem' }};padding-top:{{ '0' if loop.first else '.9rem' }};{{ '' if loop.first else 'border-top:1px solid var(--line)' }}">
+      <p class="small sans" style="margin:0 0 .2rem">
+        <strong>{{ rv.author }}</strong>
+        {% if rv.rating %}&mdash; {{ rv.rating }}★{% endif %}
+        {% if rv.date %}<span class="muted">&middot; {{ rv.date }}</span>{% endif %}
+      </p>
+      <p style="margin:0">{{ rv.body }}</p>
+    </div>
+    {% endfor %}
+  </details>
+</div>
+{% endif %}
+
+<div class="card" id="ingredients">
+  <h2 class="sans">Ingredients</h2>
+
+  {# The serving count rides along in a hidden field so the list gets what is
+     ON SCREEN, not what the recipe was written for. Scale to eight, press
+     this, and the list says eight. #}
+  {% if can_write %}
+  <form method="post" action="{{ root }}/r/{{ id }}/shop" style="margin:0 0 .9rem">
+    <input type="hidden" name="serves" value="{{ want or '' }}">
+    <button class="big" type="submit" style="margin-top:0">
+      Add to shopping list{% if factor != 1 %} (for {{ want }}){% endif %}
+    </button>
+  </form>
+
+  {% if draft.tandoor_id %}
+  <form method="post" action="{{ root }}/r/{{ id }}/plan"
+       style="display:flex;gap:.4rem;align-items:end;flex-wrap:wrap;margin:0 0 .9rem">
+    <span style="flex:1;min-width:140px">
+      <label for="plan-date" style="margin:0">Add to meal plan
+        <span class="hint">Shared with the household.</span></label>
+      <input id="plan-date" type="date" name="date" required
+            value="{{ now_date }}">
+    </span>
+    <span>
+      <label for="plan-type" style="margin:0">&nbsp;</label>
+      <select id="plan-type" name="entry_type">
+        <option value="breakfast">Breakfast</option>
+        <option value="lunch">Lunch</option>
+        <option value="dinner" selected>Dinner</option>
+        <option value="side">Side</option>
+      </select>
+    </span>
+    <button class="ghost" type="submit">Plan it</button>
+  </form>
+  {% endif %}
+  {% endif %}
+
+  {# Ticked in the browser, same lifetime as the step ticks below -- see
+     that script's own comment for why this is client-side, not a server
+     POST like the shared shopping list. Gathering ingredients is a
+     tonight-only thing, per person cooking, not a household-shared
+     state. #}
+  <ul class="plain shop ingtick" id="ingredient-list">
+    {% for item in ingredients %}
+      <li>
+        <button type="button" class="tick" data-ing="{{ loop.index0 }}">
+          <span class="box"></span>
+          {% if item.icon %}
+            <img class="itempic{% if item.icon.id %} infotrigger{% endif %}"
+                src="{{ item.icon.url }}" alt="" loading="lazy"
+                {% if item.icon.id %}onclick="event.stopPropagation(); openItemInfo('{{ item.icon.kind }}', {{ item.icon.id }})"{% endif %}>
+          {% endif %}
+          <span class="what">
+            <span class="{{ 'changed' if item.scaled }}">{{ item.text }}</span>
+            {% if item.scaled %}
+              <span class="was sans">was {{ item.original }}</span>
+            {% endif %}
+          </span>
+        </button>
+      </li>
+    {% endfor %}
+  </ul>
+</div>
+
+{% if tools %}
+<div class="card" id="tools">
+  <h2 class="sans">Tools</h2>
+  <ul class="plain shop" id="tool-list">
+    {% for t in tools %}
+      <li>
+        <button type="button" class="tick" data-tool="{{ loop.index0 }}">
+          <span class="box"></span>
+          {% if t.url %}
+            <img class="itempic{% if t.id %} infotrigger{% endif %}"
+                src="{{ t.url }}" alt="" loading="lazy"
+                {% if t.id %}onclick="event.stopPropagation(); openItemInfo('tool', {{ t.id }})"{% endif %}>
+          {% endif %}
+          <span class="what">{{ t.name }}</span>
+        </button>
+      </li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+<!-- ── Swaps ─────────────────────────────────────────────────────────────
+     The buttons below cost nothing to show: subs.scan() is a dictionary
+     lookup per line, run when the page rendered. Pressing one answers from
+     the table instantly; only the free-text box at the bottom needs the
+     model, and only when the table has nothing. -->
+<div class="card">
+  <h2 class="sans">Missing something?</h2>
+
+  {% if swaps %}
+    <p class="small muted" style="margin:0 0 .6rem">
+      These are already written down — the answers come back instantly, with no
+      model involved:
+    </p>
+    <form method="post" action="{{ root }}/r/{{ id }}/swap">
+      <div class="portions sans">
+        {% for s in swaps %}
+          <button class="small ghost" type="submit" name="ingredient"
+                  value="{{ s.key }}">{{ s.key }}</button>
+        {% endfor %}
+      </div>
+    </form>
+  {% endif %}
+
+  <form method="post" action="{{ root }}/r/{{ id }}/swap">
+    <label for="ingredient">Something else
+      <span class="hint">Name the ingredient you have not got.</span></label>
+    <input id="ingredient" name="ingredient" required
+           placeholder="e.g. star anise">
+    <label for="why">Why? <span class="hint">Optional — but "dairy-free" and
+      "the shop had none" have different answers, so it helps.</span></label>
+    <input id="why" name="why" placeholder="e.g. dairy-free">
+    <button class="big ghost" type="submit">Find a substitute</button>
+  </form>
+
+  {% if ingredients %}
+  <!-- DIFFERENT QUESTION from the box above -- that one is "what could I use
+       instead", several options. This is "I already have a specific thing,
+       how much of it do I actually need" -- one exact amount, worked against
+       the recipe's OWN line (with its quantity, picked from a list rather
+       than retyped) rather than a bare ingredient name. See subs.convert(). -->
+  <form method="post" action="{{ root }}/r/{{ id }}/swap-amount" style="margin-top:1.3rem">
+    <label for="swap-line">I already have something specific
+      <span class="hint">Pick what the recipe calls for, then say what you have instead.</span></label>
+    <select id="swap-line" name="ingredient" required>
+      {% for item in ingredients %}
+        <option value="{{ item.text }}">{{ item.text }}</option>
+      {% endfor %}
+    </select>
+    <label for="have" style="margin-top:.6rem">What you have instead</label>
+    <input id="have" name="have" required placeholder="e.g. stevia">
+    <button class="big ghost" type="submit">How much do I need?</button>
+  </form>
+  {% endif %}
+</div>
+
+<!-- ── Equipment ─────────────────────────────────────────────────────────
+     Same shape as the ingredient swap above, table first (subs.EQUIPMENT),
+     model for anything not written down. No pre-scanned quick buttons here:
+     Kitchen's recipe model has no equipment list to scan, unlike ingredients. -->
+<div class="card">
+  <h2 class="sans">Don't have the equipment?</h2>
+  <form method="post" action="{{ root }}/r/{{ id }}/swap-equipment">
+    <label for="item">What are you missing?
+      <span class="hint">e.g. a stand mixer, a Dutch oven, a meat thermometer.</span></label>
+    <input id="item" name="item" required placeholder="e.g. stand mixer">
+    <button class="big ghost" type="submit">Find a workaround</button>
+  </form>
+</div>
+
+{% if recipe.extras %}
+<div class="card">
+  <h2 class="sans">Might go well with this</h2>
+  <ul class="plain">
+    {% for x in recipe.extras %}
+      <li>
+        <span class="changed">{{ x.add }}</span>
+        {% if x.why %}<span class="muted"> — {{ x.why }}</span>{% endif %}
+      </li>
+    {% endfor %}
+  </ul>
+  {# Said here, plainly, every time -- not only when the model happens to
+     mention it. See the long note at the top of extras.py for why this is
+     appended in code rather than trusted to the prompt. #}
+  <p class="small muted" style="margin:.8rem 0 0">
+    <strong>AI suggested</strong> — {{ extras_disclaimer }}
+  </p>
+</div>
+{% endif %}
+
+<div class="card" id="method">
+  <h2 class="sans">Method</h2>
+
+  <p style="text-align:center;margin:0 0 1rem">
+    <button class="ghost small sans" type="button" id="cookmode">
+      🍳 Cooking mode
+    </button>
+    <span class="small muted" style="display:block;margin-top:.3rem">
+      Bigger text, keeps the screen from sleeping while you cook.
+    </span>
+  </p>
+
+  {% if drew %}
+    <div class="notice ok">Drew {{ drew }} step picture{{ '' if drew == '1' else 's' }}.
+      They are drawings, not photographs — replace any of them with your own.</div>
+  {% elif nodraw %}
+    <div class="notice warn">No pictures drawn: {{ nodraw }}.</div>
+  {% endif %}
+
+  {% if owner and can_draw %}
+    <form method="post" action="{{ root }}/r/{{ id }}/draw" style="margin:0 0 1rem">
+      <button class="small ghost" type="submit">
+        Draw pictures for the {{ can_draw }} step{{ '' if can_draw == 1 else 's' }} without one
+      </button>
+      <p class="small muted" style="margin:.5rem 0 0">
+        Drawings, not photographs, and only when the graphics card is free —
+        if the phone line is busy it will say so and do nothing. Recipes in the
+        library also get filled in on their own, in the background.
+      </p>
+    </form>
+  {% endif %}
+  {% for step in steps %}
+    <div class="step" id="sstep-{{ step.n }}">
+      <div class="art">
+        {% if step.photo %}
+          <img src="{{ step.photo }}" alt="{{ step.alt }}" loading="lazy"
+               referrerpolicy="no-referrer">
+          {% if step.drawn %}
+            {# Said on the picture, not in a note at the bottom of the page.
+               Somebody cooking from a phone looks at the picture and the
+               sentence next to it, and nothing else. #}
+            <p class="drawnote sans">a drawing, not a photo</p>
+          {% endif %}
+        {% else %}
+          {{ step.svg|safe }}
+        {% endif %}
+
+        {% if can_write %}
+        <form method="post" action="{{ root }}/r/{{ id }}/photo"
+              enctype="multipart/form-data" class="shot">
+          <input type="hidden" name="slot" value="step-{{ step.n }}">
+          <input type="file" name="photo" accept="image/*" capture="environment"
+                 onchange="this.form.submit()">
+          <span class="small muted sans">
+            {% if step.own %}Replace{% else %}Add your photo{% endif %}
+          </span>
+        </form>
+        {% endif %}
+        {% if step.own and can_write %}
+          <form method="post"
+                action="{{ root }}/r/{{ id }}/photo/step-{{ step.n }}/remove">
+            <button class="small ghost" type="submit"
+                    style="width:100%;margin-top:.3rem">Remove</button>
+          </form>
+        {% elif step.drawn and owner %}
+          <form method="post"
+                action="{{ root }}/r/{{ id }}/draw/step-{{ step.n }}/remove">
+            <button class="small ghost" type="submit"
+                    style="width:100%;margin-top:.3rem">Remove the drawing</button>
+          </form>
+        {% endif %}
+
+        {% if owner %}
+        {% set ref_slot = "step-" ~ step.n %}
+        <details style="margin-top:.4rem">
+          <summary class="small muted">reference picture</summary>
+          {% if draft.recipe.reference and draft.recipe.reference[ref_slot] %}
+            <p class="small muted" style="margin:.3rem 0">Set -- used next time this step is drawn.</p>
+            <form method="post" action="{{ root }}/r/{{ id }}/reference/{{ ref_slot }}/remove">
+              <button class="small ghost" type="submit">Remove reference</button>
+            </form>
+          {% else %}
+            <form method="post" action="{{ root }}/r/{{ id }}/reference" style="margin-top:.3rem">
+              <input type="hidden" name="slot" value="{{ ref_slot }}">
+              <input type="url" name="url" placeholder="link to a picture you found"
+                     style="font-size:.85rem">
+              <button class="small ghost" type="submit">Use as reference</button>
+            </form>
+          {% endif %}
+        </details>
+        {% endif %}
+      </div>
+      <div style="flex:1">
+        {% if step.icons %}
+        {# What this step actually uses, pictured -- one unified size for
+           foods and tools alike (Jason's own correction: no more small-
+           icon/big-thumbnail split). Shown BEFORE the instruction, not
+           after -- see what you need for this step, then read what to do
+           with it, same order as actually cooking. No divider between the
+           pictures and the text -- Jason's own call, they read as one
+           unit rather than two. #}
+        <div class="row" style="gap:.5rem;flex-wrap:wrap;margin-bottom:.5rem">
+          {% for icon in step.icons %}
+          <span class="row{% if icon.id %} infotrigger{% endif %}" style="gap:.3rem;align-items:center"
+               {% if icon.id %}onclick="openItemInfo('{{ icon.kind }}', {{ icon.id }})" role="button" tabindex="0"{% endif %}>
+            <img class="itempic" src="{{ icon.url }}" alt="{{ icon.name }}" loading="lazy">
+            <span class="small muted sans">{{ icon.name }}</span>
+          </span>
+          {% endfor %}
+        </div>
+        {% endif %}
+        <p><span class="n sans">{{ step.n }}.</span>{{ step.text }}</p>
+        {# TICKED IN THE BROWSER, NOT ON THE SERVER, and that is deliberate.
+           A step tick is about tonight: it should be instant with floury
+           hands and a bad signal, and it should be gone next time you cook
+           this. The shopping list is the opposite -- it must persist and be
+           shared -- so that one posts to the server. Different lifetimes,
+           different mechanisms. #}
+        <button class="tick sans" type="button" data-step="{{ step.n }}">
+          <span class="box"></span>
+          <span class="what">Done</span>
+        </button>
+        {% if listen_enabled %}
+        <button class="stepdone sans" type="button"
+                data-listen="{{ step.n }}">&#128266; Listen</button>
+        {% endif %}
+      </div>
+    </div>
+  {% endfor %}
+
+  <p style="text-align:center;margin:1rem 0 0">
+    <button class="ghost small sans" type="button" id="startover">
+      Untick every step
+    </button>
+  </p>
+
+  <script>
+  /* A tick that only lives in this browser, for this recipe -- used for
+     ingredients, tools AND steps below, same reasoning each time: this is
+     about tonight, not a record anyone needs tomorrow. One tiny factory
+     rather than three near-identical blocks. Wrapped in try/catch
+     throughout: a browser with storage blocked (private window, or the
+     setting some phones ship with) must still show a working guide. It
+     just forgets the ticks, which is a far better failure than a page
+     that does not render. */
+  function kitchenTickList(storageKey, selector) {
+    var done = {};
+    try { done = JSON.parse(localStorage.getItem(storageKey) || "{}"); } catch (e) {}
+
+    function paint(btn, on) {
+      var row = btn.closest("li") || btn;
+      row.classList.toggle("got", !!on);
+      var box = btn.querySelector(".box");
+      if (box) { box.textContent = on ? "✓" : ""; }
+    }
+    function save() {
+      try { localStorage.setItem(storageKey, JSON.stringify(done)); } catch (e) {}
+    }
+
+    var buttons = document.querySelectorAll(selector);
+    buttons.forEach(function (btn) {
+      var key = btn.getAttribute("data-ing") || btn.getAttribute("data-tool")
+        || btn.getAttribute("data-step");
+      if (done[key]) { paint(btn, true); }
+      btn.addEventListener("click", function () {
+        done[key] = !done[key];
+        paint(btn, done[key]);
+        save();
+      });
+    });
+    return { clearAll: function () {
+      buttons.forEach(function (btn) { paint(btn, false); });
+      done = {};
+      save();
+    } };
+  }
+
+  kitchenTickList("kitchen-ingredients-{{ id }}", "#ingredient-list .tick[data-ing]");
+  kitchenTickList("kitchen-tools-{{ id }}", "#tool-list .tick[data-tool]");
+
+  (function () {
+    var key = "kitchen-steps-{{ id }}";
+    var done = {};
+    try { done = JSON.parse(localStorage.getItem(key) || "{}"); } catch (e) {}
+
+    function paint(n, on) {
+      var row = document.getElementById("sstep-" + n);
+      if (row) { row.classList.toggle("did", !!on); }
+      var btn = row && row.querySelector(".tick[data-step]");
+      var box = btn && btn.querySelector(".box");
+      if (box) { box.textContent = on ? "✓" : ""; }
+    }
+    function save() {
+      try { localStorage.setItem(key, JSON.stringify(done)); } catch (e) {}
+    }
+
+    Object.keys(done).forEach(function (n) { if (done[n]) { paint(n, true); } });
+
+    document.querySelectorAll(".tick[data-step]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var n = btn.getAttribute("data-step");
+        done[n] = !done[n];
+        paint(n, done[n]);
+        save();
+      });
+    });
+
+    var over = document.getElementById("startover");
+    if (over) {
+      over.addEventListener("click", function () {
+        Object.keys(done).forEach(function (n) { paint(n, false); });
+        done = {};
+        save();
+      });
+    }
+  })();
+
+  /* Reading a step aloud. One shared <audio> element, not one per step --
+     so pressing a second step's Listen button stops the first rather than
+     playing both at once. The endpoint answers plain text (not JSON) on
+     failure, so a bad response is read as the error message itself. */
+  (function () {
+    var buttons = document.querySelectorAll(".stepdone[data-listen]");
+    if (!buttons.length) return;
+    var audio = new Audio();
+    var current = null;
+
+    function reset(btn) {
+      if (btn) { btn.textContent = "🔊 Listen"; btn.disabled = false; }
+    }
+
+    audio.addEventListener("ended", function () { reset(current); current = null; });
+    audio.addEventListener("error", function () { reset(current); current = null; });
+
+    buttons.forEach(function (btn) {
+      btn.addEventListener("click", async function () {
+        if (current === btn) { audio.pause(); reset(btn); current = null; return; }
+        if (current) { reset(current); }
+        current = btn;
+        btn.disabled = true;
+        btn.textContent = "Reading…";
+        var n = btn.getAttribute("data-listen");
+        try {
+          var r = await fetch("{{ root }}/r/{{ id }}/step/" + n + "/listen");
+          if (!r.ok) {
+            var why = await r.text();
+            alert(why || "Could not read that step aloud.");
+            reset(btn); current = null;
+            return;
+          }
+          var blob = await r.blob();
+          audio.src = URL.createObjectURL(blob);
+          await audio.play();
+          btn.disabled = false;
+          btn.textContent = "⏸ Stop";
+        } catch (e) {
+          alert("Could not read that step aloud.");
+          reset(btn); current = null;
+        }
+      });
+    });
+  })();
+
+  /* "Share this recipe" -- Jason's own request (2026-08-25): a no-login
+     link to just this recipe, good for a couple of days. One click, no
+     confirmation dialog: the link itself expires on its own, so there is
+     nothing here worth a second "are you sure". */
+  (function () {
+    var btn = document.getElementById("share-btn");
+    var out = document.getElementById("share-result");
+    if (!btn) return;
+    btn.addEventListener("click", async function () {
+      btn.disabled = true;
+      out.textContent = "Making a link…";
+      try {
+        var r = await fetch("{{ root }}/r/{{ id }}/share", {method: "POST"});
+        var data = await r.json();
+        if (!r.ok || !data.ok) {
+          out.textContent = data.error || "Could not make a link.";
+          btn.disabled = false;
+          return;
+        }
+        out.innerHTML = '<input type="text" readonly value="' + data.url +
+          '" onclick="this.select()" style="width:16rem;max-width:60vw"> ' +
+          '<button type="button" class="small ghost" id="share-copy">Copy</button> ' +
+          '<span class="small muted">works for ' + data.days + ' days</span>';
+        document.getElementById("share-copy").onclick = function () {
+          navigator.clipboard.writeText(data.url).then(function () {
+            document.getElementById("share-copy").textContent = "Copied";
+          });
+        };
+      } catch (e) {
+        out.textContent = "Could not make a link.";
+        btn.disabled = false;
+      }
+    });
+  })();
+
+  /* Cooking mode: bigger step text, and a screen wake lock so the phone
+     does not sleep mid-stir. Not persisted anywhere -- it is a for-right-now
+     toggle, same lifetime as the step ticks above, and it turns itself back
+     off if you leave the page (the wake lock is released automatically).
+     Wrapped in try/catch: the Wake Lock API is missing on older browsers
+     and Safari outside a user gesture context, and the bigger-text half of
+     this must still work when it is. */
+  (function () {
+    var btn = document.getElementById("cookmode");
+    if (!btn) return;
+    var lock = null;
+
+    async function requestLock() {
+      try {
+        if ("wakeLock" in navigator) {
+          lock = await navigator.wakeLock.request("screen");
+        }
+      } catch (e) { /* fine -- text still gets bigger */ }
+    }
+
+    btn.addEventListener("click", async function () {
+      var on = document.body.classList.toggle("cooking");
+      btn.setAttribute("aria-pressed", on ? "true" : "false");
+      btn.textContent = on ? "🍳 Cooking mode (on)" : "🍳 Cooking mode";
+      if (on) {
+        await requestLock();
+      } else if (lock) {
+        try { await lock.release(); } catch (e) {}
+        lock = null;
+      }
+    });
+
+    // Re-acquire if the tab regains visibility mid-cook -- the OS releases
+    // the lock automatically when a tab is backgrounded, and a phone
+    // sleeping again the moment you check a timer defeats the whole point.
+    document.addEventListener("visibilitychange", function () {
+      if (document.body.classList.contains("cooking") &&
+         document.visibilityState === "visible" && !lock) {
+        requestLock();
+      }
+    });
+  })();
+  </script>
+
+  <p class="small muted" style="margin:1rem 0 0">
+    Ticking a step is remembered on this phone only, and forgotten the next
+    time you cook it — it is about tonight, not about the recipe.
+    Pictures with a caption came from the page itself. The plain line drawings
+    are diagrams, drawn by this app from what the step says — they show the
+    <em>kind</em> of thing you are doing and the number you need, not what your
+    pan will look like. Anything marked <em>a drawing, not a photo</em> was
+    generated on this machine from the words of that step: it is an
+    impression of what you are aiming at, and it has never seen your kitchen.
+    Nothing here is a photograph unless it is captioned or you took it.
+  </p>
+</div>
+
+<div class="card">
+  {% if draft.tandoor_id %}
+    <p style="margin:0">This one is in the library
+      {%- if kept_by_name %}, kept by <strong>{{ kept_by_name }}</strong>{% endif %}.
+      {% if tandoor_public and can_write %}
+        <a href="{{ root }}/library?next=/view/recipe/{{ draft.tandoor_id }}">Open it in the library</a>.
+      {% endif %}
+    </p>
+  {% elif can_write %}
+    <form method="post" action="{{ root }}/r/{{ id }}/keep">
+      {# Whoever presses this is who it goes in as. No approval step -- the
+         household (people.WRITERS) is the door for THIS action; being signed
+         in at all only gets you as far as reading. #}
+      <button class="big" type="submit">Keep this in the library</button>
+      <p class="small muted" style="margin:.7rem 0 0">
+        Goes straight in, and says {{ me_name or "you" }} added it. Until you
+        do, it lives here as a draft and is swept after 30 days.
+      </p>
+    </form>
+  {% else %}
+    <p class="small muted" style="margin:0">
+      Not in the library yet. Only Jason, Casey, or Mama can put it there.
+    </p>
+  {% endif %}
+</div>
+
+{# --- did it turn out? --------------------------------------------------- #}
+<div class="card" id="says">
+  <h2 class="sans">Did it turn out?</h2>
+
+  {# Two buttons, not a five-star rating. A star rating asks you to be precise
+     about something you are not precise about; "good" and "not again" is the
+     actual decision, and it is the one a person can answer while washing up. #}
+  {% if can_write %}
+  <div class="thumbs">
+    <form method="post" action="{{ root }}/r/{{ id }}/vote" style="margin:0">
+      <input type="hidden" name="up" value="1">
+      <button class="thumb up {{ 'on' if votes.mine == 1 }}" type="submit"
+              title="{{ 'Take my thumbs up back' if votes.mine == 1 else 'Good, would make again' }}">
+        &#128077; <span>{{ votes.up }}</span>
+      </button>
+    </form>
+    <form method="post" action="{{ root }}/r/{{ id }}/vote" style="margin:0">
+      <input type="hidden" name="up" value="0">
+      <button class="thumb down {{ 'on' if votes.mine == -1 }}" type="submit"
+              title="{{ 'Take my thumbs down back' if votes.mine == -1 else 'Not one to make again' }}">
+        &#128078; <span>{{ votes.down }}</span>
+      </button>
+    </form>
+    {% if votes.mine %}
+      <span class="small muted">Press it again to take it back.</span>
+    {% endif %}
+  </div>
+  {% elif votes.up or votes.down %}
+    {# Read-only still gets to see the verdict, just not cast one. #}
+    <p class="small muted" style="margin:0">
+      &#128077; {{ votes.up }} &nbsp; &#128078; {{ votes.down }}
+    </p>
+  {% endif %}
+
+  {% if can_write %}
+  <form method="post" action="{{ root }}/r/{{ id }}/say" style="margin-top:1.2rem">
+    <label for="say">Leave a note
+      <span class="hint">What you changed, how long it really took, what to
+        watch for. The next person to cook this reads this bit.</span></label>
+    <textarea id="say" name="text" maxlength="1500"
+              placeholder="Needed another twenty minutes…"></textarea>
+    <button class="small" type="submit" style="margin-top:.6rem">Add the note</button>
+  </form>
+  {% endif %}
+
+  {% if says %}
+    <ul class="says">
+      {% for note in says %}
+        <li>
+          <span class="whoami">{{ note.who or note.email }}</span>
+          <span class="what">{{ note.text }}
+            <span class="when">{{ note.when }}
+              {% if owner or note.email == me %}
+                &middot;
+                <form method="post" style="display:inline"
+                      action="{{ root }}/r/{{ id }}/say/{{ note.id }}/remove">
+                  <button class="linky" type="submit">remove</button>
+                </form>
+              {% endif %}
+            </span>
+          </span>
+        </li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+</div>
+
+{# ── Item info card ────────────────────────────────────────────────────
+   Jason's own request (2026-08-24): tapping a food/tool picture opens a
+   small card about it (where to find it, how to use it, nutrition,
+   history) instead of leaving for a real site -- "these will just be
+   pop-ups not direct links to actual sites." One shared modal for the
+   whole page rather than one per icon; openItemInfo() fills it in and
+   fetches lazily, same reasoning as the step illustrations. #}
+<div id="iteminfo-overlay" class="iteminfo-overlay" onclick="if(event.target===this) closeItemInfo()">
+  <div class="iteminfo-card" role="dialog" aria-modal="true">
+    <button type="button" class="iteminfo-close" onclick="closeItemInfo()" aria-label="Close">&times;</button>
+    <div id="iteminfo-body"><p class="small muted">Loading&hellip;</p></div>
+  </div>
+</div>
+
+<style>
+.infotrigger{cursor:pointer}
+.iteminfo-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);
+  z-index:200;align-items:center;justify-content:center;padding:1rem}
+.iteminfo-overlay.open{display:flex}
+.iteminfo-card{background:var(--card,#161b22);border-radius:12px;max-width:26rem;
+  width:100%;max-height:85vh;overflow-y:auto;padding:1.2rem;position:relative}
+.iteminfo-close{position:absolute;top:.5rem;right:.6rem;background:none;border:0;
+  font-size:1.6rem;line-height:1;cursor:pointer;color:inherit;opacity:.7}
+.iteminfo-close:hover{opacity:1}
+.iteminfo-pic{width:100%;max-height:12rem;object-fit:cover;border-radius:8px;margin-bottom:.7rem}
+.iteminfo-section{margin-top:.8rem}
+.iteminfo-section h4{margin:0 0 .2rem;font-size:.78rem;text-transform:uppercase;
+  letter-spacing:.05em;color:var(--muted)}
+.iteminfo-section p{margin:0}
+.iteminfo-nutri ul{list-style:none;margin:.2rem 0 0;padding:0;display:flex;flex-wrap:wrap;gap:.5rem .9rem}
+.iteminfo-nutri li{font-size:.85rem}
+.iteminfo-edit textarea{width:100%;min-height:3.2rem;margin:.2rem 0 .5rem}
+</style>
+
+<script>
+(function() {
+  var overlay = document.getElementById('iteminfo-overlay');
+  var body = document.getElementById('iteminfo-body');
+  var isOwner = {{ 'true' if owner else 'false' }};
+
+  function esc(s) {
+    var d = document.createElement('div');
+    d.textContent = s || '';
+    return d.innerHTML;
+  }
+
+  function section(title, text) {
+    if (!text) return '';
+    return '<div class="iteminfo-section"><h4>' + esc(title) + '</h4><p>' + esc(text) + '</p></div>';
+  }
+
+  function render(kind, id, data) {
+    var html = '';
+    if (data.picture) html += '<img class="iteminfo-pic" src="' + esc(data.picture) + '" alt="">';
+    html += '<h3 style="margin:0">' + esc(data.name) + '</h3>';
+    if (data.nutrition) {
+      var lines = data.nutrition.lines.map(function(l) { return '<li>' + esc(l) + '</li>'; }).join('');
+      html += '<div class="iteminfo-section iteminfo-nutri"><h4>Nutrition, per ' +
+        esc(data.nutrition.per) + (data.nutrition.is_estimate ? ' (model estimate)' : '') +
+        '</h4><ul>' + lines + '</ul><p class="small muted" style="margin-top:.3rem">' +
+        esc(data.nutrition.source) + '</p></div>';
+    }
+    html += section('Where to find it', data.where_to_find);
+    html += section('How to use it', data.how_to_use);
+    html += section('History', data.history);
+    html += section('Fun fact', data.fun_fact);
+    if (!data.where_to_find && !data.how_to_use && !data.history && !data.fun_fact) {
+      html += '<p class="small muted iteminfo-section">Nothing written up yet.</p>';
+    }
+    if (isOwner) {
+      html += '<div class="iteminfo-section iteminfo-edit">' +
+        '<h4>Fill this in</h4>' +
+        '<textarea id="ii-find" placeholder="Where to find it">' + esc(data.where_to_find) + '</textarea>' +
+        '<textarea id="ii-use" placeholder="How to use it">' + esc(data.how_to_use) + '</textarea>' +
+        '<textarea id="ii-history" placeholder="History">' + esc(data.history) + '</textarea>' +
+        '<textarea id="ii-fact" placeholder="Fun fact">' + esc(data.fun_fact) + '</textarea>' +
+        '<button type="button" class="small" onclick="saveItemInfo(\'' + kind + '\',' + id + ')">Save</button>' +
+        '</div>';
+    }
+    body.innerHTML = html;
+  }
+
+  window.openItemInfo = function(kind, id) {
+    overlay.classList.add('open');
+    body.innerHTML = '<p class="small muted">Loading&hellip;</p>';
+    fetch('{{ root }}/item-info/' + kind + '/' + id)
+      .then(function(r) { return r.json(); })
+      .then(function(data) { render(kind, id, data); })
+      .catch(function() { body.innerHTML = '<p class="small muted">Could not load that.</p>'; });
+  };
+
+  window.closeItemInfo = function() {
+    overlay.classList.remove('open');
+  };
+
+  window.saveItemInfo = function(kind, id) {
+    var form = new URLSearchParams();
+    form.set('where_to_find', document.getElementById('ii-find').value);
+    form.set('how_to_use', document.getElementById('ii-use').value);
+    form.set('history', document.getElementById('ii-history').value);
+    form.set('fun_fact', document.getElementById('ii-fact').value);
+    fetch('{{ root }}/item-info/' + kind + '/' + id, {method: 'POST', body: form})
+      .then(function() { openItemInfo(kind, id); });
+  };
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') closeItemInfo();
+  });
+})();
+</script>
+
+{% endblock %}

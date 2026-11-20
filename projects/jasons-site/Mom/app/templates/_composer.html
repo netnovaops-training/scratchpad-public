@@ -1,0 +1,172 @@
+{# ============================================================================
+   The thing she types and sends pictures with.
+
+   NO VOICE INPUT, DELIBERATELY. This used to record and transcribe through
+   Whisper -- removed because it went unused; typing and photos cover what
+   is actually needed here. The answer itself can still be read back aloud,
+   see thread.html's "Listen" button, which is the direction voice turned
+   out to matter: her hearing it, not her recording it.
+
+   Included by home.html for a new question and by thread.html for every
+   follow-up, so the conversation can keep going with more photos as the
+   assistant asks for them. One file, so the two can never drift apart.
+
+   Expects in context:
+     followup   true when continuing an existing conversation
+     thread_id  the conversation id (only when followup)
+
+   Design notes, because they are not arbitrary:
+
+   - Two separate picture buttons. "Take a photo" uses capture="environment",
+     which on Android opens the camera straight away with no file browser.
+     "Choose a picture" omits it so she can pick something already taken. One
+     combined button shows a chooser dialog she then has to understand.
+
+   - Thumbnails with an X on each. Without a preview there is no way to tell a
+     blurry shot of the desk from the error message, and she will not know the
+     picture failed until the answer comes back wrong.
+
+   - Three photos maximum, enforced here and again on the server. Each one
+     costs hundreds of tokens once the vision model tiles it, on a card that is
+     already nearly full.
+============================================================================ #}
+<form method="post" action="{{ root }}/ask" enctype="multipart/form-data"
+      class="composer" id="askForm">
+  {% if followup %}<input type="hidden" name="thread_id" value="{{ thread_id }}">{% endif %}
+
+  <div class="row" style="gap:.6rem">
+    <button type="button" class="secondary photobtn" id="camBtn" style="flex:1">
+      &#128247;&nbsp; Take a photo</button>
+    <button type="button" class="secondary photobtn" id="picBtn" style="flex:1">
+      &#128444;&nbsp; Choose a picture</button>
+  </div>
+  <p class="small muted" style="margin:.5rem 0 0">
+    A photo of the screen, the error message, or the lights on your box all help.
+  </p>
+
+  {# capture="environment" asks Android for the rear camera directly. #}
+  <input type="file" name="photos" id="camInput" accept="image/*"
+         capture="environment" multiple hidden>
+  <input type="file" name="photos" id="picInput" accept="image/*" multiple hidden>
+
+  <div id="thumbs" class="thumbs" hidden></div>
+
+  {# One video, not previewed here -- only Jason ever watches it (see
+     admin_ticket.html), so all this needs to show HER is that it attached. #}
+  <div class="row" style="margin-top:.6rem">
+    <button type="button" class="secondary photobtn" id="vidBtn" style="flex:1">
+      &#127909;&nbsp; Attach a video</button>
+  </div>
+  <p id="vidName" class="small muted" hidden style="margin:.4rem 0 0"></p>
+  <input type="file" name="video" id="vidInput" accept="video/*" hidden>
+
+  <label for="question" style="margin-top:1rem">
+    {{ 'Or type it' if followup else 'Or type it here' }}
+    <span class="hint">However you'd say it out loud is fine.</span></label>
+  <textarea id="question" name="question" placeholder="{{
+    "It still says the same thing" if followup
+    else "My printer says offline and I do not know what that means" }}"></textarea>
+
+  <button class="big" type="submit" id="sendBtn">
+    {{ 'Send' if followup else 'Ask' }}</button>
+</form>
+
+<style>
+.thumbs{display:flex;gap:.6rem;flex-wrap:wrap;margin-top:.9rem}
+.thumb{position:relative;width:96px;height:96px;border-radius:12px;overflow:hidden;
+  border:2px solid var(--line);background:var(--bg)}
+.thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.thumb button{position:absolute;top:2px;right:2px;width:30px;height:30px;
+  min-height:30px;padding:0;border-radius:50%;background:rgba(0,0,0,.72);
+  color:#fff;font-size:1.1rem;line-height:1;border:0}
+.photobtn{min-height:56px;font-size:1rem}
+</style>
+
+<script>
+/* Photos are held in a DataTransfer so the file input can be rebuilt when she
+   removes one. FileList is read-only, so there is no way to drop a single item
+   from it -- the whole list has to be reconstructed. */
+(function(){
+  const MAX = 3;
+  const cam = document.getElementById('camInput');
+  const pic = document.getElementById('picInput');
+  const thumbs = document.getElementById('thumbs');
+  const send = document.getElementById('sendBtn');
+  let chosen = [];
+
+  document.getElementById('camBtn').addEventListener('click', () => cam.click());
+  document.getElementById('picBtn').addEventListener('click', () => pic.click());
+
+  function sync(){
+    const dt = new DataTransfer();
+    chosen.forEach(f => dt.items.add(f));
+    /* Both inputs share the name "photos"; only one may carry files or the
+       browser sends duplicates. */
+    pic.files = dt.files;
+    const empty = new DataTransfer();
+    cam.files = empty.files;
+    render();
+  }
+
+  function render(){
+    thumbs.innerHTML = '';
+    thumbs.hidden = chosen.length === 0;
+    chosen.forEach((f, i) => {
+      const d = document.createElement('div');
+      d.className = 'thumb';
+      const img = document.createElement('img');
+      img.alt = 'Picture ' + (i + 1);
+      img.src = URL.createObjectURL(f);
+      img.onload = () => URL.revokeObjectURL(img.src);
+      const x = document.createElement('button');
+      x.type = 'button';
+      x.textContent = '×';
+      x.setAttribute('aria-label', 'Remove picture ' + (i + 1));
+      x.addEventListener('click', () => { chosen.splice(i, 1); sync(); });
+      d.appendChild(img); d.appendChild(x);
+      thumbs.appendChild(d);
+    });
+  }
+
+  function add(input){
+    for (const f of input.files) {
+      if (chosen.length >= MAX) {
+        alert('Three pictures at a time is the most I can look at. Send these first.');
+        break;
+      }
+      if (!f.type.startsWith('image/')) continue;
+      chosen.push(f);
+    }
+    sync();
+  }
+  cam.addEventListener('change', () => add(cam));
+  pic.addEventListener('change', () => add(pic));
+
+  const vidBtn = document.getElementById('vidBtn');
+  const vidInput = document.getElementById('vidInput');
+  const vidName = document.getElementById('vidName');
+  vidBtn.addEventListener('click', () => vidInput.click());
+  vidInput.addEventListener('change', function(){
+    if (vidInput.files.length) {
+      vidName.hidden = false;
+      vidName.textContent = 'Attached: ' + vidInput.files[0].name;
+      vidBtn.textContent = '🎥  Replace the video';
+    }
+  });
+
+  /* Photos alone are a valid question -- she may not know what to call the
+     thing she is looking at, which is exactly when a picture helps most. */
+  document.getElementById('askForm').addEventListener('submit', function(e){
+    const q = document.getElementById('question').value.trim();
+    const hasVideo = vidInput.files.length > 0;
+    if (!q && chosen.length === 0 && !hasVideo) {
+      e.preventDefault();
+      alert('Type something, or send a picture or video first.');
+      return;
+    }
+    send.disabled = true;
+    send.textContent = chosen.length ? 'Sending your picture…'
+      : hasVideo ? 'Sending your video…' : 'Sending…';
+  });
+})();
+</script>

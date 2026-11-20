@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}{{ g.title }} — {{ site_name }}{% endblock %}
+{% block body %}
+<p class="small"><a href="{{ root }}/guides">&larr; All answers</a></p>
+<h1>{{ g.title }}</h1>
+<p class="muted small">{{ categories.get(g.category, g.category) }}</p>
+
+{% if sensitive %}
+<div class="notice err">
+  <strong>If this is an emergency, dial 911 now.</strong> Someone not breathing,
+  chest pain, heavy bleeding, a bad fall, a fire &mdash; call first and read
+  later. This page is not a substitute for a doctor or an ambulance.
+</div>
+{% endif %}
+
+<div class="card">
+  <textarea class="raw" hidden>{{ g.body }}</textarea>
+  <div class="md" style="font-size:1.08rem;line-height:1.8"></div>
+</div>
+
+{% if related %}
+<div class="card">
+  <h2 style="margin-top:0">See also</h2>
+  <ul class="threads">
+    {% for r in related %}
+    <li><a href="{{ root }}/guides/{{ r.id }}">{{ r.title }}</a></li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+<p><a class="btn secondary" href="{{ root }}/">Ask me something instead</a></p>
+{% endblock %}
