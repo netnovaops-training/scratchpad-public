@@ -512,7 +512,7 @@ def _machine(path: str, fresh_seconds: int) -> dict:
     try:
         with open(path, encoding="utf-8-sig") as f:
             d = json.load(f)
-    except Exception:  # noqa: BLE001
+    except Exception:
         # 2026-11-20: the exception text used to go to the browser; it is
         # logged here instead and the page gets a generic word.
         logging.getLogger("metrics").exception("machine file unreadable: %s", path)

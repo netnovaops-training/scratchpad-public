@@ -190,7 +190,7 @@ def backup_status() -> dict:
                 "why": "No backup has run yet, or its manifest is not mounted."}
     try:
         m = json.loads(BACKUP_MANIFEST.read_text(encoding="utf-8"))
-    except Exception:  # noqa: BLE001
+    except Exception:
         # 2026-11-20: the error text used to be sent to the browser; it now
         # goes to the server log only. Same JSON shape and status code.
         log.exception("backup manifest unreadable")
