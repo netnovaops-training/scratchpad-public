@@ -53,7 +53,10 @@ jobs:
         working-directory: pc/ai-stack/rust
         run: |
           rc=0
-          cargo clippy --all-features --message-format=json > clippy-results.json || rc=$?
+          # 2026-11-20 (owner: ignore anything cosmetic): unused code/imports and doc-comment spacing are
+          # housekeeping, not bugs or risks; every other lint still reports.
+          cargo clippy --all-features --message-format=json -- -A dead_code -A unused_imports -A unused_mut \
+            -A clippy::empty_line_after_doc_comments > clippy-results.json || rc=$?
           echo "cargo clippy exit code: $rc"
           echo "$rc" > clippy-exit-code.txt
 
