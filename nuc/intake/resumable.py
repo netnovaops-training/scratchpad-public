@@ -142,9 +142,23 @@ def _paths(uid: str) -> tuple[pathlib.Path, pathlib.Path]:
     # right here before any path is built. Same ids pass as before (the old test allowed letters, digits,
     # "-" and "_" up to 40; token_urlsafe never makes anything else). Note: str.isalnum() also accepts
     # non-ASCII letters, which the regex does not.
+    return _staged(uid, ".part"), _staged(uid, ".json")
+
+
+def _staged(uid: str, suffix: str) -> pathlib.Path:
+    """STAGE/<uid><suffix> for a checked upload id; 404 for anything else.
+
+    OUTCOME 2026-11-20 (sync PR #27): the regex alone already stops every escape (no "/" or "." can pass),
+    but CodeQL py/path-injection does not count a regex as a guard and kept 12 alerts open on main. The
+    normpath + startswith wall below is the form it recognizes; same ids pass, same 404 for the rest.
+    """
     if not re.fullmatch(r"[A-Za-z0-9_-]{1,40}", uid):
         raise HTTPException(404, "no such upload")
-    return STAGE / f"{uid}.part", STAGE / f"{uid}.json"
+    base = os.path.normpath(str(STAGE))
+    p = os.path.normpath(os.path.join(base, uid + suffix))
+    if not p.startswith(base + os.sep):
+        raise HTTPException(404, "no such upload")
+    return pathlib.Path(p)
 
 
 def _load(uid: str, email: str) -> tuple[dict, pathlib.Path, pathlib.Path]:
@@ -160,9 +174,7 @@ def _load(uid: str, email: str) -> tuple[dict, pathlib.Path, pathlib.Path]:
 
 def _extra(uid: str) -> tuple[pathlib.Path, pathlib.Path, pathlib.Path]:
     """Result file, finish lock and work folder of one upload (all inside STAGE, same disk as the .part)."""
-    if not re.fullmatch(r"[A-Za-z0-9_-]{1,40}", uid):
-        raise HTTPException(404, "no such upload")
-    return STAGE / f"{uid}.result.json", STAGE / f"{uid}.finishing", STAGE / f"{uid}.work"
+    return _staged(uid, ".result.json"), _staged(uid, ".finishing"), _staged(uid, ".work")
 
 
 def _sweep() -> None:
@@ -335,9 +347,7 @@ BIG_FILE = 256 * 1048576
 
 
 def _got(uid: str) -> pathlib.Path:
-    if not re.fullmatch(r"[A-Za-z0-9_-]{1,40}", uid):
-        raise HTTPException(404, "no such upload")
-    return STAGE / f"{uid}.got"
+    return _staged(uid, ".got")
 
 
 def _open_count(email: str) -> int:
