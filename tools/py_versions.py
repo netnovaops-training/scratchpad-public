@@ -139,7 +139,7 @@ def in_docker(p: Path) -> str:
 
 def nuc_pythons() -> str:
     cmd = "for p in /usr/bin/python3 /usr/bin/python3.* /usr/local/bin/python3*; do [ -x $p ] && echo $p $($p -V 2>&1); done"
-    return run(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8", "server@100.64.0.11", cmd], timeout=30)
+    return run(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=8", "server@100.64.0.10", cmd], timeout=30)
 
 
 def repair_pip(exe: str) -> int:

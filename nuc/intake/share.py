@@ -124,7 +124,7 @@ def _public_url(url: str) -> str | None:
         for info in socket.getaddrinfo(p.hostname, p.port or (443 if p.scheme == "https" else 80)):
             ip = ipaddress.ip_address(info[4][0])
             if (ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast
-                    or ip in ipaddress.ip_network("100.64.0.10/10")):
+                    or ip in ipaddress.ip_network("100.64.0.0/10")):
                 return None
         return url.strip()
     except (OSError, ValueError):

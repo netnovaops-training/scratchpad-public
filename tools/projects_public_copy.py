@@ -1,8 +1,10 @@
-"""projects_public_copy.py - copy the private Projects repo's CODE into D:/projects-public with personal data replaced.
+"""projects_public_copy.py - copy the private Projects repo's CODE into scratchpad-public/projects/, cleaned.
 
 Why: Jason 2026-11-20 wants Projects public. Flipping the private repo would publish his name, home IPs and
 family names (scan 11-20: Owner 139 files, home LAN 87, casey 147, robin 45) plus every old version in its history.
 So, like scratchpad-public, a cleaned copy with fresh history is published instead, and Projects stays private.
+Jason, later on 11-20: "I wanted it in the same repo as scratchpad, the public one" -> it now lives in
+D:/scratchpad-public/projects/ (one public repo); the separate projects-public repo was archived.
 
 How: reuses public_copy.py's rules (RULES, clean(), BANNED check, change record) by importing it and pointing
 its SRC/DST/CHANGES/EXCLUDE settings at Projects. Source is a clean clone of main, D:/projects-src, fast-forwarded
@@ -27,7 +29,9 @@ import sys
 from pathlib import Path
 
 SRC = Path("D:/projects-src")
-DST = Path("D:/projects-public")
+PUB = Path("D:/scratchpad-public")
+DST = PUB / "projects"
+MARK = "projects_public_copy"   # every commit that writes projects/ says this, so the guard can find them
 
 spec = importlib.util.spec_from_file_location("public_copy", "D:/scratchpad/tools/public_copy.py")
 pc = importlib.util.module_from_spec(spec)
@@ -36,6 +40,7 @@ spec.loader.exec_module(pc)
 pc.SRC = SRC
 pc.DST = DST
 pc.CHANGES = Path("D:/projects-public-changes.private.txt")
+pc.INCLUDE_PREFIX = ()   # public_copy keeps nuc/intake/ for the Scratchpad; nothing like that here
 pc.PORT_FILES = ("jasons-site/pc-firewall.ps1", "jasons-site/pc-firewall-undo.ps1")
 pc.EXCLUDE_PREFIX = (
     "jasons-site/ai-stack/",
@@ -73,42 +78,59 @@ def refresh_source():
 
 
 def carry_gitleaks_ignore():
-    """Write DST/.gitleaksignore from Projects' reviewed list, minus the private commit ids.
+    """Put Projects' reviewed .gitleaksignore entries into scratchpad-public's root .gitleaksignore.
 
     Projects' entries are file:rule:line (reviewed 2026-10-25 as test or example values, not real secrets).
-    Paths are cleaned the same way as the copied files.
+    gitleaks only reads the root file, so the paths get the projects/ prefix and are kept between two marker
+    lines that are rewritten on every run.
     OUTCOME 2026-11-20: without it the commit hook stopped on Mom/tools/test_mom.py line 195 (a test login).
     """
     from collections import Counter
     src = SRC / ".gitleaksignore"
     if not src.exists():
         return
-    out = ["# Carried from the private Projects list by projects_public_copy.py: reviewed test/example values."]
+    begin, end = "# >>> projects/ (projects_public_copy.py, reviewed test/example values)", "# <<< projects/"
+    block = [begin]
     for line in src.read_text(encoding="utf-8").splitlines():
         parts = line.split(":")
         if line.startswith("#") or len(parts) not in (3, 4):
             continue
-        path, rule, num = parts[-3:]  # 11-20: Projects' list is file:rule:line; a commit: prefix is dropped
-        out.append(f"{pc.clean(path, Counter(), '(path)')}:{rule}:{num}")
-    (DST / ".gitleaksignore").write_text("\n".join(out) + "\n", encoding="utf-8")
-    print("gitleaks ignore entries carried:", len(out) - 1)
+        path, rule, num = parts[-3:]
+        block.append(f"projects/{pc.clean(path, Counter(), '(path)')}:{rule}:{num}")
+    block.append(end)
+    root = PUB / ".gitleaksignore"
+    old = root.read_text(encoding="utf-8").splitlines() if root.exists() else []
+    if begin in old and end in old:
+        old = old[:old.index(begin)] + old[old.index(end) + 1:]
+    root.write_text("\n".join(old + block) + "\n", encoding="utf-8")
+    print("gitleaks ignore entries carried:", len(block) - 2)
+
+
+def guard():
+    """Stop if projects/ on GitHub changed after our last copy (a merged cloud fix not yet carried to Projects).
+
+    Fixes merged under projects/ must be ported by hand into private Projects first; public_backport.py skips
+    projects/ for that reason. A refresh before that would silently undo them.
+    """
+    subprocess.run(["git", "-C", str(PUB), "fetch", "-q", "github"], check=False)
+    log = subprocess.run(["git", "-C", str(PUB), "log", "--format=%H %s", "github/main", "--", "projects"],
+                         capture_output=True, text=True, check=False).stdout.splitlines()
+    later = []
+    for line in log:                     # newest first; stop at our own last copy
+        if MARK in line:
+            break
+        later.append(line[:60])
+    if later:
+        sys.exit(f"STOP: {len(later)} commit(s) changed projects/ on GitHub after the last copy: {later[:3]}. "
+                 "Port them into private Projects first.")
 
 
 if __name__ == "__main__":
     refresh_source()
-    if "--write" in sys.argv and (DST / ".git").exists():
-        # Guard (2026-11-20): the cloud routines fix projects-public on GitHub. A refresh would overwrite
-        # fixes that were merged there but not yet carried into private Projects, so stop if GitHub has any.
-        subprocess.run(["git", "-C", str(DST), "fetch", "-q", "github"], check=False)
-        ahead = subprocess.run(["git", "-C", str(DST), "rev-list", "--count", "main..github/main"],
-                               capture_output=True, text=True, check=False).stdout.strip()
-        if ahead not in ("", "0"):
-            sys.exit(f"STOP: GitHub projects-public has {ahead} commit(s) not in D:/projects-public main. "
-                     "Carry those fixes into private Projects first, then merge github/main here.")
     if "--write" in sys.argv:
+        guard()
         DST.mkdir(exist_ok=True)
-        if not (DST / ".git").exists():
-            subprocess.run(["git", "init", "-q", "-b", "main", str(DST)], check=True)
     pc.main()
     if "--write" in sys.argv:
         carry_gitleaks_ignore()
+        print(f"next: commit in {PUB} with '{MARK}' in the message")

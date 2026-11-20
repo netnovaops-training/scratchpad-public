@@ -11,4 +11,4 @@ $lines = foreach ($row in (docker ps --format '{{.Names}}|{{.Image}}|{{.ID}}')) 
 }
 $tmp = Join-Path $env:TEMP 'pc-images.tsv'
 [IO.File]::WriteAllText($tmp, (($lines -join "`n") + "`n"))   # LF, no BOM: read on Linux
-scp -q $tmp server@100.64.0.11:nuc-homelab/audit/pc-images.tsv
+scp -q $tmp server@100.64.0.10:nuc-homelab/audit/pc-images.tsv

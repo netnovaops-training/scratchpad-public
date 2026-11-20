@@ -8,7 +8,7 @@ Stages (each is cached and restartable; rerun skips finished work):
          M:\\Pictures\\SynologyDrive\\, which are Synology Drive online-only placeholders whose real files are on the NAS)
   hash   full SHA-256 of every media file whose size is shared with another file (unique size = cannot be a
          copy). M: files are hashed here (local disk) -> unify\\hashes.csv. NAS files are written to
-         unify\\nas-list.jsonl and hashed ON the NAS by nas_sha.py (ssh jay@100.64.0.13, ~/t1014/); its
+         unify\\nas-list.jsonl and hashed ON the NAS by nas_sha.py (ssh jay@100.64.0.12, ~/t1014/); its
          sha.jsonl is copied back to unify\\nas-sha.jsonl and read by the plan.
   meta   capture time (EXIF, first 64 KB; else the Google Takeout .json sidecar) for RAWs, JPGs that may pair
          with a RAW, and files outside P:\\<year>\\<month> with no date in their name -> unify\\meta.csv

@@ -40,7 +40,7 @@ import sys
 from pathlib import Path
 
 AI = Path(r"C:\Jasons New Site\www\ai-stack")
-DOCS = AI / "All-Documents"
+DOCS = Path(r"D:\ai-stack\All-Documents")  # 2026-11-20: moved to D: (the one documents home); the C: path is a junction to it
 IMAGES = AI / "image-files"
 REVIEW = Path(r"D:\doc-gather\secrets-review")
 JOBLOG = Path(r"D:\joblog\events.jsonl")

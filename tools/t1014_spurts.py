@@ -3,7 +3,7 @@
 after each spurt add a 3-line Review summary (done / counts / errors) to T1014 on the NUC.
 
 Run (PC, detached):  python D:\\scratchpad\\tools\\t1014_spurts.py ops-2-hold.jsonl journal-2-hold.jsonl
-Each spurt: ssh jay@100.64.0.13 runs nas_move.py --minutes 15 in the foreground and prints its last line.
+Each spurt: ssh jay@100.64.0.12 runs nas_move.py --minutes 15 in the foreground and prints its last line.
 Review lines go through ~/learning-src/todo_note.py on the NUC from a JSON file (scp, never a heredoc).
 Stops when a spurt makes no progress (only refused ops left) or after 12 spurts.
 OUTCOME 2026-11-17: written for T1014 phase 2.
@@ -15,7 +15,7 @@ import sys
 import tempfile
 import time
 
-NAS, NUC = "jay@100.64.0.13", "server@100.64.0.11"
+NAS, NUC = "jay@100.64.0.12", "server@100.64.0.10"
 SSH = ["ssh", "-o", "BatchMode=yes"]
 
 

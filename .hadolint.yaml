@@ -1,0 +1,9 @@
+# Hadolint settings (read from the repo root by the Dockerfile lint in the public copy's checks).
+# 2026-11-20 (Jason: "ignore anything that's just cosmetic"): version pinning of apt/pip packages inside
+# images (DL3008, DL3013) and the DL3066 and DL3025 style findings are housekeeping, not safety. Still ON: DL3002 (last USER root) and
+# DL3007 (image tag :latest), which are real supply-chain / privilege findings.
+ignored:
+  - DL3008
+  - DL3013
+  - DL3066
+  - DL3025

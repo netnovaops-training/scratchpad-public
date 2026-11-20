@@ -1,0 +1,13 @@
+# SwiftLint settings for the Apple apps under pc/apps (nested config: applies to this folder when
+# `swiftlint lint` runs from the repo root, as .github/workflows/mobile.yml does).
+# 2026-11-20 (Jason: "ignore anything that's just cosmetic"): the 29 open findings were naming, commas,
+# blank lines and lengths; none was a bug or a risk, so those rules are off. Everything else stays on.
+disabled_rules:
+  - identifier_name
+  - trailing_comma
+  - line_length
+  - vertical_whitespace
+  - type_body_length
+  - function_body_length
+  - statement_position
+  - implicit_optional_initialization

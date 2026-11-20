@@ -51,3 +51,41 @@ style:
     # Compose UI code: sizes, fractions, colours and animation timings are layout values, not logic.
     ignoreAnnotated:
       - "Composable"
+  # 2026-11-20 (Jason: "dismiss anything that has nothing to do with security or a design flaw; ignore
+  # anything cosmetic"): these style rules only ever flagged layout of the code, never a bug or a risk.
+  # Kept on: TooGenericExceptionCaught, PrintStackTrace, ImplicitDefaultLocale (real behaviour).
+  UseCheckOrError:
+    active: false
+  NewLineAtEndOfFile:
+    active: false
+  ReturnCount:
+    active: false
+  WildcardImport:
+    active: false
+  ThrowsCount:
+    active: false
+  MayBeConst:
+    active: false
+  MaxLineLength:
+    active: false
+  LoopWithTooManyJumpStatements:
+    active: false
+naming:
+  # Compose functions are PascalCase by design (FunctionNaming flagged 39 of them); file names match the
+  # main class closely enough.
+  FunctionNaming:
+    active: false
+  MatchingDeclarationName:
+    active: false
+complexity:
+  # Size and branch counts of screens are taste, not safety (64 findings on 2026-11-20).
+  LongMethod:
+    active: false
+  CyclomaticComplexMethod:
+    active: false
+  LongParameterList:
+    active: false
+  TooManyFunctions:
+    active: false
+  ComplexCondition:
+    active: false
