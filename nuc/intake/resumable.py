@@ -505,7 +505,14 @@ async def finish(uid: str, x_auth_email: str | None = Header(default=None)):
             return JSONResponse({"offset": meta["size"], "working": True}, status_code=409)
     name = meta["name"]
     work.mkdir(exist_ok=True)
-    target = work / name
+    import share  # late import: share imports app, app includes this router
+    # Second wall (CodeQL py/path-injection, 2026-11-20): meta["name"] already went through safe_name at
+    # /up/start, so this never fires; share._in_tmp makes the check visible to the scanner.
+    try:
+        target = share._in_tmp(work, name)
+    except ValueError:
+        lock_p.unlink(missing_ok=True)
+        raise HTTPException(400, "bad file name") from None
     if part.exists() and meta.get("parallel"):          # T0928: every numbered piece must be in
         # T0931: wait for pieces already being written (they hold LOCK_SH); new ones see lock_p and stop.
         pfd = os.open(part, os.O_RDONLY)
@@ -530,20 +537,20 @@ async def finish(uid: str, x_auth_email: str | None = Header(default=None)):
     elif not target.exists():
         lock_p.unlink(missing_ok=True)
         raise HTTPException(404, "no such upload")
-    import share  # late import: share imports app, app includes this router
     hint, shelf = meta.get("hint"), meta.get("shelf")
+    details: list[dict] = []   # internal error text, WHY.txt only (share._file, 2026-11-20)
     try:
         if (hint is None and name.lower().endswith(".zip") and zipfile.is_zipfile(target)
                 and not share._is_comic_zip(target)):
-            results = await share._unzip_and_file(target, email, work)
+            results = await share._unzip_and_file(target, email, work, details)
         else:
-            results = [await share._file(target, name, email, hint, shelf)]
+            results = [await share._file(target, name, email, hint, shelf, details)]
     except Exception as e:  # noqa: BLE001  -- any failure: keep the bytes, say so
         # T0931 (U14): the raw exception (paths, internals) went to the phone; it now goes to WHY.txt only.
-        results = [{"name": name, "status": "error", "why": "This file could not be filed.",
-                    "detail": f"{type(e).__name__}: {e}"}]
+        results = [{"name": name, "status": "error", "why": "This file could not be filed."}]
+        details.append({"name": name, "detail": f"{type(e).__name__}: {e}"})
     kept = False
-    if any(r.get("status") == "error" for r in results) and keep_failed(work, email, name, results, uid):
+    if any(r.get("status") == "error" for r in results) and keep_failed(work, email, name, results + details, uid):
         kept = True
         results.append({"name": name, "status": "kept", "why": "not filed; kept safe on the server for Jason"})
     else:
@@ -551,7 +558,6 @@ async def finish(uid: str, x_auth_email: str | None = Header(default=None)):
     # T0931 item 14 (2026-11-20): one line per finish with uid, size and the verdicts (no names of people, no
     # paths, no error text): the questions "did it arrive?" and "where did it go?" are answered from the log.
     _say(f"finish uid={uid} size={meta['size']} results={[r.get('status') for r in results]} kept={kept}")
-    results = [{k: v for k, v in r.items() if k != "detail"} for r in results]   # internals stay server-side
     _write_atomic(res_p, json.dumps(results))
     lock_p.unlink(missing_ok=True)
     return JSONResponse(results)

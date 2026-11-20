@@ -194,13 +194,16 @@ async def _to_pdf(url: str | None, text: str | None, title: str) -> tuple[bytes,
 
 
 async def _file(data_path: pathlib.Path, name: str, email: str,
-                hint: str | None = None, shelf: str | None = None) -> dict:
+                hint: str | None = None, shelf: str | None = None, details: list | None = None) -> dict:
     """Hand one file to the /upload logic (app.route_file) and return its verdict.
 
     T0925 part 2 (A3/A8, 2026-11-19): was `await upload(UploadFile(open(path)))`, which copied the file a
     second time into /tmp and then hashed, called the model and moved it ON the event loop (every other
     phone froze meanwhile). Now the file on disk is routed (moved, not copied) in a worker thread.
     The file at data_path is gone afterwards when it was filed; it stays when an error is raised.
+    details: internal error text goes here (for WHY.txt), never into the verdict the phone sees.
+    OUTCOME 2026-11-20 (CodeQL py/stack-trace-exposure, sync PR #27): the verdict used to carry a "detail"
+    key that callers removed before answering; the scanner could not see the removal, so it is now apart.
     """
     from app import route_file, safe_name  # late import: app imports this module
     from starlette.concurrency import run_in_threadpool
@@ -210,11 +213,12 @@ async def _file(data_path: pathlib.Path, name: str, email: str,
         return {"name": name, **res}
     except Exception as e:  # noqa: BLE001  -- HTTPException or anything else: report it, keep going with the rest
         # T0931 (U14): an HTTPException's detail is written for people; any other error's text is internal
-        # (paths, library names), so the phone gets plain words and the text goes to WHY.txt as "detail".
+        # (paths, library names), so the phone gets plain words and the text goes to WHY.txt via `details`.
         if hasattr(e, "detail"):
             return {"name": name, "status": "error", "why": e.detail}
-        return {"name": name, "status": "error", "why": "This file could not be filed.",
-                "detail": f"{type(e).__name__}: {e}"}
+        if details is not None:
+            details.append({"name": name, "detail": f"{type(e).__name__}: {e}"})
+        return {"name": name, "status": "error", "why": "This file could not be filed."}
 
 
 def _is_comic_zip(path: pathlib.Path) -> bool:
@@ -229,7 +233,8 @@ def _extract(z: zipfile.ZipFile, m: zipfile.ZipInfo, target: pathlib.Path) -> No
             dst.write(chunk)
 
 
-async def _unzip_and_file(path: pathlib.Path, email: str, tmp: pathlib.Path) -> list[dict]:
+async def _unzip_and_file(path: pathlib.Path, email: str, tmp: pathlib.Path,
+                          details: list | None = None) -> list[dict]:
     from starlette.concurrency import run_in_threadpool
     out, total = [], 0
     with zipfile.ZipFile(path) as z:
@@ -246,7 +251,7 @@ async def _unzip_and_file(path: pathlib.Path, email: str, tmp: pathlib.Path) -> 
             name = safe_name(raw)              # T0931 item 9: and no control characters in the name
             target = _in_tmp(tmp, f"z{len(out)}-{name}")
             await run_in_threadpool(_extract, z, m, target)
-            out.append(await _file(target, name, email))
+            out.append(await _file(target, name, email, details=details))
     return out
 
 
@@ -276,6 +281,7 @@ async def share(request: Request, x_auth_email: str | None = Header(default=None
     title, text, url = (str(form.get(k) or "") for k in ("title", "text", "url"))
     files = [f for f in form.getlist("files") if getattr(f, "filename", None)]
     results: list[dict] = []
+    details: list[dict] = []   # internal error text, WHY.txt only (see _file)
     tmp = pathlib.Path(tempfile.mkdtemp(prefix="share-"))
     try:
         for f in files:
@@ -288,9 +294,9 @@ async def share(request: Request, x_auth_email: str | None = Header(default=None
                 while chunk := await f.read(1 << 20):
                     out.write(chunk)
             if name.lower().endswith(".zip") and zipfile.is_zipfile(p) and not _is_comic_zip(p):
-                results += await _unzip_and_file(p, email, tmp)
+                results += await _unzip_and_file(p, email, tmp, details)
             else:
-                results.append(await _file(p, name, email))
+                results.append(await _file(p, name, email, details=details))
         if not files and (url or text):
             link = url or (URL_RE.search(text).group(0) if URL_RE.search(text) else "")
             safe = _public_url(link) if link else None
@@ -320,13 +326,13 @@ async def share(request: Request, x_auth_email: str | None = Header(default=None
                         name = "Gemini chat - " + _slug(title, today) + ".pdf"
                     p = _in_tmp(tmp, name)
                     p.write_bytes(pdf)
-                    results.append(await _file(p, name, email))
+                    results.append(await _file(p, name, email, details=details))
                 except _Skip:
                     pass
                 except httpx.HTTPError as e:
                     results.append({"name": link or "text", "status": "error",
-                                    "why": "The page could not be printed to PDF. Try again later.",
-                                    "detail": f"{type(e).__name__}: {e}"})
+                                    "why": "The page could not be printed to PDF. Try again later."})
+                    details.append({"name": link or "text", "detail": f"{type(e).__name__}: {e}"})
     finally:
         # T0931 (re-audit A5): this used to delete everything left in tmp, including files that failed to
         # file. Anything left after an error is now kept in .failed with a WHY.txt, like /up/finish does.
@@ -334,12 +340,9 @@ async def share(request: Request, x_auth_email: str | None = Header(default=None
 
         from resumable import keep_failed
         if any(r.get("status") == "error" for r in results) and keep_failed(
-                tmp, email, ", ".join(r.get("name", "?") for r in results), results):
+                tmp, email, ", ".join(r.get("name", "?") for r in results), results + details):
             results.append({"name": "-", "status": "kept", "why": "not filed; kept safe on the server for Jason"})
         shutil.rmtree(tmp, ignore_errors=True)
-        # Internals stay server-side (they are in WHY.txt). A new list, as resumable.finish does: CodeQL
-        # (py/stack-trace-exposure, sync PR #27, 2026-11-20) could not see that the old in-place pop removed them.
-        results = [{k: v for k, v in r.items() if k != "detail"} for r in results]
     if request.headers.get("accept", "").startswith("application/json"):
         return JSONResponse(results)
     return HTMLResponse(_page(results))
