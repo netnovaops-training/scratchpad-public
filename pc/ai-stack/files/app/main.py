@@ -136,10 +136,17 @@ def _safe(root: Path, rel: str) -> Path:
     # 2026-11-20: same check as before, written as realpath + prefix test
     # (the form code scanners recognise) so ../ and symlink escapes are
     # refused with the same 403 and the same message.
+    # 2026-11-20 (later): CodeQL still flagged py/path-injection (alerts
+    # 1040-1042) because the "target == root" half of the test returned the
+    # unchecked value. The root itself is now returned from root_real (our
+    # own config, not the request), and everything else must pass the
+    # startswith test. Same answers as before: "" and "." give the root,
+    # "../x" and symlinks out give 403.
     root_real = os.path.realpath(str(root))
     target_real = os.path.realpath(os.path.join(root_real, rel.lstrip("/")))
-    if not (target_real == root_real
-            or target_real.startswith(root_real.rstrip(os.sep) + os.sep)):
+    if target_real == root_real:
+        return Path(root_real)
+    if not target_real.startswith(root_real.rstrip(os.sep) + os.sep):
         raise HTTPException(403, "No.")
     return Path(target_real)
 
