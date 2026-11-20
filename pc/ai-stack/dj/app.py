@@ -65,7 +65,21 @@ EDITORS = {e.strip().lower() for e in
 
 MAX_EDGE = 2600          # a gig photo is looked at, not printed
 THUMB_EDGE = 800
-SAFE_NAME = re.compile(r"^[A-Za-z0-9._-]+$")
+SAFE_NAME = re.compile(r"^[A-Za-z0-9._-]+\Z")  # \Z, not $: $ lets a trailing newline through
+
+
+def _child(base, name):
+    """base/name as a real path, or None if it would land outside base.
+
+    2026-11-20: every file the web routes touch goes through here, so a
+    ../ or a symlink in a name can never reach outside its own folder.
+    """
+    base_real = os.path.realpath(str(base))
+    full = os.path.realpath(os.path.join(base_real, str(name)))
+    if full == base_real or not full.startswith(base_real.rstrip(os.sep) + os.sep):
+        return None
+    return Path(full)
+
 SAFE_ID = re.compile(r"^[a-z0-9-]{1,40}$")
 OK_EXT = (".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif")
 
@@ -175,8 +189,9 @@ class Handler(BaseHTTPRequestHandler):
             return None
         return who
 
-    def _file(self, path, cache="public, max-age=31536000, immutable"):
-        if not path.is_file():
+    def _file(self, base, name, cache="public, max-age=31536000, immutable"):
+        path = _child(base, name)
+        if path is None or not path.is_file():
             return self._send(404, {"error": "not found"})
         ctype = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
         self._send(200, path.read_bytes(), ctype, {"Cache-Control": cache})
@@ -200,7 +215,7 @@ class Handler(BaseHTTPRequestHandler):
             # differs is that Caddy required a sign-in to reach it, so the
             # page shows the upload panel. Two pages would be two galleries
             # to keep looking identical.
-            return self._file(STATIC / "index.html", cache="no-cache")
+            return self._file(STATIC, "index.html", cache="no-cache")
         if p == "/healthz":
             d = load()
             return self._send(200, {"ok": True, "gigs": len(d["gigs"]),
@@ -223,7 +238,7 @@ class Handler(BaseHTTPRequestHandler):
                     return self._send(400, {"error": "bad name"})
                 cache = "no-cache" if folder is STATIC else \
                     "public, max-age=31536000, immutable"
-                return self._file(folder / name, cache=cache)
+                return self._file(folder, name, cache=cache)
         self._send(404, {"error": "no such route"})
 
     # ---- writes -----------------------------------------------------------
@@ -381,8 +396,10 @@ class Handler(BaseHTTPRequestHandler):
         gone = ROOT / "removed"
         gone.mkdir(exist_ok=True)
         for folder in (PHOTOS, THUMBS):
-            if (folder / name).exists():
-                shutil.move(str(folder / name), str(gone / f"{folder.name}-{name}"))
+            src = _child(folder, name)
+            dest = _child(gone, f"{folder.name}-{name}")
+            if src is not None and dest is not None and src.exists():
+                shutil.move(str(src), str(dest))
         d = load()
         d["photos"] = [p for p in d["photos"] if p["name"] != name]
         save(d)

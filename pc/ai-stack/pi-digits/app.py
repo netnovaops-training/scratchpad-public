@@ -72,6 +72,9 @@ def signing_key():
     from cryptography.hazmat.primitives import serialization
     from cryptography.hazmat.primitives.asymmetric import ed25519
     KEYS.mkdir(parents=True, exist_ok=True)
+    # 2026-11-20: false positive. KEYS is a directory, and 0o700 (owner only, no group/other access) is the
+    # tightest mode that still lets the owner open it; the key file inside gets 0o600 below.
+    # nosemgrep: python.lang.security.audit.insecure-file-permissions.insecure-file-permissions
     os.chmod(KEYS, 0o700)
     p = KEYS / "ed25519.pem"
     if not p.exists():

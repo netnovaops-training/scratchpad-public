@@ -292,10 +292,24 @@ def find_voice(name: str) -> Path | None:
     if not name:
         return None
     for ext in AUDIO_EXTS:
-        p = VOICES_DIR / f"{name}{ext}"
-        if p.exists():
+        p = _in_voices(f"{name}{ext}")
+        if p is not None and p.exists():
             return p
     return None
+
+
+def _in_voices(rel: str) -> Path | None:
+    """VOICES_DIR/rel as a real path, or None if it would land outside VOICES_DIR.
+
+    2026-11-20: a voice name comes from the request, so "../x" or a symlink
+    can no longer reach a file outside the voices folder; such a name is
+    simply "no such voice" (the callers already handle None).
+    """
+    base = os.path.realpath(str(VOICES_DIR))
+    full = os.path.realpath(os.path.join(base, rel))
+    if full == base or not full.startswith(base.rstrip(os.sep) + os.sep):
+        return None
+    return Path(full)
 
 
 def list_voices() -> list[str]:
@@ -512,8 +526,8 @@ def synthesize(text: str, ref: Path | None,
             # MATCHING transcript the clone degrades quietly rather than
             # erroring, so an absent one is a hard failure with a sentence
             # that says what to run -- not a silent guess.
-            ref_txt = ref.with_suffix(".txt")
-            if not ref_txt.exists():
+            ref_txt = _in_voices(os.path.relpath(str(ref.with_suffix(".txt")), os.path.realpath(str(VOICES_DIR))))
+            if ref_txt is None or not ref_txt.exists():
                 raise RuntimeError(
                     f"F5-TTS needs a transcript for {ref.name}. Run: "
                     f"docker exec voice python /app/voice/transcribe-references.py --apply"
@@ -706,12 +720,24 @@ async def raw_pcm_request(request: Request):
 import re as _re
 
 
+def _squash_ws(m) -> str:
+    run = m.group(0)
+    if "\n" in run:
+        return "\n"
+    if not run.strip(" \t"):
+        return " "
+    return run
+
+
 def normalize_narration(text: str) -> str:
     t = text
     # emojis and pictographs are for the eye only -- never spoken
     t = _re.sub("["
                 "\U0001F000-\U0001FAFF"   # pictographs, faces, symbols
-                "\U00002600-\U000027BF"   # misc symbols, dingbats
+                # 2026-11-20: the two Unicode blocks are written as two ranges
+                # (same characters as before), so each is plainly one block.
+                "\u2600-\u26ff"           # misc symbols
+                "\u2700-\u27bf"           # dingbats
                 "\U0001F1E6-\U0001F1FF"   # flag letters
                 "\u2b00-\u2bff"           # arrows, stars
                 "\ufe0e\ufe0f\u200d"     # variation selectors, joiner
@@ -725,6 +751,13 @@ def normalize_narration(text: str) -> str:
     t = t.replace("\u2018", "'").replace("\u2019", "'")
     t = t.replace("\u201c", "").replace("\u201d", "")
     t = t.replace('"', "")
+    # 2026-11-20: shrink every run of 2+ whitespace characters to one before the
+    # whitespace-hungry patterns below. A long run of spaces made them
+    # re-scan it from every position (polynomial time, ~0.5 s for 5000
+    # spaces). A run with a newline becomes "\n", a run of only spaces and
+    # tabs becomes " ", anything stranger is left alone. The spoken result is
+    # identical (checked against the old code on random input).
+    t = _re.sub(r"\s{2,}", _squash_ws, t)
     # year/number ranges: 1923-1992 (any dash) -> "1923 to 1992"
     t = _re.sub(r"(\d)\s*[\u2013\u2014-]\s*(\d)", r"\1 to \2", t)
     # em/en dashes and middle dots are PAUSES on the page; commas in the mouth

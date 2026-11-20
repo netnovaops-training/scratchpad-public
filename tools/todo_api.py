@@ -680,10 +680,14 @@ class H(BaseHTTPRequestHandler):
         elif path == "/api/questions":
             # T1017: every unanswered Ask line of the [first] items, one grouped list
             self.send(*questions_json())
-        elif re.fullmatch(r"/code/T\d{4,}", path):
+        elif re.fullmatch(r"/code/T[0-9]{4,}", path):
             # suggested code for one item (written by the 11-16 plan review), shown as plain text, never run
-            f = CODE_DIR / (path[6:] + ".md")
-            if f.is_file():
+            # 2026-11-20: the file is resolved and must sit inside CODE_DIR, so the id can never walk out of it
+            # (ASCII digits only; the old \d also matched other scripts' digits).
+            code_root = os.path.realpath(str(CODE_DIR))
+            f = os.path.realpath(os.path.join(code_root, path[6:] + ".md"))
+            f = Path(f) if f.startswith(code_root.rstrip(os.sep) + os.sep) else None
+            if f is not None and f.is_file():
                 self.send(200, f.read_text(encoding="utf-8", errors="replace"), "text/plain")
             else:
                 self.send(404, '{"error":"no suggestion for this item"}')

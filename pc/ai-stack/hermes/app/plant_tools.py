@@ -78,6 +78,9 @@ def _pass_key(item_title: str, field: str = "API Key") -> str:
         env["PROTON_PASS_CLI_DATA_DIR"] = data_dir
     try:
         _ensure_logged_in(env)
+        # 2026-11-20: false positive. argv is a list (no shell); every element is a constant or one of our own
+        # module constants / fixed titles from _plantnet_key, and env is a copy of our own os.environ.
+        # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-tainted-env-args.dangerous-subprocess-use-tainted-env-args
         r = subprocess.run(
             [_PASS_CLI, "item", "view",
              "--vault-name", _VAULT,

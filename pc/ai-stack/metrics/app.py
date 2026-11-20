@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import socket
 import sqlite3
@@ -511,8 +512,11 @@ def _machine(path: str, fresh_seconds: int) -> dict:
     try:
         with open(path, encoding="utf-8-sig") as f:
             d = json.load(f)
-    except Exception as e:  # noqa: BLE001
-        return {"stale": True, "error": str(e)}
+    except Exception:
+        # 2026-11-20: the exception text used to go to the browser; it is
+        # logged here instead and the page gets a generic word.
+        logging.getLogger("metrics").exception("machine file unreadable: %s", path)
+        return {"stale": True, "error": "unreadable"}
     try:
         ts = datetime.datetime.fromisoformat(d.get("ts", ""))
         age = (datetime.datetime.now(ts.tzinfo) - ts).total_seconds()

@@ -577,6 +577,8 @@ def main() -> int:
         if e.get("address"):
             print(f"        {e['address']}")
         if e.get("phone"):
+            # 2026-11-20: false positive for "sensitive data". This is a business's public phone number from
+            # Places/Takeout, shown so you can check what is about to be saved; the API key is never printed.
             print(f"        {e['phone']}")
 
     if getattr(a, "dry_run", False):
