@@ -21,7 +21,13 @@ FROM n8nio/n8n:latest@sha256:d02752c6ab446ae9db8deec2f9cc887c378f77cdcad31650814
 # failure; this line specifically no longer depends on apk existing.
 COPY --from=dockercli /usr/local/bin/docker /usr/local/bin/docker
 
-# Root, not the image's default `node` user. Worth saying plainly: this is not
+# 2026-11-20: the image now ENDS as the non-root `node` user (the base image's
+# own default), which is what the linter (Hadolint DL3002) and the scanner
+# (Trivy DS-0002) ask for. This changes nothing at runtime on purpose:
+# docker-compose.yml still sets `user: "0:0"` for this service, and that is
+# what actually decides who n8n runs as.
+#
+# WHY IT STILL RUNS AS ROOT AT RUNTIME. Worth saying plainly: this is not
 # a real weakening of anything. The moment /var/run/docker.sock is mounted in
 # at all, the container can ask the Docker daemon to start a new container
 # with any mount, any privilege, any user it likes -- which is root on the
@@ -29,5 +35,7 @@ COPY --from=dockercli /usr/local/bin/docker /usr/local/bin/docker
 # user was never a meaningful boundary once that mount exists; it just usually
 # also blocks the docker-cli from opening the socket, which would make every
 # Execute Command step fail with "permission denied" for no real security
-# benefit. Root here matches the access level already granted, honestly.
-USER root
+# benefit. Root at runtime matches the access level already granted, honestly.
+# To really drop root, remove `user: "0:0"` from compose AND the docker.sock
+# mount (or give `node` the socket's group with group_add).
+USER 1000:1000

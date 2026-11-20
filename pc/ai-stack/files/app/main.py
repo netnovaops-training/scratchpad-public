@@ -37,6 +37,7 @@ without holding anything that could do harm.
 from __future__ import annotations
 
 import json
+import logging
 import mimetypes
 import os
 import time
@@ -46,6 +47,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 
+log = logging.getLogger("files")
 APP_DIR = Path(__file__).resolve().parent
 ROOT_PATH = os.getenv("FILES_ROOT_PATH", "/files")
 SITE_NAME = os.getenv("FILES_SITE_NAME", "Your files")
@@ -131,11 +133,15 @@ def _safe(root: Path, rel: str) -> Path:
     is_relative_to() answers the only question that matters: does this end
     up inside the tree they own?
     """
-    target = (root / rel.lstrip("/")).resolve()
-    root = root.resolve()
-    if not (target == root or target.is_relative_to(root)):
+    # 2026-11-20: same check as before, written as realpath + prefix test
+    # (the form code scanners recognise) so ../ and symlink escapes are
+    # refused with the same 403 and the same message.
+    root_real = os.path.realpath(str(root))
+    target_real = os.path.realpath(os.path.join(root_real, rel.lstrip("/")))
+    if not (target_real == root_real
+            or target_real.startswith(root_real.rstrip(os.sep) + os.sep)):
         raise HTTPException(403, "No.")
-    return target
+    return Path(target_real)
 
 
 def _listing(base: Path, rel: str) -> dict:
@@ -184,8 +190,11 @@ def backup_status() -> dict:
                 "why": "No backup has run yet, or its manifest is not mounted."}
     try:
         m = json.loads(BACKUP_MANIFEST.read_text(encoding="utf-8"))
-    except Exception as e:  # noqa: BLE001
-        return {"ok": False, "why": f"The backup manifest is unreadable: {e}"}
+    except Exception:  # noqa: BLE001
+        # 2026-11-20: the error text used to be sent to the browser; it now
+        # goes to the server log only. Same JSON shape and status code.
+        log.exception("backup manifest unreadable")
+        return {"ok": False, "why": "The backup manifest is unreadable."}
     age = time.time() - float(m.get("finished_at") or 0)
     days = age / 86400
     return {

@@ -73,11 +73,20 @@ def run_job(job: dict) -> tuple:
         if src.stat().st_size == 0:
             return False, "the file came back empty", 0
 
+        voice = str(job.get("voice") or "Mom")
+        pages = str(job.get("pages") or "")
+        # 2026-11-20: the queue's values are checked before they reach the command line. A voice may not look
+        # like an option (leading "-") or hold a control character; pages must be "40-58", the same shape
+        # narrate.py accepts, and anything else fails the job with the message narrate.py would have given.
+        if voice.startswith("-") or re.search(r"[\x00-\x1f]", voice):
+            return False, "that voice name is not allowed", 0
+        if pages and not re.fullmatch(r"\d+\s*-\s*\d+", pages.strip()):
+            return False, "--pages wants something like 40-58", 0
         cmd = [sys.executable, str(NARRATE), str(src),
-               "--voice", job.get("voice") or "Mom",
+               "--voice", voice,
                "--out", OUT, "--yes"]
-        if job.get("pages"):
-            cmd += ["--pages", job["pages"]]
+        if pages:
+            cmd += ["--pages", pages]
         log(f"  {' '.join(cmd[1:])}")
         try:
             # argv list, no shell: voice/pages are single arguments to our own narrate script

@@ -58,7 +58,21 @@ EDITORS = {e.strip().lower() for e in
 # that loads and one that does not.
 MAX_EDGE = 4000
 THUMB_EDGE = 900
-SAFE_NAME = re.compile(r"^[A-Za-z0-9._-]+$")
+SAFE_NAME = re.compile(r"^[A-Za-z0-9._-]+\Z")  # \Z, not $: $ lets a trailing newline through
+
+
+def _child(base, name):
+    """base/name as a real path, or None if it would land outside base.
+
+    2026-11-20: every file the web routes touch goes through here, so a
+    ../ or a symlink in a name can never reach outside its own folder.
+    """
+    base_real = os.path.realpath(str(base))
+    full = os.path.realpath(os.path.join(base_real, str(name)))
+    if full == base_real or not full.startswith(base_real.rstrip(os.sep) + os.sep):
+        return None
+    return Path(full)
+
 
 for d in (PHOTOS, THUMBS):
     d.mkdir(parents=True, exist_ok=True)
@@ -118,10 +132,12 @@ class Handler(BaseHTTPRequestHandler):
         elif isinstance(body, str):
             body = body.encode("utf-8")
         self.send_response(code)
-        self.send_header("Content-Type", ctype)
+        # 2026-11-20: CR/LF stripped from every header value, so nothing a
+        # caller supplied can start a new header or a second response.
+        self.send_header("Content-Type", re.sub(r"[\r\n]", "", str(ctype)))
         self.send_header("Content-Length", str(len(body)))
         for k, v in (extra or {}).items():
-            self.send_header(k, v)
+            self.send_header(re.sub(r"[\r\n]", "", str(k)), re.sub(r"[\r\n]", "", str(v)))
         self.end_headers()
         if self.command != "HEAD":
             self.wfile.write(body)
@@ -140,8 +156,9 @@ class Handler(BaseHTTPRequestHandler):
             return None
         return who
 
-    def _file(self, path: Path, cache="public, max-age=31536000, immutable"):
-        if not path.is_file():
+    def _file(self, base: Path, name: str, cache="public, max-age=31536000, immutable"):
+        path = _child(base, name)
+        if path is None or not path.is_file():
             return self._send(404, {"error": "not found"})
         ctype = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
         data = path.read_bytes()
@@ -157,7 +174,7 @@ class Handler(BaseHTTPRequestHandler):
             # differs is that Caddy has already required a sign-in to reach
             # it, so the page can show the arrows. Two pages would be two
             # galleries to keep looking identical.
-            return self._file(STATIC / "index.html", cache="no-cache")
+            return self._file(STATIC, "index.html", cache="no-cache")
         if p == "/healthz":
             return self._send(200, {"ok": True, "photos": len(load_order())})
         if p == "/api/photos":
@@ -170,15 +187,15 @@ class Handler(BaseHTTPRequestHandler):
             }, extra={"Cache-Control": "no-cache"})
         if p.startswith("/photo/"):
             name = p[len("/photo/"):]
-            return self._file(PHOTOS / name) if SAFE_NAME.match(name) \
+            return self._file(PHOTOS, name) if SAFE_NAME.match(name) \
                 else self._send(400, {"error": "bad name"})
         if p.startswith("/thumb/"):
             name = p[len("/thumb/"):]
-            return self._file(THUMBS / name) if SAFE_NAME.match(name) \
+            return self._file(THUMBS, name) if SAFE_NAME.match(name) \
                 else self._send(400, {"error": "bad name"})
         if p.startswith("/static/"):
             name = p[len("/static/"):]
-            return self._file(STATIC / name, cache="no-cache") \
+            return self._file(STATIC, name, cache="no-cache") \
                 if SAFE_NAME.match(name) else self._send(400, {"error": "bad name"})
         self._send(404, {"error": "no such route"})
 
@@ -304,8 +321,10 @@ class Handler(BaseHTTPRequestHandler):
         # MOVED, NOT DELETED. This is somebody's family wall and the undo for
         # a mis-tap should not be "find the original again".
         for d in (PHOTOS, THUMBS):
-            if (d / name).exists():
-                shutil.move(str(d / name), str(gone / f"{d.name}-{name}"))
+            src = _child(d, name)
+            dest = _child(gone, f"{d.name}-{name}")
+            if src is not None and dest is not None and src.exists():
+                shutil.move(str(src), str(dest))
         save_order([n for n in load_order() if n != name])
         print(f"{who} removed {name} (kept in removed/)", flush=True)
         self._send(200, {"photos": load_order()})

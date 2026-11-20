@@ -19,11 +19,13 @@
 import hashlib as _hashlib
 import html as _html
 import io
+import ipaddress
 import json
 import json as _json
 import os
 import re
 import re as _re
+import socket
 import subprocess
 import sys
 import urllib.parse as _up
@@ -46,6 +48,41 @@ def _http_only(target):
     if not url.lower().startswith(("http://", "https://")):
         raise ValueError(f"refusing a non-http(s) URL: {url[:80]}")
     return target
+
+
+def _public_only(url):
+    """Return url if it is http(s) and its host resolves only to public internet addresses, else raise ValueError.
+
+    2026-11-20 (CodeQL py/full-ssrf): the page and picture links here are pasted by a person or scraped
+    from a page, so they could point at this machine or the home network (localhost, 192.168.x, a cloud
+    metadata address). Ordinary public sites are unaffected; the Ollama/voice/search calls do not use this.
+    """
+    parts = _up.urlsplit(str(url))
+    if parts.scheme not in ("http", "https") or not parts.hostname:
+        raise ValueError(f"refusing a non-http(s) URL: {str(url)[:80]}")
+    try:
+        infos = socket.getaddrinfo(parts.hostname, parts.port or (443 if parts.scheme == "https" else 80),
+                                   type=socket.SOCK_STREAM)
+    except OSError:
+        raise ValueError(f"could not look up {parts.hostname}")
+    for info in infos:
+        if not ipaddress.ip_address(info[4][0].split("%")[0]).is_global:
+            raise ValueError(f"refusing a non-public address for {parts.hostname}")
+    return str(url)
+
+
+class _PublicRedirects(_ur.HTTPRedirectHandler):
+    """Every redirect hop must be public too, or a public page could bounce us onto the home network."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        _public_only(newurl)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def _open_public(url, headers, timeout):
+    """urlopen for a link from outside: checked first, and again on every redirect."""
+    req = _ur.Request(_public_only(url), headers=headers)
+    return _ur.build_opener(_PublicRedirects).open(req, timeout=timeout)  # nosec B310 - scheme and host checked above
 
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -85,8 +122,7 @@ def fetch_text(url, limit=6000):
     """One page, stripped to readable text. Crude on purpose: a tag-stripper
     and whitespace squeeze cover news pages, obits and wikis well enough for
     drafting, with no dependency to rot."""
-    req = _ur.Request(url, headers={"User-Agent": "Mozilla/5.0 (peewee-studio)"})
-    with _ur.urlopen(_http_only(req), timeout=30) as r:  # nosec B310
+    with _open_public(url, {"User-Agent": "Mozilla/5.0 (peewee-studio)"}, 30) as r:
         raw = r.read(400_000).decode("utf-8", "replace")
     raw = _re.sub(r"(?is)<(script|style|nav|header|footer)[^>]*>.*?</\1>", " ", raw)
     raw = _re.sub(r"(?s)<[^>]+>", " ", raw)
@@ -158,17 +194,15 @@ def fetch_images(url, want=14, min_side=220):
     Small images are dropped -- under a couple of hundred pixels a side
     is furniture, not a photograph. Duplicates are dropped by content, so
     the same picture served from two paths only appears once."""
-    req = _ur.Request(url, headers={"User-Agent": "Mozilla/5.0 (peewee-studio)"})
-    with _ur.urlopen(_http_only(req), timeout=30) as r:  # nosec B310
+    with _open_public(url, {"User-Agent": "Mozilla/5.0 (peewee-studio)"}, 30) as r:
         page = r.read(600_000).decode("utf-8", "replace")
     got, seen_bytes = [], set()
     for iu in _img_candidates(page, url):
         if len(got) >= want:
             break
         try:
-            ir = _ur.Request(iu, headers={"User-Agent": "Mozilla/5.0 (peewee-studio)",
-                                          "Referer": url})
-            with _ur.urlopen(_http_only(ir), timeout=20) as r:  # nosec B310
+            with _open_public(iu, {"User-Agent": "Mozilla/5.0 (peewee-studio)",
+                                   "Referer": url}, 20) as r:
                 blob = r.read(8_000_000)
         except Exception:  # noqa: BLE001, S112  scraped image: any fetch failure skips that image
             continue
@@ -192,7 +226,12 @@ def fetch_images(url, want=14, min_side=220):
 
 
 def pulled_dir(slug):
-    d = os.path.join(WORK, slug, "pulled")
+    # 2026-11-20 (CodeQL py/path-injection): the staging folder must resolve to somewhere under WORK;
+    # a slug like "../x" stops here with a ValueError instead of creating folders elsewhere.
+    root = os.path.realpath(WORK)
+    d = os.path.realpath(os.path.join(root, slug, "pulled"))
+    if not slug or not d.startswith(root + os.sep):
+        raise ValueError(f"not a staging folder: {slug!r}")
     os.makedirs(d, exist_ok=True)
     return d
 
@@ -210,7 +249,7 @@ def stage_images(slug, urls, want=14):
         for iu, blob, w, ht in found:
             n += 1
             ext = ".png" if blob[:8].startswith(b"\x89PNG") else ".jpg"
-            fp = os.path.join(d, f"pull-{n:03d}{ext}")
+            fp = os.path.join(d, f"pull-{n:03d}{ext}")   # d is already checked by pulled_dir
             with open(fp, "wb") as f:
                 f.write(blob)
             with open(fp + ".src.txt", "w", encoding="utf-8") as f:
@@ -396,7 +435,8 @@ def load(slug):
 
 
 def save(slug, data):
-    with open(os.path.join(PEOPLE, slug, "person.json"), "w",
+    # 2026-11-20 (CodeQL py/path-injection): person_dir() refuses a slug that resolves outside PEOPLE.
+    with open(os.path.join(person_dir(slug), "person.json"), "w",
               encoding="utf-8", newline="\n") as f:
         json.dump(data, f, indent=1)
 

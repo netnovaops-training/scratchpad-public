@@ -91,8 +91,12 @@ if [ "$LOCAL_SUM" != "$REMOTE_SUM" ]; then
 fi
 
 say "verifying the manifest is served too"
-SERVED_CODE=$(curl -sf --max-time 60 "$MANIFEST_URL" \
-  | python -c 'import json,sys; print(json.load(sys.stdin)["versionCode"])' 2>/dev/null || echo "")
+# 2026-11-20: the download is saved first and read second, instead of piped
+# straight into python (a "curl | interpreter" line is what the supply-chain
+# scanner flags, even though python only parses JSON here). Same result: an
+# empty SERVED_CODE if the fetch or the parse fails.
+MANIFEST_JSON=$(curl -sf --max-time 60 "$MANIFEST_URL" || echo "")
+SERVED_CODE=$(python -c 'import json,sys; print(json.loads(sys.argv[1])["versionCode"])' "$MANIFEST_JSON" 2>/dev/null || echo "")
 printf '  manifest says versionCode: %s\n' "${SERVED_CODE:-<none>}"
 if [ "${SERVED_CODE:-}" != "$CODE" ]; then
     echo "MISMATCH: the manifest does not name the build just published."

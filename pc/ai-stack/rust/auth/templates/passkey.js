@@ -130,7 +130,7 @@
           throw { plain: f.body.error || 'That passkey was not accepted.' };
         }
         hereSet();
-        window.location.replace(f.body.next || '/');
+        window.location.replace(sameSitePath(f.body.next));
         return true;
       });
     }
@@ -203,21 +203,27 @@
   // --------------------------------------------------------------- offer
   // Where the person was heading, from the offer page ('' when not on it).
   // Same-site paths only, as a second guard after the server's own check.
-  function safeNext() {
-    var root = document.getElementById('pk-offer');
-    if (!root) { return ''; }
-    var n = root.getAttribute('data-next') || '/';
-    // No backslashes or control characters either: browsers read "/\evil.com"
+  // 2026-11-20: one shared check, applied right before every redirect below
+  // (and to the video address), so text read from the page or a reply can
+  // never send the browser to another site or run as a javascript: address.
+  function sameSitePath(n) {
+    n = String(n || '/');
+    // No backslashes or control characters: browsers read "/\evil.com"
     // as "//evil.com".
     if (/[\\\u0000-\u001f\u007f]/.test(n)) { return '/'; }
     return (n.charAt(0) === '/' && n.charAt(1) !== '/') ? n : '/';
+  }
+  function safeNext() {
+    var root = document.getElementById('pk-offer');
+    if (!root) { return ''; }
+    return sameSitePath(root.getAttribute('data-next') || '/');
   }
 
   // The "add a passkey?" page after a password sign-in. Nothing here may block
   // the person: every path ends by carrying on to where they were going.
   function initOffer() {
     var next = safeNext();
-    if (!supported) { window.location.replace(next); return; }
+    if (!supported) { window.location.replace(sameSitePath(next)); return; }
     var msg = document.getElementById('pk-msg');
     document.getElementById('pk-offer-yes').addEventListener('click', function () {
       document.getElementById('pk-offer-buttons').style.display = 'none';
@@ -229,7 +235,7 @@
       say(msg, 'One moment...', false);
       // Carry on whether or not the answer could be saved.
       post('passkey/offer', { choice: choice }).then(function () {
-        window.location.replace(next);
+        window.location.replace(sameSitePath(next));
       });
     }
     document.getElementById('pk-offer-later').addEventListener('click', function () { answer('later'); });
@@ -284,7 +290,7 @@
           if (!f.ok) { throw { plain: f.body.error || 'That passkey was not accepted.' }; }
           hereSet();   // a passkey now exists for this device
           if (offerNext) {
-            window.location.replace(offerNext);
+            window.location.replace(sameSitePath(offerNext));
           } else if (recover) {
             form.style.display = 'none';
             say(msg, 'Passkey added. Now go to the sign-in page and use it.', false);
@@ -449,7 +455,11 @@
     if (reduce || save) { return; }
     function hide() { v.style.display = 'none'; }
     v.addEventListener('error', hide);
-    v.src = v.getAttribute('data-src');
+    // 2026-11-20: only a relative file name from our own static folder is
+    // accepted as the clip's address (no scheme, no leading slash, no "..").
+    var clip = v.getAttribute('data-src') || '';
+    if (!/^[A-Za-z0-9._\/-]+$/.test(clip) || clip.charAt(0) === '/' || clip.indexOf('..') !== -1) { return; }
+    v.src = clip;
     v.style.display = '';
     var p = v.play();
     if (p && p.catch) { p.catch(hide); }
