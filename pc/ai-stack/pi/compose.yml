@@ -1,5 +1,5 @@
 # ---------------------------------------------------------------------------
-#  sachin -- the Raspberry Pi 5, as a low-power always-on node.
+#  alex -- the Raspberry Pi 5, as a low-power always-on node.
 #
 #  Jason, 2026-09-10: "offload things like a emails to this be the n8n
 #  gatekeeper and other containers that take the load of my pc and nuc that
@@ -42,7 +42,7 @@
 #  named volume so that moving to an NVMe HAT is a docker volume relocation
 #  and not a rebuild.
 # ---------------------------------------------------------------------------
-name: sachin
+name: alex
 
 services:
 

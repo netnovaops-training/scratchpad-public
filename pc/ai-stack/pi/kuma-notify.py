@@ -36,7 +36,7 @@ import sys
 
 DB = os.environ.get(
     "KUMA_DB",
-    "/var/lib/docker/volumes/sachin_kuma_data/_data/kuma.db")
+    "/var/lib/docker/volumes/alex_kuma_data/_data/kuma.db")
 
 NAME = "Phone (ntfy)"
 SERVER = os.environ.get("NTFY_URL", "https://push.home.example.net")

@@ -77,7 +77,7 @@ use std::path::Path;
 /// question from "who can see the recipe box". It has no login of its own, so
 /// this list is the whole of its access control.
 pub const ALL_APPS: &[&str] = &[
-    // "grab" added 2026-09-11: the video fetcher Jason and Sachin submit
+    // "grab" added 2026-09-11: the video fetcher Jason and Alex submit
     // URLs to. EXPLICIT_ONLY below, so it is never inherited -- see there.
     "grab",
     "mama", "kitchen", "kb", "casey", "recipe", "status", "logs", "git", "tools", "pdf",
@@ -108,7 +108,7 @@ pub const ALL_APPS: &[&str] = &[
     // documents and workouts and nothing of anyone else's. This decides who
     // gets a search box, not who gets whose things.
     "find",
-    // Added 2026-09-10, all four for Sachin's studying and the household
+    // Added 2026-09-10, all four for Alex's studying and the household
     // records that came with it. Three gate a real path AND show a card;
     // "homebox" is card-only, like "tribute" and "studio" above, because it
     // lives on its own hostname.

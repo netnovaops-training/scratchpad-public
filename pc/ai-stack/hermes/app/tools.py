@@ -324,7 +324,7 @@ SCHEMA += [
           {"item_id": {"type": "string", "description": "An id from find_search"}},
           ["item_id"]),
     _tool("find_passages",
-          "Passages from Jason's and Sachin's TEXTBOOKS, cut to a paragraph "
+          "Passages from Jason's and Alex's TEXTBOOKS, cut to a paragraph "
           "each and carrying the page they are on. Use this -- not "
           "find_search -- for any clinical or study question: it returns the "
           "book's own words with a citable page, where find_search returns "
@@ -345,7 +345,7 @@ SCHEMA += [
                                    "would say it (e.g. 'Lammert')"},
            "shelf": {"type": "string",
                      "description": "Optional: a shelf name from `shelves` "
-                                    "(e.g. 'sachin'). Ignored if `book` is "
+                                    "(e.g. 'alex'). Ignored if `book` is "
                                     "given."}},
           ["question"]),
     _tool("shelves",

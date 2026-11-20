@@ -51,7 +51,7 @@ HOME = Path(r"D:\scratchpad")
 BACKUP = Path(r"D:\scratchpad-backup")
 MANIFEST = HOME / "MANIFEST.csv"
 AI = Path(r"C:\Jasons New Site\www\ai-stack")
-NUC = "server@100.64.0.10"  # Tailscale (2026-11-17); LAN 192.168.1.86 only if Tailscale is down
+NUC = "server@100.64.0.11"  # Tailscale (2026-11-17); LAN 192.168.1.86 only if Tailscale is down
 GDRIVE = "jason-gdrive:scratchpad-backup"
 
 # (area, root, recurse, kind). Order matters only for the report.

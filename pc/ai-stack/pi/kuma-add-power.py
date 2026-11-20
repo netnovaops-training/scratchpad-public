@@ -35,7 +35,7 @@ DB = os.environ.get("KUMA_DB", "/tmp/kw/kuma.db")  # nosec B108
 
 # name -> description. One per board that can report throttling.
 HOSTS = [
-    ("Power: Pi 5 (sachin)", "under-voltage / throttling on the Pi 5"),
+    ("Power: Pi 5 (alex)", "under-voltage / throttling on the Pi 5"),
     ("Power: Pi 3 (tor)",    "under-voltage / throttling on the Pi 3"),
 ]
 

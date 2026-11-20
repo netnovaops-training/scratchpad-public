@@ -41,7 +41,7 @@ services:
   #
   #  SCOPES ARE WHAT KEEP PEOPLE APART. Each FileBrowser user gets a scope
   #  -- a subtree they cannot climb out of. Casey's is /srv/manga/casey, so she
-  #  can add comics and cannot see Sachin's shelf or Jason's tax returns.
+  #  can add comics and cannot see Alex's shelf or Jason's tax returns.
   #  Set them with files-users.sh after the container is up; a user with no
   #  entry gets no access at all rather than the root.
   # ---------------------------------------------------------------------------

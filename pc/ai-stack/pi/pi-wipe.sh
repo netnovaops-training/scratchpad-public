@@ -66,7 +66,7 @@ set -u
 
 GO=0
 KEEP_DESKTOP=0
-NEWHOST="sachin"
+NEWHOST="alex"
 
 for a in "$@"; do
     case "$a" in

@@ -25,7 +25,7 @@ import sqlite3
 import sys
 
 DB = os.environ.get(
-    "KUMA_DB", "/var/lib/docker/volumes/sachin_kuma_data/_data/kuma.db")
+    "KUMA_DB", "/var/lib/docker/volumes/alex_kuma_data/_data/kuma.db")
 
 # name, hostname. Ping only.
 HOSTS = [

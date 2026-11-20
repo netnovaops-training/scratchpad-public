@@ -35,7 +35,7 @@ ADDRESS_FIX = {
 }
 
 POWER_HOSTS = [
-    ("Power: Pi 5 (sachin)", "under-voltage / throttling on the Pi 5"),
+    ("Power: Pi 5 (alex)", "under-voltage / throttling on the Pi 5"),
     ("Power: Pi 3 (tor)",    "under-voltage / throttling on the Pi 3"),
 ]
 

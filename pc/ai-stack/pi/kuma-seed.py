@@ -44,7 +44,7 @@ import sys
 
 DB = os.environ.get(
     "KUMA_DB",
-    "/var/lib/docker/volumes/sachin_kuma_data/_data/kuma.db")
+    "/var/lib/docker/volumes/alex_kuma_data/_data/kuma.db")
 
 INTERVAL = 60
 RETRY = 60

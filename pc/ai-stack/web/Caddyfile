@@ -3418,7 +3418,7 @@ media.home.example.net {
 # ---------------------------------------------------------------------------
 #  grab. -- MeTube on the Pi, inside the VPN tunnel.  192.168.1.69:8081
 #
-#  Jason and Sachin paste a URL, it downloads through Proton, and it lands
+#  Jason and Alex paste a URL, it downloads through Proton, and it lands
 #  in either the general or the private library.
 #
 #  GATED, unlike media./push./dj. -- and it can be, because this one is

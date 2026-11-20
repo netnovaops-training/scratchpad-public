@@ -37,7 +37,7 @@ from pathlib import Path
 HOME = Path(r"D:\scratchpad")
 BOOK = HOME / "book"
 STATE = BOOK / ".state.json"
-NUC = "server@100.64.0.10"  # Tailscale (2026-11-17); LAN 192.168.1.86 only if Tailscale is down
+NUC = "server@100.64.0.11"  # Tailscale (2026-11-17); LAN 192.168.1.86 only if Tailscale is down
 CADDY = Path(r"C:\Jasons New Site\www\ai-stack\web\Caddyfile")
 
 # Function zones: (name, colour, rule on the scratchpad path). First match wins.
