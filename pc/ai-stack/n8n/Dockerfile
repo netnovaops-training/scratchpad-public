@@ -11,7 +11,7 @@
 #  binary in directly from the small official image that's nothing BUT that
 #  binary, rather than asking n8n's image to install anything.
 # =============================================================================
-FROM docker:29.9-cli@sha256:5e6baf67325a79f64ed3bed6863954d5e05d0f3d4e57cbdb14809346814bbfdb AS dockercli
+FROM docker:29.9-cli@sha256:5a7af0dcb0e46c803efe9b45371dd21cb500e5b4453250394ac6f06d49b6e6f1 AS dockercli
 
 FROM n8nio/n8n:latest@sha256:d02752c6ab446ae9db8deec2f9cc887c378f77cdcad31650814df936b7386dfb
 
