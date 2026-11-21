@@ -88,24 +88,11 @@ _MODEL_LOCK = threading.Semaphore(1)
 # as the WHOLE caption or as a leading #hashtag, never as a substring: a
 # caption reading "Zombie Survival Guide" must not become Casey's.
 # --------------------------------------------------------------------------
-PEOPLE = {
-    "z": "casey", "casey": "casey", "zanetta": "casey",
-    "s": "alex", "alex": "alex", "sash": "alex",
-    "j": "jason", "jason": "jason", "me": "jason",
-    "m": "mom", "mom": "mom", "davetta": "mom", 'robin': 'robin', 'j u n': 'robin',
-}
+# T0927 (2026-11-21): the people tables live in drop.toml now (dropconfig.py; no emails in the code).
+# Same names as before, so every use of PEOPLE, SHELF keeps working. Edit people in drop.toml, not here.
+from dropconfig import PEOPLE, SHELF  # noqa: E402
 
 # Where each person's things live, mirroring the mounts Kavita already has.
-SHELF = {
-    "casey": {"manga": "/srv/manga/casey", "books": "/srv/books/casey"},
-    "alex": {"manga": "/srv/manga/alex", "books": "/srv/books/alex"},
-    "jason": {"manga": "/srv/manga/jason", "books": "/srv/books/jason"},
-    "mom": {"manga": "/srv/manga/mom", "books": "/srv/books/mom"},
-    # T0925 part 2 (A12, 2026-11-19): robin was in PEOPLE and portal.WHO but had no shelf, so his books
-    # went to unsorted. /home/user/documents/robin already exists (owner server, 700). Kavita does not
-    # mount it yet (only jason, alex, casey); that is a separate item.
-    "robin": {"manga": "/srv/manga/robin", "books": "/srv/books/robin"},
-}
 
 # Where a kind waits when it is correctly identified but has nowhere to
 # be filed yet, or when the uploader may read that library but not write

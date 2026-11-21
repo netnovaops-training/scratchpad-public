@@ -569,5 +569,5 @@ One line per script, taken from each script's own header. Regenerate with `pytho
 
 - `caddy_keys_to_env.py`: Move the three Caddy shared keys out of Caddyfile.nuc into web/caddy.nuc.env.
 - `rotate_backlog_key.py`: Rotate the Caddy -> backlog shared key (X-Backlog-Key). T0023 step 1, 2026-11-18 autopilot.
-- `rotate_garden_dbadmin.py`: Rotate the Robin's Garden MariaDB password for user dbadmin. T0024 step 2-6, 2026-11-19 autopilot.
+- `rotate_garden_dbadmin.py`: Rotate the Garden for All MariaDB password for user dbadmin. T0024 step 2-6, 2026-11-19 autopilot.
 - `rotate_notes_key_env.py`: Rotate the Caddy -> notes_api house key (X-Notes-Key), env-file way. T0023, 2026-11-18 autopilot.

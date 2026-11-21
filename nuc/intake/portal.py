@@ -48,23 +48,12 @@ import html
 # Jellyfin's own per-user grants and with `grab` in people.rs -- three
 # places is two too many, but the alternative is this page asking Jellyfin
 # at render time and failing open when Jellyfin is down.
-PRIVATE_OK = {"user1@example.com", "user2@example.com"}
+# T0927 (2026-11-21): the people tables live in drop.toml now (dropconfig.py; no emails in the code).
+# Same names as before, so every use of WHO, PRIVATE_OK, NAMES keeps working. Edit people in drop.toml, not here.
+from dropconfig import WHO, PRIVATE_OK, NAMES  # noqa: E402
 
-WHO = {
-    "user1@example.com": "jason",
-    "user3@example.com": "jason",
-    "user2@example.com": "alex",
-    "user4@example.com": "casey",
-    "user5@example.com": "mom",
-    # Added 2026-09-26. Robin is a full SSO account with grants on
-    # recipe, paperless and read -- and was unknown HERE, so every
-    # file he sent was filed as "no person" and went to unsorted.
-    # Two lists of who exists, and only one of them knew about him.
-    'user6@example.com': 'robin',
-}
 
 # "robin" added 2026-11-19 (T0925 A12): he had a WHO entry but no name, so his page greeted nobody.
-NAMES = {"jason": "Jason", "alex": "Alex", "casey": "Casey", "mom": "Mom", "robin": "Robin"}
 
 # T0926 (2026-11-19, ui-ux-pro-max audit U1 U4 U5 U15): --on-accent fixes dark-mode button text (white on
 # #6fd3b5 was 1.8:1, now dark ink, about 11:1); every tap target is at least 44 px; a visible focus ring;

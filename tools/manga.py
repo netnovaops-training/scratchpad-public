@@ -18,6 +18,12 @@ Each book: a cover (zone colour, contents grouped by site page and script type, 
 then one manga panel page per script: title, script-type badge (its own colour), what it does in a
 speech bubble, and a little flow strip "started by -> this script -> what it touches" drawn in
 boxes and arrows. Text is real text, so Kavita and any PDF reader can search it.
+2026-11-21 (Jason: "the scratchpad ... all code I use ... all code all variables ... views like a
+magazine"): BEFORE, the books held only MANIFEST.csv, which lists PC scripts, so the ~85 NUC and Pi
+scripts tracked under nuc/ and pi/ were in no book. NOW nuc_rows() adds every tracked NUC/Pi code file;
+the doc of any script is docs/<scratchpad path>.md (the old docs/pc/<area>/<rel>.md is the same path);
+NUC pages say which cron line starts them (from the git crontab export), and every page with a doc
+that has a "## Variables" table gets a Variables panel (first 8 rows; the rest are in the doc).
 PDFs are made by the NUC's Gotenberg (Chromium) through the paperless-ngx container: no port opened.
 Output: D:\\scratchpad\\book\\<NN Zone>.pdf, copied to the NUC at ~/documents/jason/Scratchpad Books/
 (Kavita's /books/jason library). Garden / Robin material is never in the scratchpad, so never here.
@@ -106,13 +112,84 @@ def page_of(path: str, pages: dict[str, str]) -> str:
     return "not a web page"
 
 
+def doc_path(row: dict) -> Path:
+    """The doc of a script: docs/<scratchpad path>.md (for pc/ rows this is docs/pc/<area>/<rel>.md)."""
+    return HOME / "docs" / (row["scratchpad_path"] + ".md")
+
+
+CRONTABS = [HOME / "nuc" / "config-export" / "nuc" / "crontab.txt",       # server's (git export, daily)
+            HOME / "nuc" / "config-export" / "nuc" / "crontab-root.txt"]  # root's (from 2026-11-21)
+RUNS_FROM = [  # (scratchpad prefix, where the live copy runs); first match wins
+    ("nuc/root/root-sbin-export.sh", "NUC /usr/local/sbin/root-sbin-export (root)"),
+    ("nuc/root/test_", "a throwaway test container (run by hand)"),
+    ("nuc/bin/", "NUC ~/bin/"), ("nuc/", "NUC (see nuc/NUC-SCRIPTS.md)"), ("pi/", "Pi 5"),
+]
+
+
+def cron_when(name: str) -> str:
+    """'NUC cron 01:30 daily' (or the raw schedule) for the first active crontab line naming the script."""
+    stem = name.removesuffix(".sh").removesuffix(".py")
+    for tab in CRONTABS:
+        if not tab.is_file():
+            continue
+        for line in tab.read_text("utf-8", "replace").splitlines():
+            f = line.split()
+            if len(f) < 6 or line.lstrip().startswith("#") or not re.search(rf"\b{re.escape(stem)}\b", line):
+                continue
+            who = "root cron" if tab.name == "crontab-root.txt" else "NUC cron"
+            if f[0].isdigit() and f[1].isdigit() and f[2:5] == ["*", "*", "*"]:
+                return f"{who} {int(f[1]):02d}:{int(f[0]):02d} daily (UTC)"
+            return f"{who} {' '.join(f[:5])}"
+    return ""
+
+
+def nuc_rows() -> list[dict]:
+    """MANIFEST-shaped rows for every git-tracked code file under nuc/ and pi/ (not data or exports)."""
+    out = subprocess.run(["git", "-C", str(HOME), "ls-files", "nuc", "pi"], capture_output=True,
+                         text=True, check=False).stdout.splitlines()
+    rows = []
+    for p in out:
+        src = HOME / p
+        suffix = Path(p).suffix.lower()
+        if "/config-export/" in p or "__pycache__" in p or not src.is_file() or suffix in (".md", ".json", ".txt", ".png"):
+            continue
+        if type_of(p)[0] == "Other":
+            try:
+                if src.read_bytes()[:2] != b"#!":   # keep extension-less scripts like nuc/bin/code
+                    continue
+            except OSError:
+                continue
+        where = next(w for pre, w in RUNS_FROM if p.startswith(pre))
+        if where.endswith("/"):
+            where += p.rsplit("/", 1)[-1]
+        row = {"scratchpad_path": p, "runs_from": where, "kind": "NUC script" if p.startswith("nuc/") else "Pi script",
+               "sha256": hashlib.sha256(src.read_bytes()).hexdigest()}
+        row["documented"] = "yes" if doc_path(row).is_file() else "no"
+        rows.append(row)
+    return rows
+
+
+def variables(row: dict) -> list[tuple[str, str]]:
+    """(name, meaning) pairs from the '## Variables' table of the script's doc; [] when there is none."""
+    doc = doc_path(row)
+    if not doc.is_file():
+        return []
+    m = re.search(r"## Variables\s+(.+?)(?:\n## |\Z)", doc.read_text("utf-8", "replace"), re.DOTALL)
+    pairs = []
+    for line in (m.group(1).splitlines() if m else []):
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        if len(cells) < 2 or set(cells[0]) <= set("-: ") or cells[0].lower() == "name":
+            continue
+        pairs.append((cells[0].replace("`", ""), cells[-1].replace("`", "")))
+    return pairs
+
+
 def summary(row: dict) -> str:
-    area, rel = row["scratchpad_path"].split("/", 2)[1:]
-    doc = HOME / "docs" / "pc" / area / (rel + ".md")
+    doc = doc_path(row)
     if doc.is_file():
         m = re.search(r"## What it does\s+(.+?)(?:\n#|\Z)", doc.read_text("utf-8", "replace"), re.DOTALL)
         if m:
-            text = " ".join(m.group(1).split())
+            text = " ".join(m.group(1).replace("`", "").split())  # markdown code ticks read as noise on paper
             return " ".join(re.split(r"(?<=[.!?])\s", text)[:3])[:420]
     src = HOME / row["scratchpad_path"]
     try:
@@ -127,6 +204,9 @@ def summary(row: dict) -> str:
 
 def started_by(row: dict) -> str:
     p, kind = row["scratchpad_path"], row["kind"]
+    if kind in ("NUC script", "Pi script"):
+        return cron_when(p.rsplit("/", 1)[-1]) or ("the NUC (by hand or another script)" if kind == "NUC script"
+                                                   else "the Pi 5")
     if "desktop shortcut" in kind:
         return kind.replace("started by the ", "")
     if (HOME / p).parent.joinpath("Dockerfile").exists() or "/app/" in p:
@@ -142,7 +222,9 @@ def touches(row: dict) -> list[str]:
     except OSError:
         return []
     found = []
-    for rx, label in [(r"paperless", "Paperless"), (r"pass-cli", "Proton Pass"), (r"ollama|litellm", "AI models"),
+    # Kopia and the vault SSD first (2026-11-21): only the first two labels reach the page, and a backup
+    # script's comment mentioning "Paperless" or "caddy:latest" should not hide what it really writes.
+    for rx, label in [(r"kopia", "Kopia backups"), (r"/mnt/vault", "the vault SSD"), (r"paperless", "Paperless"), (r"pass-cli", "Proton Pass"), (r"ollama|litellm", "AI models"),
                       (r"smtp|imap|gmail", "Email"), (r"192\.168\.86\.86|ssh ", "the NUC"), (r"docker", "Docker"),
                       (r"All-Documents", "All-Documents"), (r"twilio", "Twilio"), (r"rclone|gdrive", "Google Drive"),
                       (r"postgres|sqlite|\.db\b", "a database"), (r"caddy", "Caddy")]:
@@ -180,6 +262,10 @@ h1 { font-size: 8mm; font-weight: 900; font-style: italic; margin: 3mm 0 2mm; li
 .toc { font-size: 3.1mm; line-height: 1.45; columns: 2; column-gap: 5mm }
 .toc h3 { font-size: 3.5mm; margin: 2mm 0 1mm; break-after: avoid }
 .legend span { display: inline-block; margin: .8mm 1mm; }
+.vars { font-size: 2.9mm; line-height: 1.35; border-collapse: collapse; width: 100% }
+.vars td { border-top: .3mm solid #ccc; padding: .7mm 1mm; vertical-align: top }
+.vars td:first-child { font-family: 'DejaVu Sans Mono', monospace; font-weight: 700; width: 34%; word-break: break-all }
+.vars caption { text-align: left; font-weight: 900; font-style: italic; font-size: 3.4mm; padding-bottom: 1mm }
 """
 
 
@@ -189,7 +275,7 @@ def cover(zone: str, colour: str, rows: list, pages: dict) -> str:
         groups[(page_of(r["scratchpad_path"], pages), type_of(r["scratchpad_path"])[0])].append(r)
     toc = "".join(
         f"<h3>{html.escape(pg)} &middot; {html.escape(tp)}</h3>"
-        + "".join(f"<div>{html.escape(r['scratchpad_path'].split('/', 2)[2])}</div>" for r in g)
+        + "".join(f"<div>{html.escape(r['scratchpad_path'].split('/', 1)[1])}</div>" for r in g)
         for (pg, tp), g in sorted(groups.items()))
     legend = "".join(f"<span class=badge style='background:{c}'>{t}</span>"
                      for t, c in sorted({type_of(r['scratchpad_path']) for r in rows}))
@@ -204,6 +290,17 @@ def script_page(r: dict, n: int, zone: str, colour: str, pages: dict) -> str:
     p = r["scratchpad_path"]
     tname, tcol = type_of(p)
     flow_boxes = "".join(f"<div class=box>{html.escape(t)}</div>" for t in touches(r)[:2])
+    var = variables(r)
+    var_panel = ""
+    if var:
+        # OUTCOME 2026-11-21 preview: 8 rows of 110 characters, then 5 rows of 70, still pushed the last
+        # "Doc" line off the A5 page under a 7-line speech bubble; 4 one-line rows (55 characters) fit.
+        def short(d: str) -> str:
+            return d if len(d) <= 55 else d[:52].rsplit(" ", 1)[0] + "..."
+        more = f"<tr><td></td><td>+{len(var) - 4} more in the doc</td></tr>" if len(var) > 4 else ""
+        var_panel = ("<div class=panel><table class=vars><caption>Variables</caption>"
+                     + "".join(f"<tr><td>{html.escape(n)}</td><td>{html.escape(short(d))}</td></tr>" for n, d in var[:4])
+                     + more + "</table></div>")
     return (f"<div class=page><div class=band style='background:{colour}'>{html.escape(zone)}</div>"
             f"<h1>{html.escape(p.rsplit('/', 1)[-1])}</h1>"
             f"<span class=badge style='background:{tcol}'>{tname}</span>"
@@ -211,7 +308,7 @@ def script_page(r: dict, n: int, zone: str, colour: str, pages: dict) -> str:
             f"<div class=bubble>{html.escape(summary(r))}</div>"
             f"<div class=panel><div class=flow><div class=box style='background:#FFF3C4'>{html.escape(started_by(r))}</div>"
             f"<span class=arrow>&#10140;</span><div class=box style='background:{colour};color:#fff'>this script</div>"
-            f"<span class=arrow>&#10140;</span>{flow_boxes}</div></div>"
+            f"<span class=arrow>&#10140;</span>{flow_boxes}</div></div>{var_panel}"
             f"<div class=panel><div class=meta><b>Runs from</b> {html.escape(r['runs_from'])}<br>"
             f"<b>Master copy</b> D:\\scratchpad\\{html.escape(p.replace('/', chr(92)))}<br>"
             f"<b>Doc</b> {'yes' if r['documented'] == 'yes' else 'NOT YET'}</div></div>"
@@ -229,7 +326,7 @@ def render(html_doc: str) -> bytes:
 
 
 def main() -> int:
-    rows = list(csv.DictReader((HOME / "MANIFEST.csv").open(encoding="utf-8")))
+    rows = list(csv.DictReader((HOME / "MANIFEST.csv").open(encoding="utf-8"))) + nuc_rows()
     pages = site_pages()
     by_zone = defaultdict(list)
     for r in rows:
@@ -245,11 +342,14 @@ def main() -> int:
         h = hashlib.sha256()
         for r in zr:
             h.update(r["sha256"].encode())
-            area, rel = r["scratchpad_path"].split("/", 2)[1:]
-            doc = HOME / "docs" / "pc" / area / (rel + ".md")
+            doc = doc_path(r)
             if doc.exists():
                 h.update(doc.read_bytes())
         h.update(Path(__file__).read_bytes())  # a style change rebuilds everything
+        if any(r["kind"] in ("NUC script", "Pi script") for r in zr):
+            for tab in CRONTABS:  # NUC pages show their cron time, so a crontab change rebuilds this zone
+                if tab.is_file():
+                    h.update(tab.read_bytes())
         key = h.hexdigest()
         out = BOOK / f"{i:02d} {zone}.pdf"
         if "--all" not in sys.argv and state.get(zone) == key and out.exists():

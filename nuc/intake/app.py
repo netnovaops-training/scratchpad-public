@@ -64,6 +64,7 @@ import urllib.request
 # copies of them here that would drift the first time one changed.
 import classify as classify_mod
 import portal
+import scan  # T0920 virus check
 from classify import classify
 from fastapi import FastAPI, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -523,6 +524,18 @@ def route_file(tmp: pathlib.Path, name: str, size: int, email: str,
     """
     who = _person(email)
     digest = sha256(tmp)
+
+    # T0920 (2026-11-21): virus check BEFORE anything is classified or filed (scan.py; clamd over the private
+    # docker network). Infected -> held in .quarantine with a WHY.txt; scanner down -> also held (kept safe,
+    # never filed unchecked, never lost); over the stream limit -> "skipped", filed as before (scan.py SIZE).
+    # CLAMD_HOST unset = scanning off (old behaviour).
+    if scan.ENABLED:
+        state, detail = scan.scan(tmp)
+        if state in ("infected", "error"):
+            scan.hold(tmp, name, email, state, detail, digest)
+            if state == "infected":
+                raise HTTPException(422, "This file looks unsafe (virus check), so it was held back and not filed.")
+            raise HTTPException(503, "The virus check is not answering, so the file was kept safe and not filed yet.")
 
     # A VIDEO IS NOT CLASSIFIED, IT IS PLACED. The classifier's job is
     # working out what an unknown file is; the page already said. And
