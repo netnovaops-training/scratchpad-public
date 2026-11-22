@@ -167,6 +167,33 @@ pub fn enrol_allowed(user: Option<&UserKeys>, days: u64, now: u64) -> Result<(),
     Ok(())
 }
 
+/// The same checks enrol_allowed makes for a guest account, MINUS the
+/// day-bucket-fits-inside-account_expires rule -- not applicable here
+/// because the invite path (see invite_start) sets the passkey's own expiry
+/// to account_expires EXACTLY, an absolute timestamp, not a relative day
+/// count recomputed at redemption time. There is no bucket to validate
+/// against because there is no bucket at all. Still enforces everything
+/// else enrol_allowed does: the account has not already ended, the cap, and
+/// a guest's one-passkey limit.
+fn enrol_allowed_invite(user: Option<&UserKeys>, now: u64) -> Result<(), String> {
+    if let Some(u) = user {
+        if account_expired(u, now) {
+            return Err("This account has ended.".to_string());
+        }
+        if u.keys.len() >= cap_for(Some(u)) {
+            return Err(format!(
+                "You already have the most passkeys this account allows ({}). \
+                 Remove one first, or ask Jason to raise the limit.",
+                cap_for(Some(u))
+            ));
+        }
+        if u.guest && !u.keys.is_empty() {
+            return Err("A guest account can hold one passkey. Remove it first.".to_string());
+        }
+    }
+    Ok(())
+}
+
 /// The caller's address as Caddy reports it: the right-most X-Forwarded-For
 /// entry (Caddy SETS the header to the address it saw, see the (appproxy)
 /// snippet). If it does not parse as an address, everyone without one shares
@@ -826,6 +853,20 @@ enum Pending {
         /// Started from an emailed link: finishing needs no session, because
         /// the single-use token IS the proof. Nothing else is opened by it.
         via_recovery: bool,
+        /// Started from a guest invite: `expires` above is already EXACTLY
+        /// the guest account's own account_expires (an absolute timestamp
+        /// set once by the admin when the invite was created), not a
+        /// relative day-bucket recomputed from whatever moment this
+        /// challenge happens to be answered at. See invite_start and
+        /// enrol_allowed_invite for why this needs its own, looser
+        /// check than enrol_allowed's day-bucket-fits-inside-account_expires
+        /// rule, which cannot be satisfied by a short-lived guest account no
+        /// matter when it is redeemed (the real live bug, 2026-10-29).
+        invite_fixed_expiry: bool,
+        /// Started from a guest invite: the invite code, spent only in
+        /// register_finish once the passkey is actually saved. None for
+        /// every other path. See invite_start for why (2026-11-11 fix).
+        invite_code: Option<String>,
     },
     Login(DiscoverableAuthentication),
     /// An owner action waiting for the owner's own passkey to confirm it.
@@ -855,6 +896,11 @@ pub struct Passkeys {
     file_lock: Mutex<()>,
     /// Same, for the recovery file. Taken BEFORE file_lock, never after.
     recovery_lock: Mutex<()>,
+    /// Hashed one-time guest-invite codes (guest-invites.json beside the
+    /// other two). See the "Guest invites" section below.
+    guest_invite_file: PathBuf,
+    /// Same discipline as recovery_lock: taken BEFORE file_lock, never after.
+    guest_invite_lock: Mutex<()>,
     pending: Mutex<Challenges<Pending>>,
     limits: Mutex<Limiter>,
 }
@@ -924,6 +970,7 @@ impl Passkeys {
             rp_id: rp_id.to_string(),
             owners: Vec::new(),
             recovery_file: file.with_file_name("passkey-recovery.json"),
+            guest_invite_file: file.with_file_name("guest-invites.json"),
             link_base: common::env_or(
                 "AUTH_PASSKEY_LINK_BASE",
                 &format!("{}/auth", origin.trim_end_matches('/')),
@@ -931,6 +978,7 @@ impl Passkeys {
             file,
             file_lock: Mutex::new(()),
             recovery_lock: Mutex::new(()),
+            guest_invite_lock: Mutex::new(()),
             pending: Mutex::new(Challenges::new()),
             limits: Mutex::new(Limiter::default()),
         })
@@ -1328,7 +1376,7 @@ pub async fn register_start(
     }
     gate_clear(&state, &email);
 
-    match begin_registration(pk, &email, &person.name, name, b.days, false, now) {
+    match begin_registration(pk, &email, &person.name, name, b.days, None, false, None, now) {
         Ok((token, options)) => Json(json!({ "token": token, "options": options })).into_response(),
         Err(r) => r,
     }
@@ -1353,11 +1401,22 @@ fn begin_registration(
     person_name: &str,
     name: Option<String>,
     days: u64,
+    // Some(account_expires): a guest invite -- the passkey's expiry is this
+    // EXACT absolute timestamp, not a day-bucket recomputed from whenever
+    // this happens to be answered (see enrol_allowed_invite's doc comment
+    // for why bucket-matching cannot work here). `days` is ignored in this
+    // case. None: every other caller, unchanged bucket behaviour.
+    fixed_expiry: Option<u64>,
     via_recovery: bool,
+    // Some(code): a guest invite, carried to register_finish, which spends it.
+    invite_code: Option<String>,
     now: Instant,
 ) -> Result<(String, serde_json::Value), Response> {
-    let expires =
-        loaner_expiry(days, common::people::now()).map_err(|m| jerr(StatusCode::BAD_REQUEST, m))?;
+    let expires = match fixed_expiry {
+        Some(ts) => ts,
+        None => loaner_expiry(days, common::people::now())
+            .map_err(|m| jerr(StatusCode::BAD_REQUEST, m))?,
+    };
     let (user_id, exclude, display, name) = {
         let _g = lock(&pk.file_lock);
         let file = match load(&pk.file) {
@@ -1372,7 +1431,11 @@ fn begin_registration(
         };
         match file.user(email) {
             Some(u) => {
-                if let Err(m) = enrol_allowed(Some(u), days, common::people::now()) {
+                let check = match fixed_expiry {
+                    Some(_) => enrol_allowed_invite(Some(u), common::people::now()),
+                    None => enrol_allowed(Some(u), days, common::people::now()),
+                };
+                if let Err(m) = check {
                     return Err(jerr(StatusCode::BAD_REQUEST, &m));
                 }
                 let display = display_label(&u.label, person_name, email);
@@ -1444,6 +1507,8 @@ fn begin_registration(
             state: state_reg,
             expires,
             via_recovery,
+            invite_fixed_expiry: fixed_expiry.is_some(),
+            invite_code,
         },
         now,
     );
@@ -1495,6 +1560,8 @@ pub async fn register_finish(
         state: reg_state,
         expires,
         via_recovery,
+        invite_fixed_expiry,
+        invite_code,
     }) = taken
     else {
         return jerr(
@@ -1529,6 +1596,20 @@ pub async fn register_finish(
         }
     };
 
+    // Guest invite: the code is spent HERE, not in invite_start (see the note
+    // there). Lock order is invite lock, then file lock -- the same order
+    // invite_start uses -- so the two can never deadlock.
+    let _ig = invite_code.as_ref().map(|_| lock(&pk.guest_invite_lock));
+    let mut invite_store = None;
+    if let Some(code) = invite_code.as_deref() {
+        let store = common::guest_invite::read(&pk.guest_invite_file);
+        if common::guest_invite::peek(&store, code).is_none() {
+            // Someone else finished with this same link first.
+            return jerr(StatusCode::BAD_REQUEST, "That invite link was just used. Ask for a new one.");
+        }
+        invite_store = Some(store);
+    }
+
     let _g = lock(&pk.file_lock);
     let mut file = match load(&pk.file) {
         Ok(f) => f,
@@ -1560,8 +1641,19 @@ pub async fn register_finish(
         );
     };
     // The rules again at the moment of saving: the owner may have changed the
-    // cap, or ended a guest account, since this was started.
-    if let Err(m) = enrol_allowed(Some(&*u), u64::from(expires != 0), common::people::now()) {
+    // cap, or ended a guest account, since this was started. A guest invite's
+    // expiry is already an exact absolute timestamp (see begin_registration),
+    // not a relative day count, so it gets the lighter enrol_allowed_invite
+    // check instead of enrol_allowed's day-bucket-fits rule, which a short
+    // -lived guest account can never satisfy no matter when this step runs
+    // (the actual live bug, 2026-10-29 -- it resurfaced here even after the
+    // first fix, because this is a SEPARATE re-check from begin_registration's).
+    let save_check = if invite_fixed_expiry {
+        enrol_allowed_invite(Some(&*u), common::people::now())
+    } else {
+        enrol_allowed(Some(&*u), u64::from(expires != 0), common::people::now())
+    };
+    if let Err(m) = save_check {
         return jerr(StatusCode::BAD_REQUEST, &m);
     }
     // A hand-written entry (just a label, say) has no user handle yet.
@@ -1588,16 +1680,42 @@ pub async fn register_finish(
     }
     tracing::info!(email = %email, key = %name, loaner = expires != 0, via_link = via_recovery,
                    "passkey added");
-    notify(
-        &email,
-        "A passkey was added to your account",
-        format!(
-            "A passkey named \"{name}\" was just added to your sign-in account.\n\n\
-             If that was you, nothing more to do.\n\
-             If it was not, sign in and remove it on the passkeys page, and change \
-             your password. Whoever added it can sign in as you until it is removed.\n"
-        ),
-    );
+    // The passkey is saved, so now the invite is spent. If writing the
+    // invite file fails the guest still has their passkey (the important
+    // part); the code just stays usable until the account's one-passkey
+    // cap refuses a second one. Logged so it is noticed.
+    if let (Some(code), Some(mut store)) = (invite_code.as_deref(), invite_store) {
+        match common::guest_invite::redeem(&mut store, code, common::people::now()) {
+            Ok(_) => {
+                if let Err(e) = common::guest_invite::write(&pk.guest_invite_file, &store) {
+                    tracing::error!("passkey saved but the guest-invites file could not be written: {e}");
+                } else {
+                    tracing::info!(email = %email, "guest invite redeemed");
+                }
+            }
+            Err(_) => tracing::error!(email = %email, "guest invite vanished while its lock was held"),
+        }
+    }
+    // GUESTS NEVER GET THIS. A guest invite's "email" is a synthetic
+    // placeholder (guest-xxx-xxxx@invite.local) built purely to satisfy
+    // people.json's email-keyed data model -- see common/src/guest_invite.rs
+    // and admin's synthetic_guest_email -- it is never a real, deliverable
+    // address. Emailing it bounces every single time (the actual live bug,
+    // 2026-10-29: Jason got a real bounce notice from this). invite_fixed_expiry
+    // is true only for a passkey created via the invite path, which is the
+    // only path that ever produces one of these placeholder addresses.
+    if !invite_fixed_expiry {
+        notify(
+            &email,
+            "A passkey was added to your account",
+            format!(
+                "A passkey named \"{name}\" was just added to your sign-in account.\n\n\
+                 If that was you, nothing more to do.\n\
+                 If it was not, sign in and remove it on the passkeys page, and change \
+                 your password. Whoever added it can sign in as you until it is removed.\n"
+            ),
+        );
+    }
     // And the owners hear about it whoever added it: "<Name> added a passkey on <date>".
     let who = common::people::find(&crate::people(&state), &email)
         .map(|p| {
@@ -1795,7 +1913,7 @@ pub async fn lost(
             "That did not look right. Try again.",
         );
     };
-    let removed = {
+    let (removed, is_guest) = {
         let _g = lock(&pk.file_lock);
         let Ok(mut file) = load(&pk.file) else {
             return jerr(
@@ -1803,6 +1921,7 @@ pub async fn lost(
                 "The passkey list looks damaged, so I won't change it. Tell Jason.",
             );
         };
+        let is_guest = file.user(&email).map(|u| u.guest).unwrap_or(false);
         let n = match revoke_others(&mut file, &email, b.keep.as_deref()) {
             Ok(n) => n,
             Err(m) => return jerr(StatusCode::BAD_REQUEST, m),
@@ -1814,19 +1933,25 @@ pub async fn lost(
                 "Could not save that. Try again.",
             );
         }
-        n
+        (n, is_guest)
     };
     crate::revoke_all(&state, &email);
     tracing::info!(email = %email, removed, kept = b.keep.is_some(), "lost device: passkeys revoked, sessions ended");
-    notify(
-        &email,
-        "Passkeys were removed from your account",
-        format!(
-            "{removed} passkey(s) were removed from your sign-in account and every \
-             signed-in device was signed out.\n\nIf that was not you, change your \
-             password now.\n"
-        ),
-    );
+    // A guest's "email" is a synthetic placeholder (or, for a manually
+    // -converted account, simply not something a bounce-prone automated
+    // security notice needs to reach) -- same reasoning as register_finish's
+    // skip, same actual live bug (2026-10-29).
+    if !is_guest {
+        notify(
+            &email,
+            "Passkeys were removed from your account",
+            format!(
+                "{removed} passkey(s) were removed from your sign-in account and every \
+                 signed-in device was signed out.\n\nIf that was not you, change your \
+                 password now.\n"
+            ),
+        );
+    }
     Json(json!({ "ok": true, "removed": removed })).into_response()
 }
 
@@ -1960,7 +2085,21 @@ fn recover_job(state: &AppState, email: &str) {
         .unwrap_or(false);
     // A guest whose account has ended gets nothing.
     let ended = account_ended(state, email);
-    if !known || ended {
+    // A guest's "email" is a synthetic placeholder (guest-xxx-xxxx@invite.local)
+    // that was never real and never deliverable -- sending it a recovery link
+    // would just bounce, same bug class as register_finish/lost's direct
+    // -to-person notifications (the actual live bug, 2026-10-29). A guest
+    // never asks for a recovery link anyway (they have no email to type it
+    // from), so this only guards against someone else submitting the
+    // placeholder address to the /recover form.
+    let is_guest = {
+        let _g = lock(&pk.file_lock);
+        load(&pk.file)
+            .ok()
+            .and_then(|f| f.user(email).map(|u| u.guest))
+            .unwrap_or(false)
+    };
+    if !known || ended || is_guest {
         tracing::info!(email = %email, "recovery link asked for an address with no usable account");
         return;
     }
@@ -2057,7 +2196,7 @@ pub async fn recover_start(
     // Checks first, so a refusal (name taken, too many keys) leaves the link
     // alive; it is used up only once a challenge really exists.
     let (challenge, options) =
-        match begin_registration(pk, &email, &person_name, name, b.days, true, now) {
+        match begin_registration(pk, &email, &person_name, name, b.days, None, true, None, now) {
             Ok(x) => x,
             Err(r) => return r,
         };
@@ -2071,6 +2210,196 @@ pub async fn recover_start(
         );
     }
     tracing::info!(email = %email, "recovery link used");
+    Json(json!({ "token": challenge, "options": options })).into_response()
+}
+
+// -----------------------------------------------------------------------------
+//  Guest invites: a short code, minted by the admin console, that lets
+//  somebody with NO account and NO email on file make a passkey and be let
+//  straight in -- see common::guest_invite for the token storage this reads.
+//
+//  HOW THIS DIFFERS FROM THE RECOVERY FLOW JUST ABOVE. Recovery assumes an
+//  account (and a password) already exist, and the link only opens the door
+//  to adding a passkey. An invite does the opposite: the admin console has
+//  ALREADY created the account (a Person with a random, never-shown
+//  password, and a guest UserKeys entry with account_expires set) before
+//  this code is ever handed out -- see admin's invite_guest handler. So this
+//  flow's job is narrower than recovery's: find which pre-made account this
+//  code points at, and run the exact same begin_registration/register_finish
+//  ceremony recovery already uses (via_recovery = true, so register_finish
+//  does not demand a session cookie), then sign the guest straight in.
+// -----------------------------------------------------------------------------
+
+#[derive(Template)]
+#[template(path = "invite.html")]
+struct InviteTemplate {
+    /// "ask" (bad/missing/used code) or "use" (valid, ready to register).
+    mode: String,
+    code: String,
+    label: String,
+    enabled: bool,
+    error: String,
+}
+
+fn render_invite(mode: &str, code: &str, label: &str, enabled: bool, error: &str, status: StatusCode) -> Response {
+    let html = InviteTemplate {
+        mode: mode.to_string(),
+        code: code.to_string(),
+        label: label.to_string(),
+        enabled,
+        error: error.to_string(),
+    }
+    .render()
+    .unwrap_or_else(|_| "<h1>template error</h1>".into());
+    (status, Html(html)).into_response()
+}
+
+#[derive(Deserialize)]
+pub struct InviteQuery {
+    #[serde(default)]
+    c: String,
+}
+
+/// GET never spends the code: a link preview or a curious tap must not burn
+/// an invite before the guest themselves gets to use it.
+pub async fn invite_page(
+    State(state): State<Arc<AppState>>,
+    axum::extract::Query(q): axum::extract::Query<InviteQuery>,
+) -> Response {
+    let on = state.passkeys.is_some();
+    if q.c.trim().is_empty() {
+        return render_invite("ask", "", "", on, "That invite link is missing its code.", StatusCode::BAD_REQUEST);
+    }
+    let Some(pk) = state.passkeys.as_ref() else {
+        return render_invite("ask", "", "", false, "", StatusCode::OK);
+    };
+    let store = {
+        let _g = lock(&pk.guest_invite_lock);
+        common::guest_invite::read(&pk.guest_invite_file)
+    };
+    match common::guest_invite::peek(&store, &q.c) {
+        Some(inv) => render_invite("use", &q.c, &inv.label, on, "", StatusCode::OK),
+        None => render_invite(
+            "ask",
+            "",
+            "",
+            on,
+            "That invite link has already been used or has expired. Ask whoever sent it for a new one.",
+            StatusCode::BAD_REQUEST,
+        ),
+    }
+}
+
+#[derive(Deserialize)]
+struct InviteStart {
+    code: String,
+    /// What the guest typed for their own passkey's name, if anything --
+    /// same optional field, same validation (optional_name/clean_name) as
+    /// the normal "add a passkey" form already uses. Empty/absent falls back
+    /// to the guest's label, same as before this existed.
+    #[serde(default)]
+    name: String,
+}
+
+/// Turns an invite code into one registration challenge, on the
+/// already-prepared guest account the admin console created. Nothing here
+/// touches people.json or passkeys.json's guest/account_expires fields --
+/// those were set once, at invite-creation time, by the admin binary; this
+/// only adds the one passkey a guest account is allowed to hold.
+pub async fn invite_start(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    body: String,
+) -> Response {
+    let Some(pk) = state.passkeys.as_ref() else {
+        return off();
+    };
+    if !origin_ok(pk, &headers) {
+        return bad_origin();
+    }
+    let now = Instant::now();
+    let try_key = format!("invite-try:{}", client_ip(&headers));
+    {
+        let mut l = lock(&pk.limits);
+        if let Some(w) = l.blocked(&try_key, 20, FAIL_WINDOW, now) {
+            return jerr(StatusCode::TOO_MANY_REQUESTS, &wait_msg(w));
+        }
+    }
+    let Ok(b) = serde_json::from_str::<InviteStart>(&body) else {
+        return jerr(StatusCode::BAD_REQUEST, "That did not look right. Try again.");
+    };
+    // A bad name must not burn the code -- same ordering recover_start uses
+    // for the exact same reason -- so this is checked before anything else
+    // touches the invite store.
+    let chosen_name = match optional_name(&b.name) {
+        Ok(n) => n,
+        Err(m) => return jerr(StatusCode::BAD_REQUEST, m),
+    };
+
+    let _g = lock(&pk.guest_invite_lock);
+    let store = common::guest_invite::read(&pk.guest_invite_file);
+    let Some(inv) = common::guest_invite::peek(&store, &b.code) else {
+        lock(&pk.limits).record(&try_key, now);
+        return jerr(
+            StatusCode::BAD_REQUEST,
+            "That invite link has already been used or has expired. Ask whoever sent it for a new one.",
+        );
+    };
+    let (target_email, label) = (inv.target_email.clone(), inv.label.clone());
+
+    // The passkey's expiry is set to the guest account's own account_expires
+    // EXACTLY -- an absolute timestamp fixed once by the admin at invite
+    // -creation time -- not a relative day-bucket recomputed from whatever
+    // moment the guest happens to tap the link. THE BUG THIS AVOIDS (found
+    // 2026-10-29 by an actual live test): reusing the invite's original day
+    // count and asking begin_registration to add that many days to NOW
+    // (redemption time) always exceeded account_expires once ANY real time
+    // had passed since creation -- and for a short (e.g. 1-day) invite,
+    // there is no day-bucket that can ever fit (the smallest, 1 day, equals
+    // the account's whole lifespan, so even a few seconds' delay broke it).
+    // An absolute timestamp has no such gap: it is simply correct regardless
+    // of when the guest actually clicks.
+    let account_expires = {
+        let _fg = lock(&pk.file_lock);
+        match load(&pk.file) {
+            Ok(f) => f.user(&target_email).map(|u| u.account_expires).unwrap_or(0),
+            Err(_) => 0,
+        }
+    };
+
+    // Checks first, so a refusal (account cap, account already ended between
+    // invite creation and now) leaves the code alive -- same ordering
+    // recover_start already uses, same reasoning: spend it only once a real
+    // challenge exists. The guest's display name IS their label; nothing on
+    // this page asks them for one, same UX reasoning as the recovery form's
+    // auto-named device.
+    let (challenge, options) = match begin_registration(
+        pk,
+        &target_email,
+        &label,
+        chosen_name.or_else(|| Some(label.clone())),
+        0,
+        Some(account_expires),
+        true,
+        Some(b.code.clone()),
+        now,
+    ) {
+        Ok(x) => x,
+        Err(r) => return r,
+    };
+
+    // THE CODE IS NOT SPENT HERE ANY MORE (2026-11-11). It used to be
+    // redeemed right here, before the device had made anything. Confirmed
+    // live in Chrome with a test guest (Test-E): the Windows passkey prompt
+    // was cancelled, the page said "Cancelled. Nothing was created.", and
+    // the very next tap said "That invite link has already been used" --
+    // the guest was locked out with no passkey. The 11-08 Robin invite and
+    // Jason's 11-10 retries (invite/start 400 in Caddy's log) match this.
+    // Now register_finish spends it, under guest_invite_lock, only after
+    // the passkey is verified and saved. Two people racing one link: the
+    // second finish finds the code already spent and is refused, so one
+    // link still yields at most one passkey.
+    tracing::info!(label = %label, "guest invite opened, passkey challenge issued");
     Json(json!({ "token": challenge, "options": options })).into_response()
 }
 

@@ -211,7 +211,7 @@ impl Doc {
             format!(
                 "The file that is live right now is not valid JSON, so it cannot be \
                  patched safely — line {}, column {}: {e}. Nothing was changed. Fix it \
-                 by hand in ai-stack\\site-data\\data, or replace the whole file from the site \
+                 by hand in www\\Admin\\data, or replace the whole file from the site \
                  page, then come back.",
                 e.line(),
                 e.column()

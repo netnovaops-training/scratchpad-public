@@ -20,7 +20,7 @@ GW=$(docker network inspect $NET -f '{{(index .IPAM.Config 0).Gateway}}')
 docker rm -f sbx-clamav sbx-scan >/dev/null 2>&1
 docker run -d --name sbx-clamav --network $NET -v $SB/db:/var/lib/clamav clamav/clamav:stable >/dev/null
 docker run -d --name sbx-scan --network $NET -p 127.0.0.1:18231:8100 -e INTAKE_KEY=$K \
-  -e INTAKE_ALLOWED_PEERS=127.0.0.1,$GW -e LLM_BASE=http://10.255.255.1 -e INTAKE_LLM_TIMEOUT=2 \
+  -e INTAKE_ALLOWED_PEERS=127.0.0.1,$GW -e LLM_BASE=http://10.255.255.1 -e AUTH_LEVELS_URL=http://10.255.255.1/auth/levels -e GOTENBERG_URL=http://10.255.255.1:3000 -e INTAKE_LLM_TIMEOUT=2 \
   -e PENDING_ROOT=/srv/unsorted/.pending -e CLAMD_HOST=sbx-clamav \
   -v $DATA/unsorted:/srv/unsorted -v $DATA/books:/srv/books -v $DATA/manga:/srv/manga $IMG >/dev/null
 for i in $(seq 1 60); do docker logs sbx-clamav 2>&1 | grep -q "clamd started" && break; sleep 3; done

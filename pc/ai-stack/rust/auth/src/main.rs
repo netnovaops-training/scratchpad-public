@@ -1058,6 +1058,39 @@ async fn signout_all(State(state): State<Arc<AppState>>, headers: HeaderMap) -> 
     signout(State(state)).await
 }
 
+/// A real, visitable page at /auth/logout -- THE BUG THIS FIXES (found live,
+/// 2026-10-29): this route did not exist at all. /signout above has existed
+/// all along and genuinely works (it clears this browser's own session
+/// cookie), but it is a POST-only form target for the in-app sign-out
+/// button -- visiting /logout as a URL hit nothing, a bare 404, so NO
+/// session code ran at all. That is not "sign-out is broken"; it is "there
+/// was nothing here to sign anyone out at all."
+///
+/// SAME SCOPE AS /signout, DELIBERATELY: clears THIS browser's cookie only,
+/// not every device (that is what the separate, stronger /signout-all is
+/// for -- see revoke_all). This system's sessions are intentionally
+/// independent per device/browser (see make_cookie_value's own doc comment),
+/// so a plain sign-out legitimately leaves any OTHER already-open device
+/// signed in; the page below says so rather than implying otherwise.
+pub(crate) async fn logout_page(State(state): State<Arc<AppState>>) -> Response {
+    let mut c = format!("{COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0");
+    if state.cookie_secure {
+        c.push_str("; Secure");
+    }
+    let mut out = HeaderMap::new();
+    if let Ok(v) = c.parse() {
+        out.insert(header::SET_COOKIE, v);
+    }
+    let html = LogoutTemplate {}
+        .render()
+        .unwrap_or_else(|_| "<h1>Signed out.</h1>".into());
+    (out, Html(html)).into_response()
+}
+
+#[derive(Template)]
+#[template(path = "logout.html")]
+struct LogoutTemplate {}
+
 
 // -----------------------------------------------------------------------------
 //  Forgotten passwords
@@ -1535,6 +1568,8 @@ async fn run() -> anyhow::Result<()> {
         .route("/passkey/recover/start", post(passkeys::recover_start))
         .route("/passkey/login/start", post(passkeys::login_start))
         .route("/passkey/login/finish", post(passkeys::login_finish))
+        .route("/invite", get(passkeys::invite_page))
+        .route("/passkey/invite/start", post(passkeys::invite_start))
         // --- the cookie bridge to our subdomains (see bridge.rs) ----------
         .route("/sso/bridge", get(bridge::bridge))
         .route("/__sso", get(bridge::redeem))
@@ -1612,6 +1647,7 @@ async fn run() -> anyhow::Result<()> {
         .route("/levels", get(levels))
         .route("/signout", post(signout))
         .route("/signout-all", post(signout_all))
+        .route("/logout", get(logout_page))
         .route("/healthz", get(healthz))
         .with_state(state);
 

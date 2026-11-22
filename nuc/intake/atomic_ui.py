@@ -20,6 +20,7 @@ OUTCOME: see the T0884 Review line (sandbox + emulator test).
 """
 from __future__ import annotations
 
+import themes  # T0942: the drop's look
 from fastapi import APIRouter
 from fastapi.responses import HTMLResponse
 
@@ -237,10 +238,10 @@ const Atomic = (() => {
 # --- the sending page -----------------------------------------------------------------------------------
 PAGE = r"""<!doctype html><html lang=en><meta charset=utf-8>
 <meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name=theme-color content="#0b1026"><title>Atomic Share: sending</title>
+<meta name=theme-color content="@@THEME_COLOR@@"><title>@@NAME@@: sending</title>
 <link rel=manifest href="manifest.webmanifest">
 <style>
-:root{--bg:#0b1026;--card:#131a3a;--ink:#e8ecff;--dim:#9aa3c7;--cyan:#5ad1ff;--orange:#ff9b3d;--ok:#4ade80;--bad:#f87171;--spin:7s}
+@@ROOT@@
 *{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,sans-serif}
 main{max-width:560px;margin:0 auto;padding:24px 16px calc(24px + env(safe-area-inset-bottom))}
 .atom{display:block;width:min(56vw,240px);height:auto;margin:8px auto 4px;overflow:visible}
@@ -266,18 +267,8 @@ a,button{color:var(--cyan)}button{background:none;border:1px solid var(--cyan);b
 li small a{display:inline-block;padding:10px 0}
 </style>
 <main>
-<svg class=atom viewBox="0 0 96 96" aria-hidden=true>
- <defs><radialGradient id=g><stop offset="0" stop-color="#ffb46b" stop-opacity=".55"/><stop offset=".45" stop-color="#5ad1ff" stop-opacity=".12"/><stop offset="1" stop-color="#5ad1ff" stop-opacity="0"/></radialGradient>
-  <path id=o0 d="M14,48a34,13 0 1,0 68,0a34,13 0 1,0 -68,0"/></defs>
- <circle class=glow cx=48 cy=48 r=30 fill="url(#g)"/>
- <g class=orbits fill=none stroke="#5ad1ff" stroke-width=3.2 stroke-linecap=round>
-  <g><use href="#o0"/><circle class=proton r=3.6 fill="#fff" stroke=none><animateMotion dur="1.1s" repeatCount=indefinite><mpath href="#o0"/></animateMotion></circle></g>
-  <g transform="rotate(60 48 48)"><use href="#o0"/><circle class=proton r=3.6 fill="#bdeeff" stroke=none><animateMotion dur="1.5s" begin="-.4s" repeatCount=indefinite keyPoints="1;0" keyTimes="0;1" calcMode=linear><mpath href="#o0"/></animateMotion></circle></g>
-  <g transform="rotate(120 48 48)"><use href="#o0"/><circle class=proton r=3.6 fill="#fff" stroke=none><animateMotion dur=".9s" begin="-.2s" repeatCount=indefinite><mpath href="#o0"/></animateMotion></circle></g>
- </g>
- <circle class=nucleus cx=48 cy=48 r=8 fill="#ff9b3d"/>
-</svg>
-<h1 id=title>Atomic Share</h1><p id=state role=status aria-live=polite>Getting ready…</p>
+@@SVG@@
+<h1 id=title>@@NAME@@</h1><p id=state role=status aria-live=polite>Getting ready…</p>
 <div class=bar id=bar role=progressbar aria-label="Sent so far" aria-valuemin=0 aria-valuemax=100 aria-valuenow=0 aria-valuetext="0 percent"><i></i></div>
 <div id=nums aria-hidden=true><span id=pct>0%</span><span id=speed></span><span id=eta></span></div>
 <ul id=list></ul>   <!-- T0931 item 22: one live region (#state) is enough; a second one read every result twice -->
@@ -426,6 +417,8 @@ if (navigator.serviceWorker) navigator.serviceWorker.register('sw.js');
 main().catch(() => { working = false; mode('bad'); say('Something went wrong on this page. Tap Back to Drop and share again: files already sent are safe.'); });
 </script>
 """
+# T0942 (2026-11-21): the look (colours, picture, name) comes from themes.py / drop.toml; with theme atomic this is byte-for-byte the old page (test_themes.py).
+PAGE = themes.apply(PAGE)
 
 
 @router.get("/atomic.js")

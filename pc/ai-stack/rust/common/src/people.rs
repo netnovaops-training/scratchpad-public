@@ -158,6 +158,15 @@ pub const ALL_APPS: &[&str] = &[
     // TODO: SSO validation -- this may be better as an automatic grant for all
     // authenticated accounts rather than a toggleable permission.
     "looks",
+
+    // "lgbt" added 2026-11-04 (Jason): the LGBT shelf in the lending library
+    // (library/Adults/), granted per person in /admin/people instead of a
+    // hard-coded list in lending.py. EXPLICIT_ONLY below.
+    "lgbt",
+
+    // "ex" added 2026-11-04 (Jason): "For each other", the shared page /us for Jason and Robin.
+    // The /us route asks the gate about "/ex/". EXPLICIT_ONLY below.
+    "ex",
     // "backlog", "tickets", "todo" added 2026-10-30: these were already in
     // EXPLICIT_ONLY below (so an unrestricted account never silently
     // inherited them) but were MISSING from ALL_APPS itself, which meant
@@ -215,6 +224,8 @@ pub const EXPLICIT_ONLY: &[&str] = &[
     // EXPLICIT_ONLY makes sure "give this person everything" excludes them.
     // TODO: SSO validation -- revisit before sharing any of these with a guest.
     "backlog", "reviews", "secrets", "tickets", "todo",
+    "lgbt",
+    "ex",
 ];
 // "grab" added 2026-09-11. Jason: "i want this only to be avaible to the
 // sso for me and him". It downloads to a shared and a PRIVATE library, so

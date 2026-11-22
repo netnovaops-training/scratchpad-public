@@ -9,14 +9,15 @@ HOW IT WORKS
   installed (Chrome menu -> "Add to Home screen" / "Install app"), "Drop" appears in Android's share sheet.
   The share POST carries the household SSO cookie, so Caddy's forward_auth still decides who this is
   (X-Auth-Email); there is no new login and no new password.
-- Files: each one goes through the EXISTING /upload logic (app.upload), called as a function, so the
+- Files: each one goes through the EXISTING upload logic (app.route_file), called as a function, so the
   classifier, the per-person shelves, the write grants, de-duplication and the unsorted sidecar all apply
   unchanged. This module adds a door, not a second pipeline.
 - Compressed folders: a .zip that is NOT a comic (a zip of images stays one comic, see classify.py) is
   unpacked here and every member is filed on its own. Members are read in memory-safe chunks, path parts
   are dropped (no "../" escapes), and at most ZIP_MAX_FILES members / ZIP_MAX_MB in total are taken.
-- A shared link (a Gemini share link, an article): Gotenberg (container `gotenberg`, already running for
-  Paperless) prints the page to PDF with headless Chromium, then the PDF is filed like any upload.
+- A shared link (a Gemini share link, an article): Gotenberg (its own container `gotenberg-web`, at
+  GOTENBERG_URL, not Paperless's) prints the page to PDF with headless Chromium, then the PDF is filed like
+  any upload.
   Only public http(s) hosts: the address is resolved and private, loopback, link-local and Tailscale
   ranges are refused, so a share cannot make the server fetch the house's own services (SSRF).
 - Shared text with no link: wrapped in a minimal HTML page and printed to PDF the same way.
@@ -32,6 +33,8 @@ and still handles links and text.
 """
 from __future__ import annotations
 
+import themes  # T0942
+import importlib  # T0942 step 3: icon module per theme
 import html
 import ipaddress
 import json
@@ -49,20 +52,21 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 router = APIRouter()
 
-GOTENBERG = "http://gotenberg-web:3000"  # its own renderer, not Paperless's (see gotenberg_web_patch.py)
+# its own renderer, not Paperless's (see gotenberg_web_patch.py); required (T0927 slice 2), app.py checks it
+GOTENBERG = os.environ.get("GOTENBERG_URL", "").rstrip("/")
 ZIP_MAX_FILES = 200
 ZIP_MAX_MB = 2048
 URL_RE = re.compile(r"https?://\S+")
 
 MANIFEST = {
-    "name": "Atomic Share",
-    "short_name": "Atomic Share",
+    "name": themes.current()["name"],
+    "short_name": themes.current()["short_name"],
     "description": "Share files and links into the household library, Paperless and Kavita.",
     "start_url": "./",
     "scope": "./",
     "display": "standalone",
-    "background_color": "#0b1026",
-    "theme_color": "#0b1026",
+    "background_color": themes.current()["theme_color"],
+    "theme_color": themes.current()["theme_color"],
     "icons": [{"src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
               {"src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"},
               {"src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any"}],
@@ -96,18 +100,19 @@ def manifest():
 
 @router.get("/icon.svg")
 def icon():
-    return Response(ICON, media_type="image/svg+xml")
+    mod = themes.current().get("icon_module")  # T0942 step 3
+    return Response(importlib.import_module(mod).ICON_SVG if mod else ICON, media_type="image/svg+xml")
 
 
 @router.get("/icon-192.png")
 def icon_192():
-    import icons_png
+    icons_png = importlib.import_module(themes.current().get("icon_module", "icons_png"))
     return Response(icons_png.ICON_192, media_type="image/png", headers={"Cache-Control": "public, max-age=86400"})
 
 
 @router.get("/icon-512.png")
 def icon_512():
-    import icons_png
+    icons_png = importlib.import_module(themes.current().get("icon_module", "icons_png"))
     return Response(icons_png.ICON_512, media_type="image/png", headers={"Cache-Control": "public, max-age=86400"})
 
 

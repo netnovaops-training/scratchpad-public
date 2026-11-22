@@ -794,6 +794,14 @@ fn intake_upstream() -> String {
     std::env::var("INTAKE_URL").unwrap_or_else(|_| "http://192.168.1.86:8100".into())
 }
 
+/// The shared key intake checks in X-Drop-Key (T0925 part 2, 2026-11-19). Read from the
+/// environment on each call, never logged; the same value Caddy sends as {env.DROP_KEY}.
+/// OUTCOME 2026-11-20 (T0931): without it intake answered 403 to every /app/file since 11-19
+/// (0 uses in the logs, so nobody noticed). On the NUC, compose sets INTAKE_URL=http://intake:8100.
+fn intake_key() -> String {
+    std::env::var("INTAKE_KEY").unwrap_or_default()
+}
+
 /// `POST /app/file` -- hand a file to intake and let it work out what it is.
 ///
 /// THE DIFFERENCE FROM /app/upload. That one needs a shelf: the person
@@ -853,6 +861,9 @@ pub async fn app_file(
         let sent = client
             .post(&url)
             .header("X-Auth-Email", &email)
+            // T0925 part 2 / T0931: intake also wants the shared service key, so an allowed
+            // address alone is not enough. No X-Auth-Level: intake's service exception needs none.
+            .header("X-Drop-Key", intake_key())
             .multipart(form)
             .timeout(std::time::Duration::from_secs(600))
             .send()

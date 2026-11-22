@@ -16,3 +16,5 @@ reqwest.workspace = true
 argon2.workspace = true
 rand.workspace = true
 time.workspace = true
+# 2026-11-19 T0044 reconstruct: guest_invite.rs (11-11) uses sha2; the manifest copy was lost.
+sha2.workspace = true

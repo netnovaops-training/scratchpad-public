@@ -46,16 +46,40 @@
                aria-hidden="true" tabindex="-1" data-src="static/passkey-orb.v1.mp4"
                style="display:none"></video>
       </button>
-      <p class="orb-label">Tap to sign in with your passkey</p>
+      <p class="orb-label">No password. No wait. Just you.</p>
     </div>
     <p id="pk-msg" class="note" style="display:none"></p>
     {% endif %}
 
+    {% if passkeys %}
+    <details class="pw-fallback"{% if !email.is_empty() %} open{% endif %}>
+      <summary class="fine" style="cursor:pointer">Use a password instead</summary>
+      <div style="margin-top:.7rem">
+        <div>
+          <label for="e">Email</label>
+          <!-- Kept across a failed attempt, so a mistyped password does not mean
+               retyping the address. -->
+          <input id="e" name="email" type="email" inputmode="email" autocomplete="username webauthn"
+                 autocapitalize="off" autocorrect="off" spellcheck="false" value="{{ email }}" required
+                 {% if email.is_empty() %}autofocus{% endif %}>
+        </div>
+        <div style="margin-top:.6rem">
+          <label for="p">Password</label>
+          <input id="p" name="password" type="password" autocomplete="current-password" required
+                 {% if !email.is_empty() %}autofocus{% endif %}>
+        </div>
+        <input type="hidden" name="next" value="{{ next }}">
+        <button class="btn main wide" type="submit" style="margin-top:.7rem">Sign in</button>
+        <p class="fine" style="margin-top:.6rem">
+          <a href="forgot?next={{ next_q }}">Forgotten your password?</a>
+          &middot; <a href="recover">Lost your passkey device?</a>
+        </p>
+      </div>
+    </details>
+    {% else %}
     <div>
       <label for="e">Email</label>
-      <!-- Kept across a failed attempt, so a mistyped password does not mean
-           retyping the address. -->
-      <input id="e" name="email" type="email" inputmode="email" autocomplete="username webauthn"
+      <input id="e" name="email" type="email" inputmode="email" autocomplete="username"
              autocapitalize="off" autocorrect="off" spellcheck="false" value="{{ email }}" required
              {% if email.is_empty() %}autofocus{% endif %}>
     </div>
@@ -68,8 +92,8 @@
     <button class="btn main wide" type="submit">Sign in</button>
     <p class="fine">
       <a href="forgot?next={{ next_q }}">Forgotten your password?</a>
-      {% if passkeys %} &middot; <a href="recover">Lost your passkey device?</a>{% endif %}
     </p>
+    {% endif %}
   </form>
 </main>
 <script src="passkey/passkey.js" defer></script>

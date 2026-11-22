@@ -30,6 +30,7 @@ os.environ.update({
     "INTAKE_LOG": str(ROOT / "unsorted" / "intake.log"), "INTAKE_FAILED": str(ROOT / "failed"),
     "PENDING_ROOT": str(ROOT / "pending"), "TMPDIR": str(ROOT / "tmp"), "INTAKE_RESERVE_MB": "1",
     "INTAKE_MAX_MB": "100", "LLM_BASE": "http://10.255.255.1", "INTAKE_LLM_TIMEOUT": "2",
+    "AUTH_LEVELS_URL": "http://10.255.255.1/auth/levels", "GOTENBERG_URL": "http://10.255.255.1:3000",
     "INTAKE_SENTINELS": str(ROOT / "mount" / ".mounted"), "INTAKE_LOG_MAX_MB": "1",
 })
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))

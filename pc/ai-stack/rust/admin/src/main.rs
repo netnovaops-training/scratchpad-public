@@ -329,7 +329,7 @@ impl Gate {
 
 struct AppState {
     password_hash: String,
-    /// The sign-in allowlist, shared with the auth service through ai-stack\site-data (was www\Admin).
+    /// The sign-in allowlist, shared with the auth service through www\Admin.
     ///
     /// The auth service re-reads this on EVERY check, so adding or removing
     /// somebody here takes effect on their next request - including cutting
@@ -2344,6 +2344,162 @@ async fn people_passkey_revoke(State(state): State<Arc<AppState>>, headers: Head
             tracing::warn!(%email, %key_id, error = %msg, "admin: passkey revoke failed");
             flash_people(&state, &base, &token, &msg, false)
         }
+    }
+}
+
+// ===========================================================================
+//  Guest invites: resend (fresh link) and extend (2026-11-11, Jason's ask:
+//  "can the invite links go into auth for the people so i can resend them
+//  and have an option to renew them").
+//
+//  RESEND MAKES A NEW LINK, never re-shows the old one: codes are stored only
+//  as hashes (common::guest_invite), so whoever can read the file cannot
+//  sign in as a guest. Jason picked this over storing the plain link.
+//  Every older unused code for the same account is retired, so only the
+//  newest link works.
+//
+//  EXTEND moves the guest's account_expires out and carries their passkey's
+//  expiry along with it (an invite passkey's expiry IS account_expires, see
+//  auth's invite_start), so the guest keeps signing in with the same key.
+// ===========================================================================
+
+/// The raw passkeys.json entry for `email`, only if it is a guest.
+fn read_guest_entry(path: &std::path::Path, email: &str) -> Result<serde_json::Value, String> {
+    let text = std::fs::read_to_string(path).map_err(|e| format!("Could not read passkeys.json: {e}"))?;
+    let root: serde_json::Value =
+        serde_json::from_str(&text).map_err(|e| format!("passkeys.json does not parse: {e}"))?;
+    let user = root["users"]
+        .as_array()
+        .and_then(|us| us.iter().find(|u| u["email"].as_str() == Some(email)))
+        .ok_or_else(|| "That person has no guest entry.".to_string())?;
+    if user["guest"].as_bool() != Some(true) {
+        return Err("That is not a guest account.".to_string());
+    }
+    Ok(user.clone())
+}
+
+/// Read passkeys.json raw, let `f` change the one guest entry for `email`,
+/// write it back atomically. Raw JSON for the same reason as
+/// patch_new_guest_entry: this crate does not know the Passkey type.
+fn edit_guest_entry(
+    path: &std::path::Path,
+    email: &str,
+    f: impl FnOnce(&mut serde_json::Value) -> Result<(), String>,
+) -> Result<(), String> {
+    let text = std::fs::read_to_string(path).map_err(|e| format!("Could not read passkeys.json: {e}"))?;
+    let mut root: serde_json::Value =
+        serde_json::from_str(&text).map_err(|e| format!("passkeys.json does not parse: {e}"))?;
+    let user = root["users"]
+        .as_array_mut()
+        .ok_or_else(|| "passkeys.json has no users array".to_string())?
+        .iter_mut()
+        .find(|u| u["email"].as_str() == Some(email))
+        .ok_or_else(|| "That person has no guest entry.".to_string())?;
+    if user["guest"].as_bool() != Some(true) {
+        return Err("That is not a guest account.".to_string());
+    }
+    f(user)?;
+    let out = serde_json::to_vec_pretty(&root).map_err(|e| format!("Could not serialise passkeys.json: {e}"))?;
+    let tmp = path.with_extension("json.tmp");
+    std::fs::write(&tmp, &out).map_err(|e| format!("Could not write temp file: {e}"))?;
+    std::fs::rename(&tmp, path).map_err(|e| format!("Could not save passkeys.json: {e}"))
+}
+
+async fn people_invite_resend(State(state): State<Arc<AppState>>, headers: HeaderMap, body: String) -> Response {
+    let base = base_path(&headers);
+    let Some((token, csrf)) = touch_session_full(&state, &headers) else {
+        return render_login(&base, "Session expired. Sign in again.", StatusCode::UNAUTHORIZED);
+    };
+    if form_field(&body, "csrf").unwrap_or_default() != csrf {
+        return flash_people(&state, &base, &token, "Bad form token. Reload and try again.", false);
+    }
+    let email = common::people::normalise(&form_field(&body, "email").unwrap_or_default());
+    let now = common::people::now();
+
+    // Guest, not ended, no passkey yet (a guest may hold one, so a new link
+    // would only be refused at the door by auth's enrol_allowed_invite).
+    let check = read_guest_entry(&state.auth_passkeys_file, &email).and_then(|u| {
+        let ends = u["account_expires"].as_u64().unwrap_or(0);
+        if ends != 0 && now >= ends {
+            return Err("That guest account has ended. Extend it first, then make a new link.".to_string());
+        }
+        if u["keys"].as_array().map(|k| !k.is_empty()).unwrap_or(false) {
+            return Err("They already have a passkey. Revoke it first if they need a new one.".to_string());
+        }
+        Ok(())
+    });
+    if let Err(m) = check {
+        return flash_people(&state, &base, &token, &m, false);
+    }
+
+    let label = read_people(&state)
+        .iter()
+        .find(|p| p.email == email)
+        .map(|p| p.name.clone())
+        .filter(|n| !n.is_empty())
+        .unwrap_or_else(|| "Guest".to_string());
+    let code = common::guest_invite::new_code();
+    let mut store = common::guest_invite::read(&state.guest_invites_file);
+    let mut retired = 0;
+    for inv in store.invites.iter_mut().filter(|i| i.target_email == email && !i.redeemed) {
+        inv.redeemed = true; // retired, not used: peek() refuses it from now on
+        inv.redeemed_at = now;
+        retired += 1;
+    }
+    let days = store.invites.iter().rev().find(|i| i.target_email == email).map(|i| i.days).unwrap_or(0);
+    store.invites.push(common::guest_invite::Invite {
+        code_hash: common::guest_invite::code_hash(&code),
+        target_email: email.clone(),
+        label: label.clone(),
+        days,
+        created: now,
+        redeemed: false,
+        redeemed_at: 0,
+    });
+    if let Err(e) = common::guest_invite::write(&state.guest_invites_file, &store) {
+        return flash_people(&state, &base, &token, &format!("Could not save the new link: {e}"), false);
+    }
+    tracing::info!(label = %label, retired, "admin: guest invite re-sent (new code)");
+    let link = format!("{}/invite?c={}", state.invite_link_base.trim_end_matches('/'), code);
+    flash_people(&state, &base, &token,
+        &format!("New invite link for \"{label}\" -- it works once, and any older link is now off: {link}"),
+        true)
+}
+
+async fn people_guest_extend(State(state): State<Arc<AppState>>, headers: HeaderMap, body: String) -> Response {
+    let base = base_path(&headers);
+    let Some((token, csrf)) = touch_session_full(&state, &headers) else {
+        return render_login(&base, "Session expired. Sign in again.", StatusCode::UNAUTHORIZED);
+    };
+    if form_field(&body, "csrf").unwrap_or_default() != csrf {
+        return flash_people(&state, &base, &token, "Bad form token. Reload and try again.", false);
+    }
+    let email = common::people::normalise(&form_field(&body, "email").unwrap_or_default());
+    let days: u64 = form_field(&body, "days").unwrap_or_default().trim().parse().unwrap_or(0);
+    let now = common::people::now();
+    // From today if it already ended, else from the current end date; never
+    // more than 365 days from today (same ceiling as guest_expiry).
+    let mut new_end = 0;
+    let r = edit_guest_entry(&state.auth_passkeys_file, &email, |u| {
+        if !(1..=365).contains(&days) {
+            return Err("Pick 1 to 365 days.".to_string());
+        }
+        let ends = u["account_expires"].as_u64().unwrap_or(0);
+        new_end = (ends.max(now) + days * 86400).min(now + 365 * 86400);
+        u["account_expires"] = serde_json::json!(new_end);
+        if let Some(keys) = u["keys"].as_array_mut() {
+            for k in keys.iter_mut().filter(|k| k["expires"].as_u64().unwrap_or(0) != 0) {
+                k["expires"] = serde_json::json!(new_end);
+            }
+        }
+        Ok(())
+    });
+    match r {
+        Ok(()) => {
+            tracing::info!(%email, days, "admin: guest account extended");
+            flash_people(&state, &base, &token, &format!("Extended. Their access now ends {}.", unix_date(new_end)), true)
+        }
+        Err(m) => flash_people(&state, &base, &token, &m, false),
     }
 }
 
@@ -5162,6 +5318,8 @@ async fn run() -> anyhow::Result<()> {
         .route("/people/password", post(people_password))
         .route("/people/apps", post(people_apps))
         .route("/people/invite", post(people_invite_add))
+        .route("/people/invite-resend", post(people_invite_resend))
+        .route("/people/guest-extend", post(people_guest_extend))
         .route("/people/remove", post(people_remove))
         .route("/people/signout", post(people_signout))
         .route("/people/passkey-revoke", post(people_passkey_revoke))
@@ -5280,6 +5438,33 @@ mod tests {
         assert_eq!(a.chars().count(), 256);
         assert!(a.chars().all(|c| c.is_ascii_alphanumeric()));
         assert_ne!(a, b, "two calls must not produce the same password");
+    }
+
+    #[test]
+    fn guest_entry_helpers_only_touch_guests_and_keep_other_users() {
+        let dir = std::env::temp_dir().join("admin-guest-edit-test");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("passkeys.json");
+        std::fs::write(&path, r#"{"users":[
+            {"email":"owner@x","guest":false,"keys":[{"id":"a","passkey":{"opaque":1}}]},
+            {"email":"g@invite.local","guest":true,"account_expires":100,"keys":[{"id":"b","expires":100}]}
+        ]}"#).unwrap();
+
+        assert!(read_guest_entry(&path, "owner@x").is_err(), "a non-guest must be refused");
+        assert!(edit_guest_entry(&path, "owner@x", |_| Ok(())).is_err());
+        edit_guest_entry(&path, "g@invite.local", |u| {
+            u["account_expires"] = serde_json::json!(500);
+            u["keys"][0]["expires"] = serde_json::json!(500);
+            Ok(())
+        })
+        .unwrap();
+        let g = read_guest_entry(&path, "g@invite.local").unwrap();
+        assert_eq!(g["account_expires"], 500);
+        assert_eq!(g["keys"][0]["expires"], 500);
+        // The other user's key is carried through untouched.
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(text.contains("\"opaque\": 1"));
     }
 
     #[test]

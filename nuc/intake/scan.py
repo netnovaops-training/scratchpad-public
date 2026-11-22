@@ -2,7 +2,8 @@
 
 Why (Jason 2026-11-19): "a way to sanitize input of files like what I have on my NAS, that's malware and virus
 scanner ... prevent future and current and past threats". Every door (drop page, share sheet, resumable finish,
-/upload) ends in app.route_file(), so the check lives there, once.
+/upload) ends in app.route_file(), which calls the check; /intake (Telegram + mail) has its own body
+(_intake_sync) and calls the same check since T0962.
 
 HOW: the clamav container (official clamav/clamav image; freshclam updates signatures by itself) listens on TCP
 3310 on a private docker network only (no published port). intake streams the file's bytes to it (clamd INSTREAM)
@@ -74,8 +75,18 @@ def scan(path: pathlib.Path) -> tuple[str, str]:
 
 def hold(tmp: pathlib.Path, name: str, email: str, state: str, detail: str, digest: str) -> pathlib.Path:
     """Move the staged file into QUARANTINE/<time>-<sha8>/ with a WHY.txt. Returns the folder. Never deletes."""
-    folder = QUARANTINE / f"{time.strftime('%Y%m%d-%H%M%S')}-{digest[:8]}"
-    folder.mkdir(parents=True, exist_ok=True)
+    # T0962 (2026-11-21): a NEW folder every time. exist_ok=True let the same file held twice in one second
+    # share a folder, and the second WHY.txt overwrote the first.
+    base = f"{time.strftime('%Y%m%d-%H%M%S')}-{digest[:8]}"
+    QUARANTINE.mkdir(parents=True, exist_ok=True)
+    n = 1
+    while True:
+        folder = QUARANTINE / (base if n == 1 else f"{base}-{n}")
+        try:
+            folder.mkdir()
+            break
+        except FileExistsError:
+            n += 1
     safe = pathlib.PurePosixPath(name).name or "file"
     shutil.move(str(tmp), str(folder / (safe + ".held")))   # .held: never opened by a viewer by its old type
     (folder / "WHY.txt").write_text(json.dumps({"state": state, "detail": detail, "email": email, "name": name,
@@ -83,9 +94,31 @@ def hold(tmp: pathlib.Path, name: str, email: str, state: str, detail: str, dige
     return folder
 
 
+def ping(timeout: float = 3.0) -> bool:
+    """T0962 point 2: is clamd answering? zPING -> PONG, short timeout so /healthz stays fast. Off = True."""
+    if not ENABLED:
+        return True
+    try:
+        with socket.create_connection((CLAMD_HOST, CLAMD_PORT), timeout=timeout) as s:
+            s.settimeout(timeout)
+            s.sendall(b"zPING\0")
+            return s.recv(16).rstrip(b"\0\n") == b"PONG"
+    except OSError:
+        return False
+
+
 def held_count() -> int:
     """How many uploads wait in quarantine (information for /healthz, not a failure)."""
+    # T0964: only folders that still hold a file; rescan_held.py leaves released folders as a record.
+    # T0962 follow-up: an unreadable folder is skipped, not a reason to report 0 for all of them.
     try:
-        return sum(1 for d in QUARANTINE.iterdir() if d.is_dir())
+        folders = [d for d in QUARANTINE.iterdir() if d.is_dir()]
     except OSError:
         return 0
+    n = 0
+    for d in folders:
+        try:
+            n += any(p.suffix == ".held" for p in d.iterdir())
+        except OSError:
+            continue
+    return n

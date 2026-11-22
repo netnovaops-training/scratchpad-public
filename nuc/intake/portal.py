@@ -42,7 +42,9 @@ front door onto a pipeline, not a new pipeline.
 """
 from __future__ import annotations
 
+import themes  # T0942
 import html
+import os
 
 # The two accounts with the private Jellyfin library. Kept in step with
 # Jellyfin's own per-user grants and with `grab` in people.rs -- three
@@ -51,6 +53,19 @@ import html
 # T0927 (2026-11-21): the people tables live in drop.toml now (dropconfig.py; no emails in the code).
 # Same names as before, so every use of WHO, PRIVATE_OK, NAMES keeps working. Edit people in drop.toml, not here.
 from dropconfig import WHO, PRIVATE_OK, NAMES  # noqa: E402
+
+# T0964 (2026-11-21): the video card shows the real upload limit (app.MAX_MB reads the same setting); it said
+# "10 GB" as fixed text, which was only true while compose set INTAKE_MAX_MB=10240.
+def _max_gb() -> str:
+    """T0964: the upload limit in GB, one decimal at most ("10", "1.5"); a non-number setting -> the 2048 default."""
+    try:
+        mb = int(os.environ.get("INTAKE_MAX_MB", "2048"))
+    except ValueError:
+        mb = 2048
+    return f"{round(mb / 1024, 1):g}"
+
+
+MAX_GB = _max_gb()
 
 
 # "robin" added 2026-11-19 (T0925 A12): he had a WHO entry but no name, so his page greeted nobody.
@@ -209,10 +224,10 @@ def page(email: str, person: str | None) -> str:
     # U6 (2026-11-19): a real document (doctype, lang, charset); U7: results are announced (aria-live).
     return f"""<!doctype html><html lang="en"><meta charset="utf-8">
 <!-- served by ai-stack/intake -->
-<title>Atomic Share</title>
+<title>{themes.current()['name']}</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="manifest" href="manifest.webmanifest">
-<meta name="theme-color" content="#0b1026">
+<meta name="theme-color" content="{themes.current()['theme_color']}">
 <script>if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");</script>
 <style>{CSS}</style>
 <div class="wrap">
@@ -243,7 +258,7 @@ def page(email: str, person: str | None) -> str:
 
   <div class="card">
     <h2>A video</h2>
-    <p class="note">Goes straight to Jellyfin. Up to 10 GB per file.</p>
+    <p class="note">Goes straight to Jellyfin. Up to {MAX_GB} GB per file.</p>
     <form id="f2" action="upload" method="post" enctype="multipart/form-data">
       <label for="u2">Videos</label>
       <input id="u2" type="file" name="file" accept="video/*" multiple required>

@@ -65,6 +65,14 @@ import urllib.request
 import classify as classify_mod
 import portal
 import scan  # T0920 virus check
+
+# T0927 slice 2 (audit phase 4 item 4): these had the household's own addresses as built-in defaults, so a copy
+# run by someone else would quietly ask OUR servers. Now they must be set (compose.yml), and the app refuses to
+# start, naming what is missing, instead of guessing.
+REQUIRED_SETTINGS = ("LLM_BASE", "AUTH_LEVELS_URL", "GOTENBERG_URL")
+_missing = [name for name in REQUIRED_SETTINGS if not os.environ.get(name, "").strip()]
+if _missing:
+    raise SystemExit(f"intake: required setting(s) missing: {', '.join(_missing)} (set them in compose.yml)")
 from classify import classify
 from fastapi import FastAPI, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -339,8 +347,16 @@ def healthz():
         failed = sum(1 for _ in resumable.FAILED.iterdir()) if resumable.FAILED.is_dir() else 0
     except OSError:
         failed = -1
+    # T0962 point 2 (2026-11-21): with the scanner down every upload is HELD, not filed, so "uploads could
+    # land" is false: 503 with a plain reason. "held" counts quarantine folders (information only).
+    clamav = "off"
+    if scan.ENABLED:
+        clamav = "ok" if scan.ping() else "down"
+        if clamav == "down":
+            problems.append("virus check not answering (uploads are held, not filed)")
     body = {"ok": not problems, "free_mb": free_mb, "problems": problems, "failed": failed,
-            "allow_telegram": len(ALLOW), "allow_mail": len(MAIL_ALLOW)}
+            "allow_telegram": len(ALLOW), "allow_mail": len(MAIL_ALLOW), "clamav": clamav,
+            "held": scan.held_count()}
     return JSONResponse(body, status_code=200 if not problems else 503)
 
 
@@ -389,28 +405,49 @@ async def intake(
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
+def _virus_gate(tmp: pathlib.Path, name: str, digest: str, held_as: str, door: str) -> None:
+    """T0927 slice 3: the ONE virus check every door runs before anything is classified or filed (T0920, T0962).
+    Infected -> held in .quarantine + 422; scanner down -> held + 503 (kept safe, never filed unchecked, never
+    lost); over the stream limit -> "skipped", filed as before. CLAMD_HOST unset = scanning off. `held_as` is what
+    the WHY.txt records (a door and a person id, never an email: T0962 point 5)."""
+    if not scan.ENABLED:
+        return
+    state, detail = scan.scan(tmp)
+    if state in ("infected", "error"):
+        scan.hold(tmp, name, held_as, state, detail, digest)
+        say(f"HELD {door}: {name} -- virus check {state}")
+        if state == "infected":
+            raise HTTPException(422, "This file looks unsafe (virus check), so it was held back and not filed.")
+        raise HTTPException(503, "The virus check is not answering, so the file was kept safe and not filed yet.")
+
+
+def _place_or_unsorted(tmp: pathlib.Path, name: str, digest: str, verdict: dict, sidecar: dict) -> dict:
+    """T0927 slice 3: the ONE placement step. Into the verdict's library, or into unsorted WITH a .intake.json
+    sidecar (the reason it could not be placed is the only thing that makes the pile actionable later)."""
+    if verdict["dest"]:
+        res = place(tmp, pathlib.Path(verdict["dest"]), name, digest, verdict)
+    else:
+        res = place(tmp, UNSORTED, name, digest, verdict)
+        side = pathlib.Path(res["path"]).with_suffix(".intake.json")
+        side.write_text(json.dumps(
+            {**verdict, **sidecar, "sha256": digest, "at": time.strftime("%Y-%m-%d %H:%M:%S")},
+            indent=2), encoding="utf-8")
+    say(f"  {res['status']}: {res['path']}")
+    return res
+
+
 def _intake_sync(tmp: pathlib.Path, name: str, size: int, who: str, sender: str,
                  source: str, caption: str | None) -> dict:
-    """The blocking half of /intake: hash, classify, place (runs in a thread, T0925 A3)."""
+    """The blocking half of /intake: hash, virus check, classify, place (runs in a thread, T0925 A3)."""
     digest = sha256(tmp)
+    # T0962 (2026-11-21): this door had no virus check (T0920 put it in route_file, which /intake does not use).
+    # T0927 slice 3: both doors now call the same _virus_gate, so they cannot drift apart again.
+    _virus_gate(tmp, name, digest, f"{source}:{who}", f"{source} from {who}")
     verdict = classify(str(tmp), name, caption, who)
     say(f"{source} from {who}: {name} ({size/1048576:.1f}MB) "
         f"-> {verdict['kind']} :: {verdict['why']}")
 
-    if verdict["dest"]:
-        res = place(tmp, pathlib.Path(verdict["dest"]), name, digest, verdict)
-    else:
-        # Unsorted, WITH a sidecar. The reason it could not be placed is
-        # the only thing that makes the pile actionable later.
-        res = place(tmp, UNSORTED, name, digest, verdict)
-        side = pathlib.Path(res["path"]).with_suffix(".intake.json")
-        side.write_text(json.dumps(
-            {**verdict, "sender": sender, "source": source,
-             "caption": caption, "sha256": digest,
-             "at": time.strftime("%Y-%m-%d %H:%M:%S")},
-            indent=2), encoding="utf-8")
-
-    say(f"  {res['status']}: {res['path']}")
+    res = _place_or_unsorted(tmp, name, digest, verdict, {"sender": sender, "source": source, "caption": caption})
     return {**res, **verdict, "size": size, "sha256": digest}
 
 
@@ -450,8 +487,7 @@ async def drop_page(x_auth_email: str | None = Header(default=None)):
 # ---------------------------------------------------------------------------
 #  permission: may this person WRITE to the library their file belongs in?
 # ---------------------------------------------------------------------------
-AUTH_LEVELS_URL = os.environ.get(
-    "AUTH_LEVELS_URL", "https://example.org/auth/levels")
+AUTH_LEVELS_URL = os.environ.get("AUTH_LEVELS_URL", "")  # required (T0927 slice 2), checked at the top
 SERVICE_KEY = os.environ.get("SERVICE_KEY", "")
 
 
@@ -529,13 +565,9 @@ def route_file(tmp: pathlib.Path, name: str, size: int, email: str,
     # docker network). Infected -> held in .quarantine with a WHY.txt; scanner down -> also held (kept safe,
     # never filed unchecked, never lost); over the stream limit -> "skipped", filed as before (scan.py SIZE).
     # CLAMD_HOST unset = scanning off (old behaviour).
-    if scan.ENABLED:
-        state, detail = scan.scan(tmp)
-        if state in ("infected", "error"):
-            scan.hold(tmp, name, email, state, detail, digest)
-            if state == "infected":
-                raise HTTPException(422, "This file looks unsafe (virus check), so it was held back and not filed.")
-            raise HTTPException(503, "The virus check is not answering, so the file was kept safe and not filed yet.")
+    # T0962 point 5 (Jason 11-21): the note keeps the person id, not the email address.
+    # T0927 slice 3: the shared gate (same as /intake).
+    _virus_gate(tmp, name, digest, f"drop:{who or 'unknown'}", f"drop from {who or 'unknown'}")
 
     # A VIDEO IS NOT CLASSIFIED, IT IS PLACED. The classifier's job is
     # working out what an unknown file is; the page already said. And
@@ -586,18 +618,7 @@ def route_file(tmp: pathlib.Path, name: str, size: int, email: str,
     say(f"drop from {email}: {name} ({size/1048576:.1f}MB) "
         f"-> {verdict['kind']} :: {verdict['why']}")
 
-    if verdict["dest"]:
-        res = place(tmp, pathlib.Path(verdict["dest"]), name, digest, verdict)
-    else:
-        res = place(tmp, UNSORTED, name, digest, verdict)
-        side = pathlib.Path(res["path"]).with_suffix(".intake.json")
-        side.write_text(json.dumps(
-            {**verdict, "uploader": email, "source": "drop",
-             "sha256": digest,
-             "at": time.strftime("%Y-%m-%d %H:%M:%S")},
-            indent=2), encoding="utf-8")
-
-    say(f"  {res['status']}: {res['path']}")
+    res = _place_or_unsorted(tmp, name, digest, verdict, {"uploader": email, "source": "drop"})
     return {**res, **verdict, "size": size}
 
 

@@ -34,6 +34,16 @@ Variables (module level, read by portal.py / classify.py / app.py):
     NAMES        person id -> display name                (was portal.NAMES)
     PEOPLE       caption alias (lower case) -> person id  (was classify.PEOPLE)
     SHELF        person id -> {"manga": path, "books": path}  (was classify.SHELF)
+    LIBRARIES    kind -> {"dest": path template | "shelf": manga|books, "grant": app}  (T0927 slice 2; was
+                 classify.GRANT_FOR_KIND + the "where" block of classify.classify)
+
+[library.<kind>] (optional, T0927 slice 2). Kinds: document, recipe, workout, book, comic (the classifier's closed
+vocabulary; a config cannot invent a kind). A section REPLACES that kind's default; give exactly one of
+dest (a path under /srv/; placeholders {person} and {pending} = PENDING_ROOT only) or shelf (manga | books, the
+person's own shelf), plus grant (the app name in the admin panel that lets a person ADD this kind).
+enabled = false switches a kind off: those files go to unsorted. Defaults (= the old code tables):
+    document -> /srv/consume (paperless)          recipe  -> {pending}/{person}/recipe (recipe)
+    workout  -> {pending}/{person}/workout (gym)  book    -> shelf books (read)     comic -> shelf manga (read)
 OUTCOME 2026-11-21: tables built from the generated file equal the old code tables exactly (test_dropconfig.py).
 """
 from __future__ import annotations
@@ -47,8 +57,17 @@ from pathlib import Path
 log = logging.getLogger("dropconfig")
 CONFIG_PATH = Path(os.environ.get("DROP_CONFIG", "/config/drop.toml"))
 DEFAULT_BRAND = {"name": "Atomic Share", "short_name": "Atomic Share", "theme": "atomic"}
-THEMES = {"atomic", "garden"}
+THEMES = {"atomic", "garden", "horizon"}
 ID_RE = re.compile(r"^[a-z0-9-]{1,32}$")
+GRANT_RE = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
+LIBRARY_KINDS = ("document", "recipe", "workout", "book", "comic")   # classify.KINDS minus "unknown"
+DEFAULT_LIBRARIES = {
+    "document": {"dest": "/srv/consume", "grant": "paperless"},
+    "recipe": {"dest": "{pending}/{person}/recipe", "grant": "recipe"},
+    "workout": {"dest": "{pending}/{person}/workout", "grant": "gym"},
+    "book": {"shelf": "books", "grant": "read"},
+    "comic": {"shelf": "manga", "grant": "read"},
+}
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[a-z]{2,}$", re.I)
 
 
@@ -105,12 +124,49 @@ def build(data: dict) -> dict:
                     and all(isinstance(v, str) and v.startswith("/srv/") and ".." not in v for v in sh.values())):
                 raise ValueError(f"person {pid}: shelves must be manga/books paths under /srv/")
             shelf[pid] = dict(sh)
-    return {"BRAND": brand, "WHO": who, "PRIVATE_OK": private, "NAMES": names, "PEOPLE": people, "SHELF": shelf}
+    return {"BRAND": brand, "WHO": who, "PRIVATE_OK": private, "NAMES": names, "PEOPLE": people, "SHELF": shelf,
+            "LIBRARIES": build_libraries(data)}
+
+
+def build_libraries(data: dict) -> dict:
+    """kind -> library from the defaults plus any [library.<kind>] sections. Raises ValueError on a bad one.
+
+    Every library has a grant: a kind nobody is granted is not writable, and a config cannot make one that
+    needs no grant at all (the old rule: an ungoverned kind goes to unsorted)."""
+    lib = {k: dict(v) for k, v in DEFAULT_LIBRARIES.items()}
+    sect = data.get("library", {})
+    if not isinstance(sect, dict):
+        raise ValueError("[library] must be a table")
+    for kind, v in sect.items():
+        if kind not in LIBRARY_KINDS:
+            raise ValueError(f"library.{kind}: not a kind the drop knows ({', '.join(LIBRARY_KINDS)})")
+        if not isinstance(v, dict) or not set(v) <= {"dest", "shelf", "grant", "enabled"}:
+            raise ValueError(f"library.{kind}: the keys are dest, shelf, grant, enabled")
+        if v.get("enabled", True) is False:
+            del lib[kind]
+            continue
+        if v.get("enabled", True) is not True:
+            raise ValueError(f"library.{kind}: enabled must be true or false")
+        if ("dest" in v) == ("shelf" in v):
+            raise ValueError(f"library.{kind}: give exactly one of dest or shelf")
+        if "dest" in v:
+            d = v["dest"]
+            probe = d.replace("{pending}", "/srv/p").replace("{person}", "x") if isinstance(d, str) else ""
+            if not probe.startswith("/srv/") or ".." in probe or "{" in probe or "}" in probe:
+                raise ValueError(f"library.{kind}: dest must be a path under /srv/ "
+                                 "(placeholders {person} and {pending} only)")
+        elif v["shelf"] not in ("manga", "books"):
+            raise ValueError(f"library.{kind}: shelf must be manga or books")
+        if not (isinstance(v.get("grant"), str) and GRANT_RE.match(v["grant"])):
+            raise ValueError(f"library.{kind}: grant must be an app name (a-z) from the admin panel")
+        lib[kind] = {k: v[k] for k in ("dest", "shelf", "grant") if k in v}
+    return lib
 
 
 def load(path: Path = CONFIG_PATH) -> tuple[dict, str]:
     """(tables, error). On any problem: empty people tables + default brand, and the reason."""
-    empty = {"BRAND": dict(DEFAULT_BRAND), "WHO": {}, "PRIVATE_OK": set(), "NAMES": {}, "PEOPLE": {}, "SHELF": {}}
+    empty = {"BRAND": dict(DEFAULT_BRAND), "WHO": {}, "PRIVATE_OK": set(), "NAMES": {}, "PEOPLE": {}, "SHELF": {},
+             "LIBRARIES": {}}   # fails closed: no library is writable, everything goes to unsorted
     try:
         with open(path, "rb") as fh:
             return build(tomllib.load(fh)), ""
@@ -125,3 +181,4 @@ def load(path: Path = CONFIG_PATH) -> tuple[dict, str]:
 _t, ERROR = load()
 BRAND, WHO, PRIVATE_OK = _t["BRAND"], _t["WHO"], _t["PRIVATE_OK"]
 NAMES, PEOPLE, SHELF = _t["NAMES"], _t["PEOPLE"], _t["SHELF"]
+LIBRARIES = _t["LIBRARIES"]

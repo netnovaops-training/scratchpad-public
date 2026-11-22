@@ -650,7 +650,7 @@ async fn signin_page_with_passkeys_on_has_button_script_and_autofill_hint() {
         html.contains("name=\"password\""),
         "password form always present"
     );
-    assert!(html.contains("Tap to sign in with your passkey"));
+    assert!(html.contains("No password. No wait. Just you."), "caption replaced 2026-10-29 -- passkey-first redesign");
     assert!(html.contains("autocomplete=\"username webauthn\""));
     assert!(html.contains("passkey/passkey.js"));
     assert!(
@@ -1533,8 +1533,10 @@ fn the_offer_page_script_always_carries_on() {
     // every path in initOffer ends in a replace() to the return-to
     let js = SCRIPT.split("function initOffer").nth(1).unwrap();
     let js = js.split("// ----").next().unwrap();
-    assert!(js.contains("if (!supported) { window.location.replace(next); return; }"));
-    assert!(js.matches("window.location.replace(next)").count() >= 2);
+    // 2026-11-21 (T0965): redirects go through sameSitePath() since the
+    // 2026-11-20 open-redirect fix; the old text match failed after it.
+    assert!(js.contains("if (!supported) { window.location.replace(sameSitePath(next)); return; }"));
+    assert!(js.matches("window.location.replace(sameSitePath(next))").count() >= 2);
 }
 
 // ====================================================== review fixes (round 1)
@@ -2817,7 +2819,7 @@ async fn the_signin_page_is_just_the_form_plus_the_passkey_extras() {
     // the orb: a focusable round button with an accessible name, a clip inside
     // (muted, looping, inline, autoplay) and a visible label under it
     assert!(html.contains("<button id=\"pk-btn\" class=\"orb\" type=\"button\" aria-label=\"Sign in with your passkey\""));
-    assert!(html.contains("Tap to sign in with your passkey"));
+    assert!(html.contains("No password. No wait. Just you."), "caption replaced 2026-10-29 -- passkey-first redesign");
     assert!(
         html.contains("<video")
             && html.contains("muted")
@@ -3164,14 +3166,23 @@ fn the_sequence_timings_are_constants_at_the_top_of_the_script() {
 fn the_prompt_opens_by_itself_only_with_the_note_and_follows_the_rules() {
     let s = SCRIPT.split("function initSignin").nth(1).unwrap();
     let s = s.split("// ---------").next().unwrap();
-    // without the note: nothing opens by itself
-    let gate = s
-        .find("if (!hereGet()) { armConditional(); return; }")
-        .expect("no-note branch");
+    // Conditional UI (armConditional) is armed UNCONDITIONALLY, for every
+    // visitor whose browser supports it -- 2026-10-29, the passkey-first
+    // redesign: this must happen before the hereGet() gate, not only inside
+    // its no-note branch, which is what made the prompt appear with no tap
+    // at all on page load instead of waiting for the explicit cinematic
+    // sequence (which still only runs for a device marked as having used a
+    // passkey here before).
+    let conditional_call = s.find("armConditional();").expect("unconditional armConditional() call");
+    let gate = s.find("if (!hereGet()) { return; }").expect("no-note early return");
     let open = s.find("function openPrompt").expect("prompt function");
     assert!(
+        conditional_call < gate,
+        "conditional UI must be armed before the hereGet() gate, so it runs for every visitor"
+    );
+    assert!(
         gate < open,
-        "the automatic prompt code is only reached with the note"
+        "the automatic EXPLICIT (cinematic) prompt code is still only reached with the note"
     );
     // timing: after the first frame, but never later than MAX_WAIT_MS from page load
     assert!(s.contains("window.setTimeout(openPrompt, FIRST_FRAME_TO_PROMPT_MS)"));
@@ -3189,7 +3200,7 @@ fn the_prompt_opens_by_itself_only_with_the_note_and_follows_the_rules() {
 
 #[test]
 fn the_note_is_set_on_success_and_cleared_on_lost_device_or_no_credential() {
-    assert!(SCRIPT.contains("hereSet();\n        window.location.replace(f.body.next"));
+    assert!(SCRIPT.contains("hereSet();\n        window.location.replace(sameSitePath(f.body.next)"));
     assert!(SCRIPT.contains("if (f.status === 401) { hereClear(); }"));
     assert!(SCRIPT.contains("if (r.ok) { hereClear(); window.location.replace('./'); }"));
     assert!(SCRIPT.contains("hereSet();   // a passkey now exists for this device"));
@@ -3249,4 +3260,389 @@ fn the_css_sheen_sits_under_the_video_and_motion_effects_respect_reduced_motion(
     // outside that block there is no scale or sweep
     let outside = CSS.replace(np, "");
     assert!(!outside.contains("scale(.92)") && !outside.contains("animation: sheen"));
+}
+
+// -----------------------------------------------------------------------------
+//  Guest invites -- the fixed-expiry fix (2026-10-29 live test)
+//
+//  First attempt at this fix tried to recompute a day-BUCKET (1/7/30) that
+//  would fit the remaining time at redemption -- see enrol_allowed_invite's
+//  doc comment for why that could never work for a short (1-day) invite: the
+//  smallest bucket equals the account's entire lifespan, so even a few
+//  seconds' delay between creation and redemption broke it. The actual fix
+//  is enrol_allowed_invite plus begin_registration's fixed_expiry parameter,
+//  proven end to end below with a real (software) WebAuthn ceremony.
+// -----------------------------------------------------------------------------
+
+#[tokio::test]
+async fn invite_start_actually_succeeds_after_real_time_has_passed_since_creation() {
+    // END-TO-END reproduction of the live bug (2026-10-29): an admin creates
+    // a 1-day guest invite; by the time the guest actually taps the link,
+    // real wall-clock time has moved on, same as a real phone tap always
+    // would. Before the fit_loaner_days fix this failed every single time
+    // with "That would last longer than this guest account." -- this test
+    // drives the REAL invite_start handler and the REAL registration
+    // ceremony (software authenticator) to prove it now succeeds, not just
+    // that the isolated days-math helper returns the right number.
+    let dir = temp_dir("invite-e2e");
+    let email = "jason@example.test"; // app_state's seeded person; its own
+                                       // account data is irrelevant here --
+                                       // only passkeys.json/guest-invites.json matter.
+    let st = app_state(&dir, true, false, true);
+    let pk = st.passkeys.as_ref().unwrap();
+
+    let created_at = common::people::now();
+    let account_expires = created_at + 1 * 86400; // the admin's original 1-day pick
+
+    // Set up the guest account exactly as the admin's people_invite_add +
+    // patch_new_guest_entry would have (see admin/src/main.rs): a guest
+    // UserKeys entry, zero keys, the 1-day account_expires.
+    let target_email = "guest-test-abcd@invite.local";
+    {
+        let mut file = load(&pk.file).unwrap_or_default();
+        file.users.push(UserKeys {
+            email: target_email.to_string(),
+            label: "Test".to_string(),
+            guest: true,
+            account_expires,
+            ..Default::default()
+        });
+        save(&pk.file, &file).unwrap();
+    }
+
+    // Set up the invite record itself, same shape common::guest_invite::write
+    // produces.
+    let code = "TESTCODE0000001";
+    let mut store = common::guest_invite::Store::default();
+    store.invites.push(common::guest_invite::Invite {
+        code_hash: common::guest_invite::code_hash(code),
+        target_email: target_email.to_string(),
+        label: "Test".to_string(),
+        days: 1,
+        created: created_at,
+        redeemed: false,
+        redeemed_at: 0,
+    });
+    common::guest_invite::write(&pk.guest_invite_file, &store).unwrap();
+
+    // Simulate real elapsed time between invite creation and the guest
+    // actually clicking it -- this is the exact gap that broke it live.
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+    let body = json!({ "code": code }).to_string();
+    let r = invite_start(State(st.clone()), hdrs(Some(ORIGIN), None), body).await;
+    let (code_status, _, v) = read(r).await;
+    assert_eq!(
+        code_status,
+        StatusCode::OK,
+        "invite_start must succeed even after real time has passed since the invite was created; got: {v:?}"
+    );
+
+    // Finish the ceremony with a real (software) authenticator, exactly as a
+    // guest's browser would -- proves the whole path end to end, not just
+    // that a challenge was issued.
+    let mut dev = soft();
+    let finish_status = finish_enrol(&st, &mut dev, v, ORIGIN, None).await;
+    assert_eq!(finish_status, StatusCode::OK, "the passkey must actually register");
+
+    // And the invite must now be burned -- a second attempt with the same
+    // code must be refused.
+    let body2 = json!({ "code": code }).to_string();
+    let r2 = invite_start(State(st.clone()), hdrs(Some(ORIGIN), None), body2).await;
+    let (code2, _, _) = read(r2).await;
+    assert_eq!(code2, StatusCode::BAD_REQUEST, "a redeemed invite code must not work twice");
+
+    let _ = email; // app_state's own seeded person, unused by this test directly
+}
+
+#[tokio::test]
+async fn a_cancelled_invite_prompt_leaves_the_link_usable_and_one_link_gives_one_passkey() {
+    // THE BUG (2026-11-11, reproduced live in Chrome with test guest Test-E):
+    // the code was spent at invite_start, so cancelling the device prompt
+    // left the guest with no passkey and a dead link.
+    let dir = temp_dir("invite-cancel-e2e");
+    let st = app_state(&dir, true, false, true);
+    let pk = st.passkeys.as_ref().unwrap();
+    let created_at = common::people::now();
+    let target_email = "guest-cancel-test@invite.local";
+    {
+        let mut file = load(&pk.file).unwrap_or_default();
+        file.users.push(UserKeys {
+            email: target_email.to_string(),
+            label: "Test".to_string(),
+            guest: true,
+            account_expires: created_at + 7 * 86400,
+            ..Default::default()
+        });
+        save(&pk.file, &file).unwrap();
+    }
+    let code = "CANCELTEST00001";
+    let mut store = common::guest_invite::Store::default();
+    store.invites.push(common::guest_invite::Invite {
+        code_hash: common::guest_invite::code_hash(code),
+        target_email: target_email.to_string(),
+        label: "Test".to_string(),
+        days: 7,
+        created: created_at,
+        redeemed: false,
+        redeemed_at: 0,
+    });
+    common::guest_invite::write(&pk.guest_invite_file, &store).unwrap();
+    let start = || invite_start(State(st.clone()), hdrs(Some(ORIGIN), None), json!({ "code": code }).to_string());
+
+    // 1. Start, then "cancel": never finish.
+    let (s1, _, _) = read(start().await).await;
+    assert_eq!(s1, StatusCode::OK);
+
+    // 2. Two more starts (a retry, plus a second person racing the same link).
+    let (s2, _, v2) = read(start().await).await;
+    assert_eq!(s2, StatusCode::OK, "a cancelled prompt must not burn the link: {v2:?}");
+    let (s3, _, v3) = read(start().await).await;
+    assert_eq!(s3, StatusCode::OK, "{v3:?}");
+
+    // 3. First finish wins; the racer is refused.
+    let mut dev = soft();
+    assert_eq!(finish_enrol(&st, &mut dev, v2, ORIGIN, None).await, StatusCode::OK);
+    let mut dev2 = soft();
+    assert_eq!(finish_enrol(&st, &mut dev2, v3, ORIGIN, None).await, StatusCode::BAD_REQUEST,
+               "one invite link must never give two passkeys");
+    assert_eq!(load(&pk.file).unwrap().user(target_email).unwrap().keys.len(), 1);
+
+    // 4. Now the link is spent.
+    let (s4, _, _) = read(start().await).await;
+    assert_eq!(s4, StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn invite_lets_the_guest_name_their_own_passkey() {
+    // Jason's second ask (2026-10-29, same live-test round as the duration
+    // fix): the guest should be able to type their own passkey name during
+    // creation, same as the normal (non-invite) "add a passkey" form
+    // already lets a signed-in person do -- not be silently auto-named.
+    let dir = temp_dir("invite-name-e2e");
+    let st = app_state(&dir, true, false, true);
+    let pk = st.passkeys.as_ref().unwrap();
+
+    let created_at = common::people::now();
+    let account_expires = created_at + 7 * 86400;
+    let target_email = "guest-naming-test@invite.local";
+    {
+        let mut file = load(&pk.file).unwrap_or_default();
+        file.users.push(UserKeys {
+            email: target_email.to_string(),
+            label: "Test".to_string(),
+            guest: true,
+            account_expires,
+            ..Default::default()
+        });
+        save(&pk.file, &file).unwrap();
+    }
+    let code = "NAMETEST0000001";
+    let mut store = common::guest_invite::Store::default();
+    store.invites.push(common::guest_invite::Invite {
+        code_hash: common::guest_invite::code_hash(code),
+        target_email: target_email.to_string(),
+        label: "Test".to_string(),
+        days: 7,
+        created: created_at,
+        redeemed: false,
+        redeemed_at: 0,
+    });
+    common::guest_invite::write(&pk.guest_invite_file, &store).unwrap();
+
+    // The guest types their own name for the device.
+    let body = json!({ "code": code, "name": "My Phone" }).to_string();
+    let r = invite_start(State(st.clone()), hdrs(Some(ORIGIN), None), body).await;
+    let (status, _, v) = read(r).await;
+    assert_eq!(status, StatusCode::OK, "{v:?}");
+
+    let mut dev = soft();
+    let finish_status = finish_enrol(&st, &mut dev, v, ORIGIN, None).await;
+    assert_eq!(finish_status, StatusCode::OK);
+
+    let file = load(&pk.file).unwrap();
+    let u = file.user(target_email).expect("guest user must exist");
+    assert_eq!(u.keys.len(), 1);
+    assert_eq!(u.keys[0].name, "My Phone", "the guest's own chosen name must be stored, not the label");
+}
+
+#[tokio::test]
+async fn invite_falls_back_to_the_label_when_the_guest_types_no_name() {
+    let dir = temp_dir("invite-no-name-e2e");
+    let st = app_state(&dir, true, false, true);
+    let pk = st.passkeys.as_ref().unwrap();
+
+    let created_at = common::people::now();
+    let account_expires = created_at + 7 * 86400;
+    let target_email = "guest-noname-test@invite.local";
+    {
+        let mut file = load(&pk.file).unwrap_or_default();
+        file.users.push(UserKeys {
+            email: target_email.to_string(),
+            label: "Robin".to_string(),
+            guest: true,
+            account_expires,
+            ..Default::default()
+        });
+        save(&pk.file, &file).unwrap();
+    }
+    let code = "NONAMETEST000001";
+    let mut store = common::guest_invite::Store::default();
+    store.invites.push(common::guest_invite::Invite {
+        code_hash: common::guest_invite::code_hash(code),
+        target_email: target_email.to_string(),
+        label: "Robin".to_string(),
+        days: 7,
+        created: created_at,
+        redeemed: false,
+        redeemed_at: 0,
+    });
+    common::guest_invite::write(&pk.guest_invite_file, &store).unwrap();
+
+    // No name typed -- empty string, same as the JS sends when the field is blank.
+    let body = json!({ "code": code, "name": "" }).to_string();
+    let r = invite_start(State(st.clone()), hdrs(Some(ORIGIN), None), body).await;
+    let (status, _, v) = read(r).await;
+    assert_eq!(status, StatusCode::OK);
+
+    let mut dev = soft();
+    let finish_status = finish_enrol(&st, &mut dev, v, ORIGIN, None).await;
+    assert_eq!(finish_status, StatusCode::OK);
+
+    let file = load(&pk.file).unwrap();
+    let u = file.user(target_email).expect("guest user must exist");
+    assert_eq!(u.keys[0].name, "Robin", "an untyped name must fall back to the guest's label");
+}
+
+// -----------------------------------------------------------------------------
+//  /logout -- THE BUG: no route existed here at all (2026-10-29 live find).
+//  /signout (POST) already worked when actually invoked; this proves the new
+//  GET page actually terminates the session, not just that it renders.
+// -----------------------------------------------------------------------------
+
+#[tokio::test]
+async fn logout_actually_invalidates_the_session_cookie_that_called_it() {
+    let dir = temp_dir("logout-e2e");
+    let st = app_state(&dir, false, false, true);
+
+    // A real, issued session -- same function the password and passkey
+    // sign-in paths both use.
+    let session_resp = crate::issue_session(&st, EMAIL, "/");
+    let set_cookie = session_resp
+        .headers()
+        .get(axum::http::header::SET_COOKIE)
+        .expect("issue_session must set a cookie")
+        .to_str()
+        .unwrap()
+        .to_string();
+    // Just the "sso=<value>" part, same as a browser would send back.
+    let cookie_pair = set_cookie.split(';').next().unwrap().to_string();
+
+    let mut before = HeaderMap::new();
+    before.insert(axum::http::header::COOKIE, cookie_pair.parse().unwrap());
+    assert_eq!(
+        crate::cookie_email(&st, &before),
+        Some(EMAIL.to_string()),
+        "sanity check: the freshly issued cookie must authenticate before logout"
+    );
+
+    // THE ACTUAL FIX: visiting /logout (no body, no form -- a plain GET, same
+    // as typing the URL or clicking a bookmark) must clear it.
+    let logout_resp = crate::logout_page(State(st.clone())).await;
+    let logout_set_cookie = logout_resp
+        .headers()
+        .get(axum::http::header::SET_COOKIE)
+        .expect("logout must set a cookie to clear the old one")
+        .to_str()
+        .unwrap()
+        .to_string();
+    let cleared_pair = logout_set_cookie.split(';').next().unwrap().to_string();
+
+    // The browser now holds whatever logout told it to -- simulate exactly
+    // that on the next request, same as a real follow-up page load would.
+    let mut after = HeaderMap::new();
+    after.insert(axum::http::header::COOKIE, cleared_pair.parse().unwrap());
+    assert_eq!(
+        crate::cookie_email(&st, &after),
+        None,
+        "a session cookie must not authenticate anything after /logout"
+    );
+
+    // NOTE on what this does NOT claim: this cookie model is stateless
+    // (self-contained, HMAC-signed -- see make_cookie_value's own doc
+    // comment), so plain logout only tells the BROWSER to drop its cookie;
+    // it does not revoke the old value server-side. Someone who somehow
+    // still held the original value could replay it directly (bypassing
+    // the browser entirely) and it would still authenticate -- that is
+    // exactly why the separate, stronger /signout-all exists (revoke_all,
+    // checked via revoked_at). Plain /logout's real, honest job is "clear
+    // the cookie in front of you right now", proven above; it was never
+    // meant to be "invalidate this value everywhere", and this test does
+    // not pretend otherwise.
+}
+
+// -----------------------------------------------------------------------------
+//  Passkey-first sign-in page (2026-10-29): auto-armed conditional UI, the
+//  new caption, and the password form hidden by default behind a disclosure.
+// -----------------------------------------------------------------------------
+
+#[tokio::test]
+async fn signin_page_has_the_new_caption_and_hides_the_password_form_by_default() {
+    ENABLED.store(true, Ordering::Relaxed);
+    let page = crate::render_signin("", "", "/kitchen/", StatusCode::OK);
+    let (_, _, html) = html_of(page).await;
+    ENABLED.store(false, Ordering::Relaxed);
+
+    assert!(html.contains("No password. No wait. Just you."), "new caption must be present");
+    assert!(!html.contains("Tap to sign in with your passkey"), "old caption must be gone");
+
+    // The password form lives inside a <details> that is NOT open by
+    // default when there is no error and no email to recover -- Jason's
+    // explicit requirement is de-emphasised, never deleted: it must still
+    // be in the page (one click away via <summary>), just not shown first.
+    assert!(html.contains("<details class=\"pw-fallback\">"), "the password fallback must be collapsed by default (no open attribute)");
+    assert!(html.contains("Use a password instead"), "the reveal control must be present");
+    // The actual fields are still really there, inside the details, not removed.
+    assert!(html.contains("name=\"email\"") && html.contains("name=\"password\""),
+            "the password path itself must never be deleted, only de-emphasised");
+}
+
+#[tokio::test]
+async fn signin_page_reopens_the_password_form_automatically_after_a_failed_attempt() {
+    // Someone who just typed a wrong password must see the error AND the
+    // form that produced it, not have it collapsed back behind a click.
+    ENABLED.store(true, Ordering::Relaxed);
+    let page = crate::render_signin("Wrong password.", "jason@example.test", "/", StatusCode::UNAUTHORIZED);
+    let (_, _, html) = html_of(page).await;
+    ENABLED.store(false, Ordering::Relaxed);
+
+    assert!(html.contains("<details class=\"pw-fallback\" open>"), "a failed password attempt must leave the form open, not collapsed");
+    assert!(html.contains("Wrong password."));
+}
+
+#[tokio::test]
+async fn signin_page_without_passkeys_shows_the_password_form_directly() {
+    // Passkeys switched off entirely: there is nothing to de-emphasise it
+    // IN FAVOUR OF, so the form must not be hidden behind a toggle pointing
+    // at a feature that does not exist.
+    ENABLED.store(false, Ordering::Relaxed);
+    let page = crate::render_signin("", "", "/", StatusCode::OK);
+    let (_, _, html) = html_of(page).await;
+
+    assert!(!html.contains("<details"), "with passkeys off, the password form must not be hidden behind anything");
+    assert!(html.contains("name=\"email\"") && html.contains("name=\"password\""));
+}
+
+// 2026-11-21 (T0965): the shared redirect guard exists and every redirect that
+// takes a value from the page or a server reply goes through it.
+#[test]
+fn every_redirect_goes_through_same_site_path() {
+    assert!(SCRIPT.contains("function sameSitePath(n)"));
+    assert!(SCRIPT.contains("(n.charAt(0) === '/' && n.charAt(1) !== '/') ? n : '/'"));
+    for line in SCRIPT.lines().filter(|l| l.contains("window.location.replace(")) {
+        assert!(
+            line.contains("sameSitePath(") || line.contains("replace('./')"),
+            "unguarded redirect: {line}"
+        );
+    }
 }

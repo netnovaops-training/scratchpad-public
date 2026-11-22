@@ -44,8 +44,11 @@ def staged(text="hello"):
     return f
 
 
+calls = []   # every file the fake scanner was asked about
+
+
 def run(answer):
-    scan.scan = lambda path: answer
+    scan.scan = lambda path: calls.append(path) or answer
     f = staged()
     try:
         r = app._intake_sync(f, "note.xyz", 5, "jason", "12345", "telegram", None)
@@ -72,9 +75,11 @@ code, r, f = run(("clean", ""))
 check("clean via /intake -> filed (200, unsorted here)", code == 200 and r and pathlib.Path(r["path"]).exists())
 
 scan.ENABLED = False
-scan.scan = lambda path: ("infected", "must not be called")
+asked_before = len(calls)
 code, r, f = run(("infected", "ignored"))
-check("scanning off -> old behaviour (filed, scanner never asked)", code == 200)
+# 11-21 doc review: this used to set a "must not be called" scanner that run() then replaced, so it proved
+# nothing about the scanner; now the fake records every call and the check counts them.
+check("scanning off -> old behaviour (filed, scanner never asked)", code == 200 and len(calls) == asked_before)
 scan.ENABLED = True
 
 # point 3: two holds of the same file in the same second
