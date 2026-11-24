@@ -29,14 +29,14 @@ for n in $ALL; do docker rm -f $n >/dev/null 2>&1; done
 docker run -d --name rl-clamav --network $NET -v $DB:/var/lib/clamav clamav/clamav:stable >/dev/null
 for i in $(seq 1 60); do docker logs rl-clamav 2>&1 | grep -q "clamd started" && break; sleep 3; done
 M="-v $CONF:/config/drop.toml:ro"
-E="--network $NET -e INTAKE_KEY=$K -e INTAKE_ALLOWED_PEERS=127.0.0.1,$GW -e LLM_BASE=http://10.255.255.1 -e AUTH_LEVELS_URL=http://10.255.255.1/auth/levels -e GOTENBERG_URL=http://10.255.255.1:3000 -e INTAKE_LLM_TIMEOUT=2 -e PENDING_ROOT=/srv/unsorted/.pending -e INTAKE_MAX_MB=10240 -e CLAMD_HOST=rl-clamav $M"
+E="--network $NET -e INTAKE_KEY=$K -e INTAKE_TOKEN=t-regress -e INTAKE_ALLOWED_PEERS=127.0.0.1,$GW -e LLM_BASE=http://10.255.255.1 -e AUTH_LEVELS_URL=http://10.255.255.1/auth/levels -e GOTENBERG_URL=http://10.255.255.1:3000 -e INTAKE_LLM_TIMEOUT=2 -e PENDING_ROOT=/srv/unsorted/.pending -e INTAKE_MAX_MB=10240 -e CLAMD_HOST=rl-clamav $M"
 docker run -d --name sbx-a -p 127.0.0.1:18201:8100 $E -v $B/a/books:/srv/books -v $B/a/manga:/srv/manga \
   -v $B/a/media:/srv/media -v $B/a/unsorted:/srv/unsorted -v $B/a/consume:/srv/consume $IMG >/dev/null
 docker run -d --name sbx-ro -p 127.0.0.1:18202:8100 $E -v $B/ro/unsorted:/srv/unsorted:ro $IMG >/dev/null
 docker run -d --name sbx-n -p 127.0.0.1:18205:8100 $E -v $B/n/unsorted:/srv/unsorted $IMG >/dev/null
 docker run -d --name sbx-b -p 127.0.0.1:18211:8100 $E -v $B/b/unsorted:/srv/unsorted $IMG >/dev/null
 docker run -d --name sbx-bres -p 127.0.0.1:18212:8100 $E -e INTAKE_RESERVE_MB=99999999 -v $B/b2/unsorted:/srv/unsorted $IMG >/dev/null
-docker run -d --name sbx-bblk -p 127.0.0.1:18213:8100 --network $NET -e INTAKE_KEY=$K -e LLM_BASE=http://10.255.255.1 -e AUTH_LEVELS_URL=http://10.255.255.1/auth/levels -e GOTENBERG_URL=http://10.255.255.1:3000 -e INTAKE_ALLOWED_PEERS=127.0.0.1 $M -v $B/b2/unsorted:/srv/unsorted $IMG >/dev/null
+docker run -d --name sbx-bblk -p 127.0.0.1:18213:8100 --network $NET -e INTAKE_KEY=$K -e INTAKE_TOKEN=t-regress -e LLM_BASE=http://10.255.255.1 -e AUTH_LEVELS_URL=http://10.255.255.1/auth/levels -e GOTENBERG_URL=http://10.255.255.1:3000 -e INTAKE_ALLOWED_PEERS=127.0.0.1 $M -v $B/b2/unsorted:/srv/unsorted $IMG >/dev/null
 docker run -d --name sbx-r -p 127.0.0.1:8199:8100 $E -v $B/r/unsorted:/srv/unsorted $IMG >/dev/null
 docker run -d --name rl-scan -p 127.0.0.1:18231:8100 $E -v $B/s/unsorted:/srv/unsorted $IMG >/dev/null
 sleep 6
@@ -53,7 +53,7 @@ run() {
   fi
 }
 run tables docker run --rm $M --entrypoint python $IMG -c "import dropconfig as d, portal, classify, scan; print('PASS tables', repr(d.ERROR), len(portal.WHO), len(portal.PRIVATE_OK), len(classify.PEOPLE), len(classify.SHELF))"
-run test_t0931b docker run --rm --network $NET -e INTAKE_KEY=$K -e CLAMD_HOST=rl-clamav $M --entrypoint python $IMG test_t0931b.py
+run test_t0931b docker run --rm --network $NET -e INTAKE_KEY=$K -e INTAKE_TOKEN=t-regress -e CLAMD_HOST=rl-clamav $M --entrypoint python $IMG test_t0931b.py
 run test_t0931 python3 $SRC/test_t0931.py http://127.0.0.1:18205 $K $B/n/unsorted sbx-n
 run test_parallel python3 $SRC/test_parallel.py http://127.0.0.1:18201 $K $B/a
 run test_part2 python3 $SRC/test_part2.py http://127.0.0.1:18201 $K $B/a http://127.0.0.1:18202

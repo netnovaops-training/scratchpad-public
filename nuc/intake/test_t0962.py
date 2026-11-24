@@ -18,7 +18,7 @@ ROOT = pathlib.Path(tempfile.mkdtemp())
 for d in ("unsorted", "stage", "tmp", "quarantine"):
     (ROOT / d).mkdir()
 os.environ.update({
-    "INTAKE_KEY": "k-test", "INTAKE_UNSORTED": str(ROOT / "unsorted"), "INTAKE_LOG": str(ROOT / "unsorted" / "log"),
+    "INTAKE_KEY": "k-test", "INTAKE_TOKEN": "t-test", "INTAKE_UNSORTED": str(ROOT / "unsorted"), "INTAKE_LOG": str(ROOT / "unsorted" / "log"),
     "INTAKE_STAGE": str(ROOT / "stage"), "TMPDIR": str(ROOT / "tmp"), "PENDING_ROOT": str(ROOT / "pending"),
     "INTAKE_QUARANTINE": str(ROOT / "quarantine"), "CLAMD_HOST": "fake-clamd", "LLM_BASE": "http://10.255.255.1",
     "INTAKE_LLM_TIMEOUT": "1", "AUTH_LEVELS_URL": "http://10.255.255.1/a", "GOTENBERG_URL": "http://10.255.255.1:3000",

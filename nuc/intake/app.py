@@ -55,6 +55,7 @@ import pathlib
 import re
 import shutil
 import tempfile
+import threading
 import time
 import urllib.parse
 import urllib.request
@@ -101,6 +102,9 @@ MAIL_ALLOW: dict[str, str] = json.loads(os.environ.get("MAIL_ALLOW", "{}"))
 async def _lifespan(_app):
     """Start the hourly sweep of leftovers (T0931 item 13, 2026-11-20); stop it with the app."""
     import resumable
+    # 2026-11-23: stale finish locks are cleared HERE, at real server start (was: at import of resumable, which the
+    # hourly rescan_held.py import also triggered, deleting live locks). Only uvicorn runs this lifespan.
+    resumable._clear_finish_locks()
     task = asyncio.create_task(resumable.sweep_loop())
     if not INTAKE_TOKEN:
         say("WARNING: INTAKE_TOKEN is not set; /intake still accepts the shared drop key (T0931 item 10)")
@@ -159,7 +163,13 @@ DROP_KEY = os.environ.get("INTAKE_KEY", "").strip().encode()
 INTAKE_TOKEN = os.environ.get("INTAKE_TOKEN", "").strip().encode()
 if not DROP_KEY:
     raise RuntimeError("INTAKE_KEY is not set: refusing to start (T0931 item 7). Set it in compose.")
+# Review 11-23 #7: with no token, any signed-in "full" user could POST /intake with someone else's sender id.
+# n8n sends the token (live since T0931 item 10), so an empty one now stops start-up like INTAKE_KEY.
+if not INTAKE_TOKEN:
+    raise RuntimeError("INTAKE_TOKEN is not set: refusing to start (review 2026-11-23 #7). Set it in compose.")
 READ_METHODS = {"GET", "HEAD", "OPTIONS"}
+# Review 11-23 #12 (Jason: "yes, a jellyfin grant"): adding a video needs "full" on this auth-service app.
+VIDEO_GRANT = os.environ.get("INTAKE_VIDEO_GRANT", "jellyfin").strip()
 VIDEO_EXT = {".mp4", ".m4v", ".mkv", ".mov", ".webm", ".avi", ".wmv", ".mpg", ".mpeg", ".ts", ".3gp"}
 
 
@@ -209,6 +219,27 @@ async def gatekeeper(request: Request, call_next):
     if peer not in _peers(ALLOWED_PEERS, peer):
         return JSONResponse({"error": "not allowed from this address"}, status_code=403)
     write = request.method not in READ_METHODS
+    # Review 11-23 #16: another site's page must not be able to make a signed-in visitor upload or share.
+    # Browsers send Sec-Fetch-Site; only "cross-site" is refused (the share sheet sends "none", server calls none).
+    if write and (request.headers.get("sec-fetch-site") or "").lower() == "cross-site":
+        return JSONResponse({"error": "not allowed from another site"}, status_code=403)
+    # Review 11-23 #6: FastAPI spools the whole multipart body to disk BEFORE a handler runs, so the MAX_MB check
+    # inside /intake and /upload came after the disk was already used, and /share had none. Refuse by the
+    # declared length first. A chunked body (no Content-Length) is capped by Caddy's request_body max_size.
+    if write and request.url.path in ("/intake", "/upload", "/share"):
+        try:
+            declared = int(request.headers.get("content-length") or 0)
+        except ValueError:
+            return JSONResponse({"error": "bad Content-Length"}, status_code=400)
+        if declared > MAX_MB * 1048576 + 16 * 1048576:          # + multipart overhead
+            return JSONResponse({"error": f"This file is bigger than the {MAX_MB / 1024:g} GB limit."}, status_code=413)
+        import resumable
+        try:
+            free = shutil.disk_usage(tempfile.gettempdir()).free
+        except OSError:
+            free = None
+        if free is not None and declared and free < declared + resumable.RESERVE:
+            return JSONResponse({"error": "The server is short of space. Try again later."}, status_code=507)
     level = (request.headers.get("x-auth-level") or "").strip().lower()
     token_door = write and request.url.path == "/intake" and bool(INTAKE_TOKEN)
     if token_door:                       # n8n: its own token instead of the drop key
@@ -247,15 +278,27 @@ def _rotate_log() -> None:
         pass                             # no log yet, or a race with another writer: try again next line
 
 
+_LOG_LOCK = threading.Lock()
+
+
 def say(msg: str) -> None:
-    """Print one line and append it to intake.log. Never put keys, tokens or file contents in `msg`."""
+    """Print one line and append it to intake.log. Never put keys, tokens or file contents in `msg`.
+
+    Race review 11-23 R6: rotate + append run under a thread lock and a flock on intake.log.lock, so two threads
+    (or the server and rescan_held) cannot both rotate and lose a generation."""
+    import fcntl
     line = f"{time.strftime('%Y-%m-%d %H:%M:%S')}  {msg}"
     print(line, flush=True)
     try:
         LOG.parent.mkdir(parents=True, exist_ok=True)
-        _rotate_log()
-        with LOG.open("a", encoding="utf-8") as f:
-            f.write(line + "\n")
+        with _LOG_LOCK, open(LOG.with_name(LOG.name + ".lock"), "a") as lk:
+            fcntl.flock(lk, fcntl.LOCK_EX)
+            try:
+                _rotate_log()
+                with LOG.open("a", encoding="utf-8") as f:
+                    f.write(line + "\n")
+            finally:
+                fcntl.flock(lk, fcntl.LOCK_UN)
     except OSError as e:
         print(f"(log file not written: {e.strerror})", flush=True)   # the line above is still in docker logs
 
@@ -282,35 +325,145 @@ def safe_name(name: str) -> str:
     # or a WHY.txt just like \n does).
     name = re.sub(r"[\x00-\x1f\x7f-\x9f\u2028\u2029]", "", name).strip().lstrip(".")
     name = re.sub(r'[<>:"|?*]', "_", name)
+    if name.lower().endswith(".intake.json"):   # R5: an upload must not look like (or overwrite) a note
+        name = name[:-len(".intake.json")] + ".intake-json"
     return name[:200] or "unnamed"
+
+
+_PLACE_LOCK = threading.Lock()          # guards _FOLDER_LOCKS only (race review 11-23 R1)
+_FOLDER_LOCKS: dict[str, threading.Lock] = {}
+PLACE_WAIT = float(os.environ.get("INTAKE_PLACE_WAIT", "120"))
+
+
+@contextlib.contextmanager
+def _folder_lock(dest_dir: pathlib.Path):
+    """One lock per destination folder, for this process's threads AND other processes (rescan_held).
+
+    Race review 11-23 R1: a single global lock was held while a NAS folder was listed and hashed, so one slow or
+    hung share stopped every filing. Waits at most PLACE_WAIT seconds for each half, then raises TimeoutError (the
+    caller keeps the file in .failed rather than hanging a pool thread)."""
+    import fcntl
+    import hashlib as _h
+    import resumable
+    key = str(dest_dir.resolve())
+    with _PLACE_LOCK:
+        tl = _FOLDER_LOCKS.setdefault(key, threading.Lock())
+    if not tl.acquire(timeout=PLACE_WAIT):
+        raise TimeoutError(f"busy filing into {dest_dir.name}")
+    try:
+        resumable.STAGE.mkdir(parents=True, exist_ok=True)
+        with open(resumable.STAGE / f".place-{_h.sha1(key.encode()).hexdigest()[:12]}.lock", "a") as lk:
+            end = time.monotonic() + PLACE_WAIT
+            while True:
+                try:
+                    fcntl.flock(lk, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    break
+                except BlockingIOError:
+                    if time.monotonic() > end:
+                        raise TimeoutError(f"busy filing into {dest_dir.name} (other process)") from None
+                    time.sleep(0.2)
+            try:
+                yield
+            finally:
+                fcntl.flock(lk, fcntl.LOCK_UN)
+    finally:
+        tl.release()
+
+
+class NotMounted(RuntimeError):
+    """The NAS share behind a library folder is not mounted (review 11-23 #4): filing would land on local disk."""
+
+
+def _check_mounted(dest_dir: pathlib.Path) -> None:
+    """Raise NotMounted when a sentinel in INTAKE_SENTINELS covers dest_dir and is missing (review 11-23 #4).
+
+    /healthz already used the sentinels (T0931 item 13) but place() did not: with the share unmounted,
+    mkdir(parents=True) built the library folder on the local disk and the file vanished behind the mount
+    when the NAS came back. A sentinel /srv/media/general/.mounted covers everything under /srv/media/general.
+    """
+    for s in [x.strip() for x in os.environ.get("INTAKE_SENTINELS", "").split(",") if x.strip()]:
+        root = pathlib.PurePosixPath(s).parent
+        if (dest_dir == pathlib.Path(root) or pathlib.Path(root) in dest_dir.parents) and not pathlib.Path(s).exists():
+            raise NotMounted(f"not mounted: {root.name}")
 
 
 def place(tmp: pathlib.Path, dest_dir: pathlib.Path, name: str,
           digest: str, meta: dict) -> dict:
+    """Move `tmp` into dest_dir as `name` (or name-<digest8>, -2, ...); a byte-identical file there = duplicate.
+
+    Review 11-23 #1: the .part name was fixed ("<name>.part"), so two same-name files filed at the same moment
+    (3 phone scans all called scan.pdf) both moved into it and one overwrote the other. Now the bytes go to a
+    UNIQUE part first (the slow cross-disk copy, outside the lock), then duplicate check, name choice and the
+    rename run under _PLACE_LOCK + flock(STAGE/.place.lock), which also covers the rescan_held process.
+    """
+    _check_mounted(dest_dir)
     dest_dir.mkdir(parents=True, exist_ok=True)
-
-    # Already here, under any name? The checksum decides, so a volume
-    # re-sent from a phone does not land twice.
-    for existing in dest_dir.iterdir():
-        if (existing.is_file() and existing.stat().st_size == tmp.stat().st_size
-                and sha256(existing) == digest):
-            tmp.unlink(missing_ok=True)
-            say(f"  duplicate of {existing.name}, skipped")
-            return {"status": "duplicate", "path": str(existing)}
-
-    target = dest_dir / name
-    if target.exists():
-        target = dest_dir / f"{target.stem}-{digest[:8]}{target.suffix}"
 
     # Write to a .part in the DESTINATION directory then rename. Kavita and
     # Paperless both watch these folders; a rename within one filesystem is
     # atomic, so neither can ever see a half-written file and try to open
     # it. Copying straight in is how you get a library full of corrupt
     # entries that only appear on slow transfers.
-    part = target.with_suffix(target.suffix + ".part")
+    import secrets as _secrets
+    part = dest_dir / f".{name[:150]}.{_secrets.token_hex(6)}.part"
     shutil.move(str(tmp), str(part))
-    part.rename(target)
+    try:
+        with _folder_lock(dest_dir):
+            # Already here, under any name? The checksum decides, so a volume
+            # re-sent from a phone does not land twice.
+            size = part.stat().st_size
+            for existing in dest_dir.iterdir():
+                if existing == part or existing.name.endswith(".part"):
+                    continue
+                try:                         # R2: Paperless may consume (delete) a file while we look at it
+                    same = existing.is_file() and existing.stat().st_size == size and sha256(existing) == digest
+                except OSError:
+                    continue
+                if same:
+                    part.unlink(missing_ok=True)
+                    say(f"  duplicate of {existing.name}, skipped")
+                    return {"status": "duplicate", "path": str(existing)}
+            stem, suffix = pathlib.PurePosixPath(name).stem, pathlib.PurePosixPath(name).suffix
+            target = dest_dir / name
+            if target.exists():
+                target = dest_dir / f"{stem}-{digest[:8]}{suffix}"
+            n = 2
+            while target.exists():
+                target = dest_dir / f"{stem}-{digest[:8]}-{n}{suffix}"
+                n += 1
+            part.rename(target)
+    except BaseException:
+        # R2: never leave the bytes as a hidden .part in the library; put them back where the caller keeps them
+        if part.exists():
+            try:
+                shutil.move(str(part), str(tmp))
+            except OSError:
+                pass
+        raise
     return {"status": "filed", "path": str(target)}
+
+
+def write_sidecar(filed: str | pathlib.Path, data: dict) -> pathlib.Path:
+    """Write the note for an unsorted file WITHOUT overwriting anything (race review 11-23 R5): exclusive create;
+    if that name is taken, a short random suffix. Returns the note's path."""
+    import secrets as _secrets
+    p = sidecar_for(filed)
+    text = json.dumps(data, indent=2)
+    for cand in (p, p.with_name(f"{pathlib.Path(filed).name}.{_secrets.token_hex(3)}.intake.json")):
+        try:
+            with open(cand, "x", encoding="utf-8") as f:
+                f.write(text)
+            return cand
+        except FileExistsError:
+            continue
+    raise FileExistsError(str(p))
+
+
+def sidecar_for(filed: str | pathlib.Path) -> pathlib.Path:
+    """The .intake.json note next to an unsorted file: '<full name>.intake.json' (review 11-23 #13; was
+    with_suffix, so bill.pdf and bill.docx shared bill.intake.json and the second overwrote the first)."""
+    p = pathlib.Path(filed)
+    return p.with_name(p.name + ".intake.json")
 
 
 @app.get("/healthz")
@@ -325,7 +478,8 @@ def healthz():
     problems = []
     try:
         resumable.STAGE.mkdir(parents=True, exist_ok=True)
-        probe = resumable.STAGE / ".healthz"
+        import secrets as _secrets
+        probe = resumable.STAGE / f".healthz-{_secrets.token_hex(4)}"   # R8: overlapping checks must not collide
         probe.write_text("ok")
         probe.unlink()
     except OSError as e:
@@ -413,6 +567,13 @@ def _virus_gate(tmp: pathlib.Path, name: str, digest: str, held_as: str, door: s
     if not scan.ENABLED:
         return
     state, detail = scan.scan(tmp)
+    # Review 11-23 #5: "skipped" (over the scan limit) is allowed for videos only. A 96 MB PDF or .docx (padding
+    # is easy) went to Paperless or a shelf unchecked. Held as "too-big" (rescan_held re-checks only "error",
+    # so it stays held for Jason to look at).
+    if state == "skipped" and pathlib.PurePosixPath(name).suffix.lower() not in VIDEO_EXT:
+        scan.hold(tmp, name, held_as, "too-big", detail, digest)
+        say(f"HELD {door}: {name} -- too big for the virus check and not a video")
+        raise HTTPException(422, "This file is too big for the virus check, so it was held for Jason to look at.")
     if state in ("infected", "error"):
         scan.hold(tmp, name, held_as, state, detail, digest)
         say(f"HELD {door}: {name} -- virus check {state}")
@@ -428,10 +589,9 @@ def _place_or_unsorted(tmp: pathlib.Path, name: str, digest: str, verdict: dict,
         res = place(tmp, pathlib.Path(verdict["dest"]), name, digest, verdict)
     else:
         res = place(tmp, UNSORTED, name, digest, verdict)
-        side = pathlib.Path(res["path"]).with_suffix(".intake.json")
-        side.write_text(json.dumps(
-            {**verdict, **sidecar, "sha256": digest, "at": time.strftime("%Y-%m-%d %H:%M:%S")},
-            indent=2), encoding="utf-8")
+        if res["status"] == "filed":     # review 11-23 #13: a duplicate keeps the original's note
+            write_sidecar(res["path"],     # R5: exclusive create, never overwrites another note
+                          {**verdict, **sidecar, "sha256": digest, "at": time.strftime("%Y-%m-%d %H:%M:%S")})
     say(f"  {res['status']}: {res['path']}")
     return res
 
@@ -514,7 +674,7 @@ def level_for(email: str, app: str) -> str | None:
             body = json.loads(r.read())
     except Exception as e:  # noqa: BLE001
         # T0931 item 14: the exception text can hold the URL; log only its type
-        say(f"level check failed for {email} on {app}: {type(e).__name__}")
+        say(f"level check failed for {_person(email) or 'unmapped'} on {app}: {type(e).__name__}")  # 11-23 #14
         return None
     got = (body.get("levels") or {}).get(app)
     return got if got in ("view", "full") else None
@@ -545,6 +705,14 @@ async def upload(
                 out.write(chunk)
         # A3: the blocking work (hash, model, grant lookup, move) runs in a worker thread.
         return JSONResponse(await run_in_threadpool(route_file, tmp, name, size, email, hint, shelf))
+    except HTTPException:
+        raise                            # refused (too big, held, not allowed): handled, nothing to keep here
+    except Exception as e:
+        # Review 11-23 #3: this door had no keep_failed, so a NAS hiccup or a bug deleted the bytes in `finally`.
+        from resumable import keep_failed
+        keep_failed(tmp_dir, email, name, [{"name": name, "status": "error", "detail": f"{type(e).__name__}: {e}"}])
+        say(f"KEPT drop file from {_person(email) or 'unmapped'} after {type(e).__name__}")
+        raise
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
@@ -586,7 +754,7 @@ def route_file(tmp: pathlib.Path, name: str, size: int, email: str,
         verdict = {
             "kind": "video", "person": who,
             "dest": f"/srv/media/{sub}", "unpack": False,
-            "why": f"uploaded by {who or email} to the {sub} library",
+            "why": f"uploaded by {who or 'unmapped'} to the {sub} library",   # 11-23 #14: no email in notes
         }
     else:
         verdict = classify(str(tmp), name, None, who)
@@ -600,6 +768,8 @@ def route_file(tmp: pathlib.Path, name: str, size: int, email: str,
     # rejected upload just means they send it again or ask somebody to
     # do it for them, and neither leaves a record.
     grant = classify_mod.GRANT_FOR_KIND.get(verdict["kind"])
+    if verdict["kind"] == "video" and not grant:
+        grant = VIDEO_GRANT or None       # review 11-23 #12: videos had no grant check at all
     if grant:
         lvl = level_for(email, grant)
         if lvl != "full":
@@ -612,10 +782,10 @@ def route_file(tmp: pathlib.Path, name: str, size: int, email: str,
                 "level": lvl or "none",
                 "why": verdict["why"] + " | held: {} has {} access to "
                        "{}, so it is not filed into the shared library"
-                       .format(email, lvl or "no", grant),
+                       .format(who or "unmapped", lvl or "no", grant),   # 11-23 #14
             }
 
-    say(f"drop from {email}: {name} ({size/1048576:.1f}MB) "
+    say(f"drop from {who or 'unmapped'}: {name} ({size/1048576:.1f}MB) "   # 11-23 #14: person id, not email
         f"-> {verdict['kind']} :: {verdict['why']}")
 
     res = _place_or_unsorted(tmp, name, digest, verdict, {"uploader": email, "source": "drop"})

@@ -17,6 +17,9 @@ Progress: D:\\backups\\photo-verify\\unify\\progress.log
 Safety: opens files for reading only. Never moves, copies, renames or deletes anything (phase 2 is a separate,
 Jason-approved script). Skips Synology system folders (#recycle, #snapshot, @eaDir, .Synology*, .tmp.drivedownload).
 OUTCOME 2026-11-17: written for T1014 phase 1; first run started detached the same day (see progress.log).
+HISTORICAL 2026-11-24: the library left the Pictures share for \\\\192.168.1.68\\home\\Photos\\Library (P: maps to
+\\\\192.168.1.68\\home\\Photos now). These ROOTS describe the 11-17 layout; the current tools are in
+D:\\scratchpad\\tools\\photos_syno\\.
 """
 import csv
 import hashlib

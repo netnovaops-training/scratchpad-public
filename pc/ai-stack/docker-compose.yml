@@ -1162,8 +1162,15 @@ services:
     labels:
       ai-stack.role: "heartbeat + usage graphs - opens at localhost:5678"
       ai-stack.order: "12"
-    user: "0:0"    # see n8n/Dockerfile - docker.sock already makes this moot
+    # T0056 2026-11-23: runs as the image's own `node` user (1000), not root.
+    # Root was only ever needed to open the raw docker.sock, which is gone
+    # (see DOCKER_HOST below). The n8n_data volume was chowned to 1000:1000
+    # once, the same day, so node can read its config and database.
+    # Tested: docker ps/inspect/stats/system df work as 1000 through the proxy.
+    user: "1000:1000"
     depends_on:
+      n8n_docker_proxy:
+        condition: service_started
       # service_started, NOT service_healthy. n8n does not need litellm to
       # boot -- it only queries it for the models/latency/tokens charts, and
       # those degrade to "no data" by themselves. Requiring health here meant
@@ -1185,14 +1192,16 @@ services:
       # that hostmetrics.ps1 writes from the Windows side. None of those are
       # visible from inside a container. A plain file drop, not a new port.
       - ./transcripts:/transcripts:ro
-      # What the user chose over the read-only sidecar: n8n sees the Docker
-      # API directly. This is root-equivalent on this PC -- anyone who can
-      # edit a workflow here, or any bug in a community node, can ask the
-      # Docker daemon to start a container with any mount it wants. That is
-      # the deliberate tradeoff for a Docker node that works like Docker
-      # actually works, instead of a narrower read-only JSON endpoint.
-      - /var/run/docker.sock:/var/run/docker.sock
+      # T0056 2026-11-23: the raw /var/run/docker.sock mount is GONE. It was
+      # root-equivalent on this PC, and the public Koalendar webhook runs in
+      # this same n8n. The workflows only ever READ Docker (ps, inspect,
+      # stats, system df); the three exec uses were moved off Docker (GPU now
+      # comes from host-metrics.json, model inventory over HTTP, telephony and
+      # teabook nodes emptied - both retired 11-19). The docker CLI now talks
+      # to n8n_docker_proxy below, which answers reads and refuses exec, run,
+      # and every POST with 403 (checked 11-23).
     environment:
+      - DOCKER_HOST=tcp://n8n_docker_proxy:2375
       - GENERIC_TIMEZONE=${BUSINESS_TZ:-America/Los_Angeles}
       - TZ=${BUSINESS_TZ:-America/Los_Angeles}
       # Loopback-only and no TLS in front of it, so n8n's session cookie has to
@@ -1272,6 +1281,37 @@ services:
       # fix the permissions itself instead of rejecting the file, which is a
       # prime suspect for "everything resets on refresh".
       - N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=true
+
+  # ---------------------------------------------------------------------------
+  #  n8n_docker_proxy -- read-only Docker for n8n (T0056, 2026-11-23)
+  #
+  #  Its own proxy, not the web stack's docker_proxy, so giving n8n
+  #  `docker system df` (SYSTEM=1) does not widen what the watchdog can read.
+  #  Reads only: CONTAINERS covers ps, inspect and stats; SYSTEM covers
+  #  system df; PING and VERSION are the image's defaults the CLI needs.
+  #  POST and EXEC stay 0, so `docker exec` and `docker run` get 403.
+  #  No ports: only containers on ai-stack_default can reach it.
+  #  Rollback: compose copy in D:\archive\2026-11-23\ai-stack-T0056\ and
+  #  image tag ai-stack/n8n:before-T0056.
+  # ---------------------------------------------------------------------------
+  n8n_docker_proxy:
+    image: tecnativa/docker-socket-proxy:latest
+    container_name: n8n_docker_proxy
+    restart: unless-stopped
+    logging: *default-logging
+    labels:
+      ai-stack.role: "read-only Docker API for n8n (no exec, no POST)"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - CONTAINERS=1
+      - SYSTEM=1
+      - POST=0
+      - EXEC=0
+      - IMAGES=0
+      - VOLUMES=0
+      - NETWORKS=0
+      - INFO=0
 
 
   # --- netdata: REMOVED 2026-08-31 at Jason's word. The one wall

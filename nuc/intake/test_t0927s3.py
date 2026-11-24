@@ -15,7 +15,7 @@ ROOT = pathlib.Path(tempfile.mkdtemp())
 for d in ("unsorted", "stage", "tmp", "quarantine"):
     (ROOT / d).mkdir()
 os.environ.update({
-    "INTAKE_KEY": "k-test", "INTAKE_UNSORTED": str(ROOT / "unsorted"), "INTAKE_LOG": str(ROOT / "unsorted" / "log"),
+    "INTAKE_KEY": "k-test", "INTAKE_TOKEN": "t-test", "INTAKE_UNSORTED": str(ROOT / "unsorted"), "INTAKE_LOG": str(ROOT / "unsorted" / "log"),
     "INTAKE_STAGE": str(ROOT / "stage"), "TMPDIR": str(ROOT / "tmp"), "INTAKE_QUARANTINE": str(ROOT / "quarantine"),
     "CLAMD_HOST": "fake-clamd", "LLM_BASE": "http://10.255.255.1", "INTAKE_LLM_TIMEOUT": "1",
     "AUTH_LEVELS_URL": "http://10.255.255.1/a", "GOTENBERG_URL": "http://10.255.255.1:3000", "INTAKE_RESERVE_MB": "1",
@@ -67,7 +67,7 @@ for door in ("drop", "intake"):
     code, r = call(door, ("clean", ""), text=f"clean {door} file")
     check(f"{door}: clean -> filed through the shared placement", code == 200 and len(places) == p0 + 1
           and pathlib.Path(r["path"]).read_text() == f"clean {door} file")
-    side = json.loads(pathlib.Path(r["path"]).with_suffix(".intake.json").read_text())
+    side = json.loads(pathlib.Path(r["path"] + ".intake.json").read_text())
     if door == "drop":
         check("drop sidecar: uploader + source drop + sha256 + time, as before",
               side.get("uploader") == "someone@example.com" and side.get("source") == "drop" and "sha256" in side and "at" in side)

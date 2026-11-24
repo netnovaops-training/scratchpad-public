@@ -31,7 +31,10 @@ foreach ($d in Get-PhysicalDisk) {
     $model = ($d.FriendlyName -replace '[^0-9A-Za-z]+', '_').Trim('_')
     # Every row has the SAME columns: Export-Csv -Append keeps the first header and silently drops unknown ones,
     # so a first "needs admin" row would have cut every later counter (found in the 11-21 test run).
-    $row = [ordered]@{ time = $now; disk = $d.DeviceId; model = $model; media = "$($d.MediaType)"; temp_c = '';
+    # 2026-11-23: + serial and the counters' own DeviceId (counter_disk). With two identical Seagates the counter rows
+    # swapped between disks from one run to the next (11-21..11-23 CSVs), so a row now says which drive it really is.
+    $row = [ordered]@{ time = $now; disk = $d.DeviceId; serial = "$($d.SerialNumber)".Trim(); counter_disk = "$($c.DeviceId)";
+                       model = $model; media = "$($d.MediaType)"; temp_c = '';
                        power_on_hours = ''; start_stop_cycles = ''; load_unload_cycles = ''; read_errors = '';
                        wear_pct = ''; note = '' }
     if ($null -eq $c) {
@@ -52,9 +55,9 @@ foreach ($d in Get-PhysicalDisk) {
     $rows += [pscustomobject]$row
 }
 
-$file = Join-Path $dir ("drives-" + (Get-Date -Format 'yyyy-MM-dd') + '.csv')
+$file = Join-Path $dir ("drives2-" + (Get-Date -Format 'yyyy-MM-dd') + '.csv')   # drives2: new columns (serial, counter_disk)
 if (Test-Path $file) { $rows | Export-Csv $file -Append -NoTypeInformation -Force } else { $rows | Export-Csv $file -NoTypeInformation }
-Get-ChildItem $dir -Filter 'drives-*.csv' | Where-Object LastWriteTime -lt (Get-Date).AddDays(-30) | Remove-Item -Force
+Get-ChildItem $dir -Filter 'drives*-*.csv' | Where-Object LastWriteTime -lt (Get-Date).AddDays(-30) | Remove-Item -Force
 
 if ($lines.Count -gt 2) {   # only when real counters were read, so Grafana never shows a half-empty set
     try {

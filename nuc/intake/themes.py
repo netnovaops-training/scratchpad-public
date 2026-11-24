@@ -108,19 +108,38 @@ GARDEN = {
 # Colours: the atomic night sky and palette (contrast already measured for atomic); only the picture differs.
 # Every SVG attribute value before "/>" is QUOTED (an unquoted value swallows the slash: 11-21 garden debug).
 HORIZON = {
-    "root": ATOMIC["root"],
-    "theme_color": ATOMIC["theme_color"],
+    # 2026-11-23 evening (Jason: "purple and black ... and orange like an event horizon"): its own palette, was the
+    # atomic navy + cyan. --cyan is the accent NAME the page uses; here it holds purple. "html .bar" beats the page's
+    # own .bar track (same trick as garden): #7a62b3 is 3.4:1 on the sky (WCAG 1.4.11 wants 3).
+    "root": ":root{--bg:#07050d;--card:#151024;--ink:#efe9ff;--dim:#ab9fcc;--cyan:#b388ff;--orange:#ff8a3d;--ok:#4ade80;--bad:#f87171;--spin:7s}\nhtml .bar{background:#7a62b3}",
+    # Review 11-23 #3: the Drop page (portal.py) uses these tokens too, so it matches /sending and the splash.
+    # Contrast on --bg #0b1026: ink 16:1, dim 7.6:1, accent 10:1; on-accent ink on the cyan button 10:1.
+    "portal_root": "--ink:#efe9ff;--dim:#ab9fcc;--line:#2c2142;--bg:#07050d;--card:#151024;--accent:#b388ff;"
+                   "--on-accent:#07050d;--accent-soft:#2a1b47;--warn:#ff8a3d;--warn-soft:#2a1a10;--ok:#4ade80;--bad:#f87171;color-scheme:dark",
+    # The small mark beside the Drop page heading: the app icon's black hole and disk, simplified.
+    "mark": '<svg class="mark" width="30" height="30" viewBox="0 0 96 96" aria-hidden="true">'
+            '<ellipse cx="48" cy="48" rx="44" ry="12" fill="none" stroke="#a66bff" stroke-width="5" transform="rotate(-16 48 48)"/>'
+            '<circle cx="48" cy="48" r="24" fill="#000"/><circle cx="48" cy="48" r="26" fill="none" stroke="#ff8a3d" stroke-width="4"/></svg>',
+    "theme_color": "#07050d",
+    # 2026-11-23 (Jason: the install sheet still showed the old logo): Novashare's own icon, a black hole with
+    # its disk (gen_icons_horizon.py); without this key share.py served the atom.
+    "icon_module": "icons_png_horizon",
     "svg": """<svg class=atom viewBox="0 0 96 96" aria-hidden=true>
  <style>
   .atom{--g:0}
   .atom .star{transform-origin:48px 48px;transform:scale(calc(1 - var(--g) * 0.85));opacity:calc(1 - var(--g) * 0.85);transition:transform .7s ease,opacity .7s ease}
   .atom .hole{transform-origin:48px 48px;transform:scale(var(--g));transition:transform .7s ease}
   .atom .disk{transform-origin:48px 48px;transform:scale(calc(1.3 - var(--g) * 0.5));opacity:calc(0.08 + var(--g) * 0.92);transition:transform .7s ease,opacity .7s ease}
-  .atom .infall{transform-origin:48px 48px;transform:scale(calc(1 - var(--g) * 0.6));transition:transform .7s ease}
+  .atom .infall{transform-origin:48px 48px;transform:scale(calc(1 - var(--g) * 0.6));opacity:calc(1 - max(0, var(--g) - 0.9) * 10);transition:transform .7s ease,opacity .7s ease}
   .atom .gulp{transform-origin:48px 48px;opacity:0}
   /* hz-full: only when the upload really reached 100 % (an empty page is also body.done: keep the star) */
   body.done .atom.hz-full .star{transform:scale(0);opacity:0}
-  body.done .atom .star .nucleus,body.bad .atom .star .nucleus{fill:url(#hzstar)}
+  body.done .atom .star .nucleus{fill:url(#hzstar)}
+  /* review 11-23 #4: an error shows at ANY progress (the red ring sat in .hole, scaled to 0 at 0 %) */
+  body.bad .atom .star .nucleus{fill:var(--bad)}
+  body.bad .atom .hole{transform:scale(max(.35,var(--g)))}
+  /* #9: finished stays visible after the gulp (and with reduced motion): the photon ring turns ok */
+  body.done .atom.hz-full .ring{stroke:var(--ok);transition:stroke .6s ease}
   body.done .atom.hz-full .hole{transform:scale(1)}
   body.done .atom.hz-full .gulp{animation:hz-gulp 1.3s cubic-bezier(.5,0,.9,.4) 1 forwards}
   @keyframes hz-gulp{0%{transform:scale(2.2);opacity:0}25%{opacity:.9}100%{transform:scale(.45);opacity:0}}
@@ -129,25 +148,25 @@ HORIZON = {
  </style>
  <defs>
   <radialGradient id="hzstar"><stop offset="0" stop-color="#fffaf0"/><stop offset=".35" stop-color="#ffd27a"/><stop offset=".75" stop-color="#ff9b3d"/><stop offset="1" stop-color="#ff6a3d" stop-opacity="0"/></radialGradient>
-  <radialGradient id="hzglow"><stop offset="0" stop-color="#ffb46b" stop-opacity=".45"/><stop offset=".5" stop-color="#5ad1ff" stop-opacity=".1"/><stop offset="1" stop-color="#5ad1ff" stop-opacity="0"/></radialGradient>
+  <radialGradient id="hzglow"><stop offset="0" stop-color="#ff8a3d" stop-opacity=".4"/><stop offset=".5" stop-color="#8a4dff" stop-opacity=".18"/><stop offset="1" stop-color="#8a4dff" stop-opacity="0"/></radialGradient>
  </defs>
  <circle class="glow" cx="48" cy="48" r="40" fill="url(#hzglow)"/>
  <g class="disk"><g transform="rotate(-16 48 48)">
-  <ellipse cx="48" cy="48" rx="36" ry="9" fill="none" stroke="#ffb46b" stroke-width="2.2" stroke-opacity=".75"/>
-  <ellipse cx="48" cy="48" rx="28" ry="6.5" fill="none" stroke="#5ad1ff" stroke-width="1.4" stroke-opacity=".7"/>
+  <ellipse cx="48" cy="48" rx="36" ry="9" fill="none" stroke="#ff8a3d" stroke-width="2.2" stroke-opacity=".8"/>
+  <ellipse cx="48" cy="48" rx="28" ry="6.5" fill="none" stroke="#a66bff" stroke-width="1.4" stroke-opacity=".8"/>
  </g></g>
  <g class="infall"><g class="orbits">
-  <circle cx="84" cy="48" r="1.8" fill="#ffd27a"/><circle cx="20" cy="40" r="1.5" fill="#bdeeff"/>
-  <circle cx="60" cy="16" r="1.3" fill="#fff"/><circle cx="34" cy="80" r="1.6" fill="#ffb46b"/>
-  <circle cx="76" cy="74" r="1.2" fill="#bdeeff"/><circle cx="14" cy="62" r="1.2" fill="#fff"/>
-  <circle cx="70" cy="26" r="1" fill="#ffd27a"/><circle cx="26" cy="22" r="1" fill="#bdeeff"/>
+  <circle cx="84" cy="48" r="1.8" fill="#ffb35c"/><circle cx="20" cy="40" r="1.5" fill="#d8c4ff"/>
+  <circle cx="60" cy="16" r="1.3" fill="#fff"/><circle cx="34" cy="80" r="1.6" fill="#ff8a3d"/>
+  <circle cx="76" cy="74" r="1.2" fill="#d8c4ff"/><circle cx="14" cy="62" r="1.2" fill="#fff"/>
+  <circle cx="70" cy="26" r="1" fill="#ffb35c"/><circle cx="26" cy="22" r="1" fill="#d8c4ff"/>
  </g></g>
  <g class="star"><circle class="nucleus" cx="48" cy="48" r="22" fill="url(#hzstar)"/></g>
  <g class="hole">
   <circle cx="48" cy="48" r="13" fill="#000"/>
-  <circle class="ring" cx="48" cy="48" r="14.6" fill="none" stroke="#ffe6b0" stroke-width="1.6"/>
+  <circle class="ring" cx="48" cy="48" r="14.6" fill="none" stroke="#ffb35c" stroke-width="1.8"/>
  </g>
- <circle class="gulp" cx="48" cy="48" r="16" fill="none" stroke="#ffd27a" stroke-width="2"/>
+ <circle class="gulp" cx="48" cy="48" r="16" fill="none" stroke="#b388ff" stroke-width="2"/>
  <script>
  // The collapse follows the upload; it reads only #bar's aria-valuenow and writes --g.
  addEventListener('DOMContentLoaded', () => {

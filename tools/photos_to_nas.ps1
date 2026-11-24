@@ -10,7 +10,11 @@ Writes:       P:\From-M-Pictures\<path under M:\Pictures>   (P: = \\192.168.1.68
 Log:          D:\backups\photo-verify\to-nas.log (progress every 500 files), to-nas-result.csv (path, status)
 Next step (separate, needs Jason's OK on the plan): dedupe on the NAS, then clear M:.
 OUTCOME 2026-11-17: written and started; see the log.
+RETIRED 2026-11-24: the library moved to the personal space (\\192.168.1.68\home\Photos\Library, P: now maps
+there) and the PC fill-in is done by D:\scratchpad\tools\photos_syno\pc_fill.py. A 2026-11-24 03:12 run started by
+mistake; this guard stops any rerun from writing into the old Pictures share.
 #>
+Write-Host 'photos_to_nas.ps1 is retired (2026-11-24): use D:\scratchpad\tools\photos_syno\pc_fill.py'; exit 1
 $ErrorActionPreference = 'Continue'
 $report = 'D:\backups\photo-verify\report.csv'
 $dstRoot = '\\192.168.1.68\Pictures\From-M-Pictures'

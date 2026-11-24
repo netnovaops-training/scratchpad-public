@@ -17,7 +17,7 @@ ROOT = pathlib.Path(tempfile.mkdtemp())
 for d in ("unsorted", "stage", "tmp", "quarantine"):
     (ROOT / d).mkdir()
 os.environ.update({
-    "INTAKE_KEY": "k-test", "INTAKE_UNSORTED": str(ROOT / "unsorted"), "INTAKE_LOG": str(ROOT / "unsorted" / "log"),
+    "INTAKE_KEY": "k-test", "INTAKE_TOKEN": "t-test", "INTAKE_UNSORTED": str(ROOT / "unsorted"), "INTAKE_LOG": str(ROOT / "unsorted" / "log"),
     "INTAKE_STAGE": str(ROOT / "stage"), "TMPDIR": str(ROOT / "tmp"), "INTAKE_QUARANTINE": str(ROOT / "quarantine"),
     "CLAMD_HOST": "fake-clamd", "LLM_BASE": "http://10.255.255.1", "AUTH_LEVELS_URL": "http://10.255.255.1/a",
     "GOTENBERG_URL": "http://10.255.255.1:3000",
@@ -48,8 +48,8 @@ why = json.loads((a / "WHY.txt").read_text())
 out = list((ROOT / "unsorted").glob("doc*.txt"))
 check("scanner back + clean -> released", c["clean"] == 1 and why["state"] == "released")
 check("... file now in unsorted with its content", len(out) == 1 and out[0].read_text() == "first file")
-check("... sidecar says why", out[0].with_suffix(".intake.json").exists()
-      and "re-scanned" in json.loads(out[0].with_suffix(".intake.json").read_text())["why"])
+check("... sidecar says why", out[0].with_name(out[0].name + ".intake.json").exists()
+      and "re-scanned" in json.loads(out[0].with_name(out[0].name + ".intake.json").read_text())["why"])
 check("... nothing left held in that folder", not any(p.suffix == ".held" for p in a.iterdir()))
 
 b = hold("second file", "error")

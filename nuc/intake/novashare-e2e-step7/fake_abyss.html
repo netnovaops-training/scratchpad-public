@@ -1,0 +1,21 @@
+<!doctype html><html lang=en><meta charset=utf-8><title>stand-in Abyss (sandbox only)</title>
+<!-- harden_sbx.sh serves this on http://127.0.0.1:18296 as the "Abyss" origin (INTAKE_ABYSS_ORIGIN in the sandbox).
+     It does what Abyss /album/ does (album.js keyring()): open the Novashare /keyring popup, wait for keyring-ready
+     from exactly that window and origin, send one request, keep the answer. test_harden_browser.py drives it. -->
+<p id=out>ready</p>
+<script>
+window.keyring = (door, request) => new Promise((resolve, reject) => {
+  const origin = new URL(door).origin;
+  const w = window.open(door + '/keyring', 'abyss-keyring', 'popup,width=480,height=640');
+  if (!w) return reject(new Error('popup blocked'));
+  let sent = false;
+  const on = (e) => {
+    if (e.origin !== origin || e.source !== w || !e.data || typeof e.data !== 'object') return;
+    if (e.data.type === 'keyring-ready' && !sent) { sent = true; w.postMessage(request, origin); }
+    else if (e.data.type === 'keyring-error') { removeEventListener('message', on); reject(new Error(e.data.why)); }
+    else if (e.data.type === 'keyring-wrapped' || e.data.type === 'keyring-keys') { removeEventListener('message', on); resolve(e.data); }
+  };
+  addEventListener('message', on);
+});
+</script>
+</html>

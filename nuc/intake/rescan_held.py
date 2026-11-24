@@ -79,9 +79,8 @@ def one(app, folder: pathlib.Path, counts: dict) -> None:
                "why": f"held while the virus check was down; re-scanned {state} at {time.strftime('%F %T')}"}
     res = app.place(held[0], app.UNSORTED, name, digest, verdict)
     if res["status"] == "filed":
-        side = pathlib.Path(res["path"]).with_suffix(".intake.json")
-        side.write_text(json.dumps({**verdict, "source": "quarantine re-scan", "sha256": digest,
-                                    "held_in": folder.name, "at": time.strftime("%F %T")}, indent=2))
+        app.write_sidecar(res["path"], {**verdict, "source": "quarantine re-scan", "sha256": digest,   # R5
+                                        "held_in": folder.name, "at": time.strftime("%F %T")})
     why.update(state="released", released_to=res["path"], released_status=res["status"],
                rescanned=time.strftime("%F %T"))
     why_file.write_text(json.dumps(why, indent=1))

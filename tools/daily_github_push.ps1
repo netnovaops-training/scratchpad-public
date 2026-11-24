@@ -6,7 +6,7 @@ How to run:   powershell -NoProfile -ExecutionPolicy Bypass -File D:\scratchpad\
 Scheduled:    Windows task "Scratchpad daily GitHub push", 16:30 every day (made 2026-11-16 at 23:30; moved
               to 16:30 on 11-17 so GitHub checks and Dependabot see the day's work before the 03:00 merge).
 Reads/writes: D:\scratchpad (git), remotes nuc (-> Gitea via the NUC's post-receive hook) and github
-              (github.com/netnovaops-training/Scratchpad, private). Log: D:\scratchpad\.git\daily-push.log
+              (github.com/netnovaops-training/scratchpad-private, private; renamed from Scratchpad 2026-11-23). Log: D:\scratchpad\.git\daily-push.log
 How to test:  run it by hand; the log ends with "github: pushed <sha>" or "github: up to date".
 
 Order is the rule Jason set 11-16: Gitea gets everything first, GitHub gets it once a day.

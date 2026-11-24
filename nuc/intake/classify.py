@@ -80,6 +80,11 @@ LLM_TIMEOUT = float(os.environ.get("INTAKE_LLM_TIMEOUT", "120"))
 # files at once; each ask_model holds a worker thread for up to 2 x LLM_TIMEOUT, and a single 7B model on the
 # PC only queues them anyway. One at a time keeps the thread pool free for uploads; the others wait their turn.
 _MODEL_LOCK = threading.Semaphore(1)
+# Review 11-23 #10: the lock was waited for without limit INSIDE a pool thread, so files queued behind a sleeping
+# PC (2 x 120 s each) held every worker thread and starved the other doors. Now: wait at most MODEL_WAIT for a
+# turn (then "unknown:busy" -> unsorted, recoverable), and fail the CONNECT in LLM_CONNECT seconds.
+MODEL_WAIT = float(os.environ.get("INTAKE_MODEL_WAIT", "30"))
+LLM_CONNECT = float(os.environ.get("INTAKE_LLM_CONNECT", "5"))
 
 # --------------------------------------------------------------------------
 # WHO. A caption tag or the sending account, and nothing else.
@@ -223,6 +228,20 @@ def _unwrap(text: str) -> str:
     return text
 
 
+class _ReleaseAfter:
+    """`with _ReleaseAfter(lock):` releases a lock that was already acquired (with a timeout) when the block ends."""
+
+    def __init__(self, lock):
+        self.lock = lock
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self.lock.release()
+        return False
+
+
 def ask_model(name: str, text: str) -> str:
     """One word back, from a closed list. Temperature 0.
 
@@ -254,13 +273,15 @@ def ask_model(name: str, text: str) -> str:
     # under it, while the second -- with the model now resident -- returns
     # in under a second. Retrying more than once would just be waiting on
     # something genuinely broken while a user's file sits in a temp dir.
-    with _MODEL_LOCK:                    # T0931 item 16
+    if not _MODEL_LOCK.acquire(timeout=MODEL_WAIT):     # review 11-23 #10: bounded wait
+        return "unknown:busy"
+    with _ReleaseAfter(_MODEL_LOCK):     # T0931 item 16 (one model call at a time)
         for attempt in (1, 2):
             try:
                 r = httpx.post(f"{LLM_BASE}/v1/chat/completions", json=body,
-                               headers=headers, timeout=LLM_TIMEOUT)
+                               headers=headers, timeout=httpx.Timeout(LLM_TIMEOUT, connect=LLM_CONNECT))
                 r.raise_for_status()
-                out = r.json()["choices"][0]["message"]["content"]
+                out = r.json()["choices"][0]["message"]["content"] or ""   # 11-23 #11: null content
                 break
             except Exception as e:  # noqa: BLE001  -- never raises (see above): any failure means "unknown"
                 if attempt == 2:

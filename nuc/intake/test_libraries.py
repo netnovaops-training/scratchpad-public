@@ -105,7 +105,7 @@ else:
 # required settings
 base = {k: v for k, v in os.environ.items() if k not in ("LLM_BASE", "AUTH_LEVELS_URL", "GOTENBERG_URL")}
 full = dict(base, LLM_BASE="http://10.255.255.1", AUTH_LEVELS_URL="http://10.255.255.1/a",
-            GOTENBERG_URL="http://10.255.255.1:3000", INTAKE_KEY="k-test")  # INTAKE_KEY: required since T0931
+            GOTENBERG_URL="http://10.255.255.1:3000", INTAKE_KEY="k-test", INTAKE_TOKEN="t-test")  # INTAKE_KEY: required since T0931
 for name in ("LLM_BASE", "AUTH_LEVELS_URL", "GOTENBERG_URL"):
     env = {k: v for k, v in full.items() if k != name}
     r = subprocess.run([sys.executable, "-c", "import app"], env=env, capture_output=True, text=True, timeout=120)
