@@ -8,6 +8,8 @@ Run (NAS):  python3 ~/t1014/nas_verify.py
 3) totals: files and GB per share (no @eaDir/#recycle) and in the holding folder.
 4) 20 photos for Jason's phone spot check, spread over the kinds of move.
 OUTCOME 2026-11-17: written for T1014 phase 2.
+HISTORICAL 2026-11-24: the library moved from /volume1/Pictures to /volume1/homes/jay/Photos/Library; the
+11-24 checks are photos_syno/nas_move.py verify and photos_syno/nas_dedupe.py verify.
 """
 import hashlib
 import json

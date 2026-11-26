@@ -1,0 +1,1095 @@
+{
+ "uid": "hw-health",
+ "title": "Hardware health",
+ "tags": [
+  "hardware",
+  "pc",
+  "nas",
+  "nuc"
+ ],
+ "timezone": "browser",
+ "schemaVersion": 39,
+ "version": 1,
+ "editable": false,
+ "refresh": "1m",
+ "time": {
+  "from": "now-24h",
+  "to": "now"
+ },
+ "description": "Fans, temperatures, every drive's SMART (PC, NUC, NAS) and NAS pool/cache state. Source: D:\\scratchpad\\tools\\hwmon (2026-11-24).",
+ "templating": {
+  "list": [
+   {
+    "name": "ds",
+    "label": "Prometheus",
+    "type": "datasource",
+    "query": "prometheus",
+    "current": {
+     "text": "Prometheus",
+     "value": "Prometheus"
+    },
+    "hide": 0
+   }
+  ]
+ },
+ "panels": [
+  {
+   "id": 100,
+   "type": "row",
+   "title": "Problems now",
+   "collapsed": false,
+   "gridPos": {
+    "x": 0,
+    "y": 0,
+    "w": 24,
+    "h": 1
+   },
+   "panels": []
+  },
+  {
+   "id": 1,
+   "type": "table",
+   "title": "NAS pools, volumes, SSD cache, disks (anything not normal is a problem)",
+   "description": "DSM web API every 15 min (nas_dsm_prom.py). 11-24 04:03: the SSD cache on /volume1 lost one of its 2 SSDs (nvme1n1). A status change emails Jason (hw_watch.py).",
+   "gridPos": {
+    "x": 0,
+    "y": 1,
+    "w": 12,
+    "h": 8
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${ds}"
+   },
+   "targets": [
+    {
+     "expr": "hw_nas_state",
+     "instant": true,
+     "format": "table",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${ds}"
+     },
+     "refId": "A"
+    }
+   ],
+   "transformations": [
+    {
+     "id": "organize",
+     "options": {
+      "excludeByName": {
+       "Time": true,
+       "Value": true,
+       "__name__": true,
+       "instance": true,
+       "job": true,
+       "host": true,
+       "role": true
+      },
+      "indexByName": {
+       "kind": 0,
+       "name": 1,
+       "status": 2
+      }
+     }
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {},
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byName",
+       "options": "status"
+      },
+      "properties": [
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-text"
+        }
+       },
+       {
+        "id": "mappings",
+        "value": [
+         {
+          "type": "regex",
+          "options": {
+           "pattern": "^normal.*",
+           "result": {
+            "color": "green",
+            "index": 0
+           }
+          }
+         },
+         {
+          "type": "regex",
+          "options": {
+           "pattern": "^(attention|degrade|crash|abnormal|not_use).*",
+           "result": {
+            "color": "red",
+            "index": 1
+           }
+          }
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "id": 2,
+   "type": "stat",
+   "title": "NAS SSD cache: SSDs working / designed",
+   "description": "A read-write SSD cache needs both SSDs. 1 of 2 = degraded: cached writes are unprotected.",
+   "gridPos": {
+    "x": 12,
+    "y": 1,
+    "w": 4,
+    "h": 4
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${ds}"
+   },
+   "targets": [
+    {
+     "expr": "hw_nas_cache_devices{which=\"normal\"}",
+     "legendFormat": "working",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${ds}"
+     },
+     "refId": "A"
+    },
+    {
+     "expr": "hw_nas_cache_devices{which=\"designed\"}",
+     "legendFormat": "designed",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${ds}"
+     },
+     "refId": "B"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "red",
+        "value": null
+       },
+       {
+        "color": "green",
+        "value": 2
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "background",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    }
+   }
+  },
+  {
+   "id": 3,
+   "type": "stat",
+   "title": "NAS read OK",
+   "description": "1 = the last 15-minute DSM read worked.",
+   "gridPos": {
+    "x": 16,
+    "y": 1,
+    "w": 4,
+    "h": 4
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${ds}"
+   },
+   "targets": [
+    {
+     "expr": "hw_nas_ok",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${ds}"
+     },
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "red",
+        "value": null
+       },
+       {
+        "color": "green",
+        "value": 1
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "background",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    }
+   }
+  },
+  {
+   "id": 4,
+   "type": "stat",
+   "title": "Hottest drive",
+   "description": "Alert: hard drive over 55 C, SSD over 70 C.",
+   "gridPos": {
+    "x": 20,
+    "y": 1,
+    "w": 4,
+    "h": 4
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${ds}"
+   },
+   "targets": [
+    {
+     "expr": "max(hw_smart{field=\"temp_c\"})",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${ds}"
+     },
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "orange",
+        "value": 50
+       },
+       {
+        "color": "red",
+        "value": 55
+       }
+      ]
+     },
+     "unit": "celsius"
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "background",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    }
+   }
+  },
+  {
+   "id": 5,
+   "type": "stat",
+   "title": "Bad sectors / media errors, drives in use",
+   "description": "Summed over every drive still in use (a NAS disk DSM marked not_use is left out; it is in the table below). Any rise emails Jason.",
+   "gridPos": {
+    "x": 12,
+    "y": 5,
+    "w": 12,
+    "h": 4
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${ds}"
+   },
+   "targets": [
+    {
+     "expr": "sum by (field) (hw_smart{field=~\"reallocated|pending|uncorrectable|reported_uncorrect|media_errors\"} unless on(drive) label_replace(hw_nas_state{kind=\"disk\",status=\"not_use\"}, \"drive\", \"$1\", \"name\", \"(.*)\"))",
+     "legendFormat": "{{field}}",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${ds}"
+     },
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "red",
+        "value": 1
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "colorMode": "background",
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    }
+   }
+  },
+  {
+   "id": 109,
+   "type": "row",
+   "title": "PC fans and temperatures (every 5 s, pc_noise_logger.ps1)",
+   "collapsed": false,
+   "gridPos": {
+    "x": 0,
+    "y": 9,
+    "w": 24,
+    "h": 1
+   },
+   "panels": []
+  },
+  {
+   "id": 6,
+   "type": "timeseries",
+   "title": "PC fans (RPM)",
+   "description": "Every header LibreHardwareMonitor sees. System Fan #1-3 read 0 (nothing plugged in). Pump normal 4,355-6,618 RPM, following CPU temperature. GPU fans 0 = zero-RPM mode (GPU cool). Alerts: pump < 3,000; CPU fans < 800 with CPU > 70 C; GPU fan 0 with GPU > 75 C; GPU fans starting > 30 times an hour.",
+   "gridPos": {
+    "x": 0,
+    "y": 10,
+    "w": 12,
+    "h": 9
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${ds}"
+   },
+   "targets": [
+    {
+     "expr": "pc_noise_fan_rpm",
+     "legendFormat": "{{fan}}",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${ds}"
+     },
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "rotrpm",
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 1,
+      "fillOpacity": 10,
+      "showPoints": "never"
+     },
+     "min": 0
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "right",
+     "calcs": [
+      "lastNotNull",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi"
+    }
+   }
+  },
+  {
+   "id": 7,
+   "type": "timeseries",
+   "title": "PC CPU / GPU temperature (C) and load (%)",
+   "description": "Alert: CPU over 90 C (11-23/24 max 84 C).",
+   "gridPos": {
+    "x": 12,
+    "y": 10,
+    "w": 12,
+    "h": 9
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${ds}"
+   },
+   "targets": [
+    {
+     "expr": "pc_noise_temp_c",
+     "legendFormat": "{{part}} C",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${ds}"
+     },
+     "refId": "A"
+    },
+    {
+     "expr": "pc_noise_load_pct",
+     "legendFormat": "{{part}} load %",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${ds}"
+     },
+     "refId": "B"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 1,
+      "fillOpacity": 10,
+      "showPoints": "never",
+      "thresholdsStyle": {
+       "mode": "line+area"
+      }
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "red",
+        "value": 90
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "right",
+     "calcs": [
+      "lastNotNull",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi"
+    }
+   }
+  },
+  {
+   "id": 8,
+   "type": "timeseries",
+   "title": "Pump swing inside 10 minutes (alert > 2,500 RPM)",
+   "description": "11-23/24: 1,750 typical, 2,263 at most. Over 2,500 = worse than the night the noise was noticed.",
+   "gridPos": {
+    "x": 0,
+    "y": 19,
+    "w": 12,
+    "h": 7
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${ds}"
+   },
+   "targets": [
+    {
+     "expr": "max_over_time(pc_noise_fan_rpm{fan=\"System Fan #4 / Pump\"}[10m]) - min_over_time(pc_noise_fan_rpm{fan=\"System Fan #4 / Pump\"}[10m])",
+     "legendFormat": "pump swing",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${ds}"
+     },
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "rotrpm",
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 1,
+      "fillOpacity": 10,
+      "showPoints": "never",
+      "thresholdsStyle": {
+       "mode": "line+area"
+      }
+     },
+     "min": 0,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "red",
+        "value": 2500
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "right",
+     "calcs": [
+      "lastNotNull",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi"
+    }
+   }
+  },
+  {
+   "id": 9,
+   "type": "timeseries",
+   "title": "Head parks per hour, per hard drive (alert > 500)",
+   "description": "Each head park is one click. PC M: and G: steady ~34/h since 11-23 17:00; bursts of ~3,300/h on 11-21..11-23. PC disk 0 = G:, disk 1 = M:. The Windows counter before 11-23 17:13 swapped between the two drives (spikes).",
+   "gridPos": {
+    "x": 12,
+    "y": 19,
+    "w": 12,
+    "h": 7
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${ds}"
+   },
+   "targets": [
+    {
+     "expr": "increase(hw_smart{field=\"load_unload\",kind=\"hdd\"}[1h])",
+     "legendFormat": "{{machine}} {{drive}}",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${ds}"
+     },
+     "refId": "A"
+    },
+    {
+     "expr": "increase(pc_drive_value{counter=\"load_unload_cycles\"}[1h])",
+     "legendFormat": "PC disk {{disk}} (Windows counter)",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${ds}"
+     },
+     "refId": "B"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "custom": {
+      "drawStyle": "bars",
+      "lineWidth": 1,
+      "fillOpacity": 30,
+      "showPoints": "never",
+      "thresholdsStyle": {
+       "mode": "line+area"
+      }
+     },
+     "min": 0,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "red",
+        "value": 500
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "right",
+     "calcs": [
+      "lastNotNull",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi"
+    }
+   }
+  },
+  {
+   "id": 126,
+   "type": "row",
+   "title": "Drives: SMART (PC every 1 min, hard drives 10 min; NUC 5 min; NAS 15 min)",
+   "collapsed": false,
+   "gridPos": {
+    "x": 0,
+    "y": 26,
+    "w": 24,
+    "h": 1
+   },
+   "panels": []
+  },
+  {
+   "id": 10,
+   "type": "table",
+   "title": "SMART now, every drive",
+   "description": "passed 1 = SMART verdict OK. reallocated / pending / uncorrectable / media_errors should stay 0 for life.",
+   "gridPos": {
+    "x": 0,
+    "y": 27,
+    "w": 24,
+    "h": 11
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${ds}"
+   },
+   "targets": [
+    {
+     "expr": "hw_smart{field=~\"passed|temp_c|power_on_hours|reallocated|pending|uncorrectable|reported_uncorrect|crc_errors|load_unload|media_errors|percentage_used|available_spare|critical_warning\"}",
+     "instant": true,
+     "format": "table",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${ds}"
+     },
+     "refId": "A"
+    }
+   ],
+   "transformations": [
+    {
+     "id": "joinByLabels",
+     "options": {
+      "value": "field",
+      "join": [
+       "machine",
+       "drive",
+       "model",
+       "serial"
+      ]
+     }
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {},
+    "overrides": [
+     {
+      "matcher": {
+       "id": "byRegexp",
+       "options": "reallocated|pending|uncorrectable|reported_uncorrect|media_errors|critical_warning"
+      },
+      "properties": [
+       {
+        "id": "custom.cellOptions",
+        "value": {
+         "type": "color-background"
+        }
+       },
+       {
+        "id": "thresholds",
+        "value": {
+         "mode": "absolute",
+         "steps": [
+          {
+           "color": "transparent",
+           "value": null
+          },
+          {
+           "color": "red",
+           "value": 1
+          }
+         ]
+        }
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "id": 11,
+   "type": "timeseries",
+   "title": "Drive temperatures (alert: HDD > 55 C, SSD > 70 C)",
+   "description": "",
+   "gridPos": {
+    "x": 0,
+    "y": 38,
+    "w": 12,
+    "h": 8
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${ds}"
+   },
+   "targets": [
+    {
+     "expr": "hw_smart{field=\"temp_c\"}",
+     "legendFormat": "{{machine}} {{drive}}",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${ds}"
+     },
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "celsius",
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 1,
+      "fillOpacity": 10,
+      "showPoints": "never",
+      "thresholdsStyle": {
+       "mode": "line+area"
+      }
+     },
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "red",
+        "value": 55
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "right",
+     "calcs": [
+      "lastNotNull",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi"
+    }
+   }
+  },
+  {
+   "id": 12,
+   "type": "timeseries",
+   "title": "SMART error counters: change over the last day",
+   "description": "Empty = nothing got worse. Any rise also emails Jason at once.",
+   "gridPos": {
+    "x": 12,
+    "y": 38,
+    "w": 12,
+    "h": 8
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${ds}"
+   },
+   "targets": [
+    {
+     "expr": "delta(hw_smart{field=~\"reallocated|pending|uncorrectable|reported_uncorrect|media_errors\"}[1d]) != 0",
+     "legendFormat": "{{machine}} {{drive}} {{field}}",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${ds}"
+     },
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "custom": {
+      "drawStyle": "bars",
+      "lineWidth": 1,
+      "fillOpacity": 30,
+      "showPoints": "never"
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "right",
+     "calcs": [
+      "lastNotNull",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi"
+    }
+   }
+  },
+  {
+   "id": 13,
+   "type": "timeseries",
+   "title": "Head parks per day (alert > 2,000)",
+   "description": "ST2000DM008 rated 600,000 cycles. Today's steady ~820/day is fine; 2,000/day would use the rating up in ~10 months.",
+   "gridPos": {
+    "x": 0,
+    "y": 46,
+    "w": 12,
+    "h": 8
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${ds}"
+   },
+   "targets": [
+    {
+     "expr": "increase(hw_smart{field=\"load_unload\",kind=\"hdd\"}[24h])",
+     "legendFormat": "{{machine}} {{drive}}",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${ds}"
+     },
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 1,
+      "fillOpacity": 10,
+      "showPoints": "never",
+      "thresholdsStyle": {
+       "mode": "line+area"
+      }
+     },
+     "min": 0,
+     "thresholds": {
+      "mode": "absolute",
+      "steps": [
+       {
+        "color": "green",
+        "value": null
+       },
+       {
+        "color": "red",
+        "value": 2000
+       }
+      ]
+     }
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "right",
+     "calcs": [
+      "lastNotNull",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi"
+    }
+   }
+  },
+  {
+   "id": 14,
+   "type": "timeseries",
+   "title": "SSD / NVMe wear (% used) and spare (%)",
+   "description": "",
+   "gridPos": {
+    "x": 12,
+    "y": 46,
+    "w": 12,
+    "h": 8
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "${ds}"
+   },
+   "targets": [
+    {
+     "expr": "hw_smart{field=~\"percentage_used|available_spare\"}",
+     "legendFormat": "{{machine}} {{drive}} {{field}}",
+     "datasource": {
+      "type": "prometheus",
+      "uid": "${ds}"
+     },
+     "refId": "A"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percent",
+     "custom": {
+      "drawStyle": "line",
+      "lineWidth": 1,
+      "fillOpacity": 10,
+      "showPoints": "never"
+     },
+     "min": 0
+    },
+    "overrides": []
+   },
+   "options": {
+    "legend": {
+     "displayMode": "table",
+     "placement": "right",
+     "calcs": [
+      "lastNotNull",
+      "max"
+     ]
+    },
+    "tooltip": {
+     "mode": "multi"
+    }
+   }
+  },
+  {
+   "id": 154,
+   "type": "row",
+   "title": "Logs (Loki)",
+   "collapsed": false,
+   "gridPos": {
+    "x": 0,
+    "y": 54,
+    "w": 24,
+    "h": 1
+   },
+   "panels": []
+  },
+  {
+   "id": 15,
+   "type": "logs",
+   "title": "PC SMART and drive logs (D:\\pc-health)",
+   "description": "",
+   "gridPos": {
+    "x": 0,
+    "y": 55,
+    "w": 12,
+    "h": 10
+   },
+   "datasource": {
+    "type": "loki",
+    "uid": "loki"
+   },
+   "targets": [
+    {
+     "expr": "{host=\"pc\",source=\"pc-health\",container=~\"pc-health-(smart|drives)\"}",
+     "datasource": {
+      "type": "loki",
+      "uid": "loki"
+     },
+     "refId": "A"
+    }
+   ],
+   "options": {
+    "showTime": true,
+    "wrapLogMessage": true,
+    "sortOrder": "Descending"
+   }
+  },
+  {
+   "id": 16,
+   "type": "logs",
+   "title": "Hardware alerts and NAS reads (NUC)",
+   "description": "",
+   "gridPos": {
+    "x": 12,
+    "y": 55,
+    "w": 12,
+    "h": 10
+   },
+   "datasource": {
+    "type": "loki",
+    "uid": "loki"
+   },
+   "targets": [
+    {
+     "expr": "{host=\"nuc\",container=~\"hw-watch|nas-dsm\"}",
+     "datasource": {
+      "type": "loki",
+      "uid": "loki"
+     },
+     "refId": "A"
+    }
+   ],
+   "options": {
+    "showTime": true,
+    "wrapLogMessage": true,
+    "sortOrder": "Descending"
+   }
+  },
+  {
+   "id": 17,
+   "type": "logs",
+   "title": "PC noise log: fans, temps, hard-drive I/O and the processes doing it (5 s rows)",
+   "description": "Columns: time, fans_rpm, fan_control_pct, cpu_c, gpu_c, cpu_load, gpu_load, G_tps, M_tps, io_top.",
+   "gridPos": {
+    "x": 0,
+    "y": 65,
+    "w": 24,
+    "h": 12
+   },
+   "datasource": {
+    "type": "loki",
+    "uid": "loki"
+   },
+   "targets": [
+    {
+     "expr": "{host=\"pc\",container=\"pc-health-noise\"}",
+     "datasource": {
+      "type": "loki",
+      "uid": "loki"
+     },
+     "refId": "A"
+    }
+   ],
+   "options": {
+    "showTime": true,
+    "wrapLogMessage": false,
+    "sortOrder": "Descending"
+   }
+  }
+ ]
+}

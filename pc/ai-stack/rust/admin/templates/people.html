@@ -304,6 +304,33 @@
           </div>
         </details>
         {% endif %}
+        {% if p.guest %}
+        <details class="pw">
+          <summary>Invite link &amp; renew</summary>
+          <div style="margin-top:.5rem;display:flex;flex-direction:column;gap:.6rem">
+            {% if p.passkeys.is_empty() %}
+            <form method="post" action="{{ base }}/people/invite-resend"
+                  onsubmit="return confirm('Make a new invite link for {{ p.display_name }}? Any unused old link stops working.')">
+              <input type="hidden" name="csrf" value="{{ csrf }}">
+              <input type="hidden" name="email" value="{{ p.email }}">
+              <button type="submit">New invite link</button>
+              <span class="sub" style="font-size:.72rem">A fresh link to send; the old unused one stops working.</span>
+            </form>
+            {% else %}
+            <span class="sub" style="font-size:.72rem">They already have a passkey, so no link is needed. To move them to a new phone, revoke the passkey above first, then make a new link.</span>
+            {% endif %}
+            <form method="post" action="{{ base }}/people/guest-extend">
+              <input type="hidden" name="csrf" value="{{ csrf }}">
+              <input type="hidden" name="email" value="{{ p.email }}">
+              <div class="row">
+                <input type="number" name="days" min="1" max="365" value="30" required style="width:6rem">
+                <button type="submit">Extend by days</button>
+              </div>
+              <span class="sub" style="font-size:.72rem">Moves the end date out; their passkey keeps working to the new date.</span>
+            </form>
+          </div>
+        </details>
+        {% endif %}
         <details class="pw">
           <summary>{% if p.has_password %}Set a new password{% else %}Set a password{% endif %}</summary>
           <form method="post" action="{{ base }}/people/password">
@@ -351,7 +378,7 @@
 
             <label class="row" style="margin-top:.9rem;display:block">
               <span style="display:block;font-size:.85rem;opacity:.75;margin-bottom:.25rem">
-                Start page look &mdash; changes appearance only, never access
+                Start page (cards) look &mdash; changes appearance only, never access
               </span>
               <select name="theme">
                 {% for t in themes %}
@@ -400,12 +427,29 @@
 // (Jason's own account needed them added to its apps list, since
 // EXPLICIT_ONLY ignores apps_unrestricted by design).
 (function(){
+  // Names say what each app IS; the key in brackets is what people.json stores (2026-11-04).
+  var NAMES = {
+    kitchen:'Kitchen: recipe database (kitchen)', recipe:'Recipe book (recipe)', casey:"Casey's page (casey)",
+    home:'Start page cards (home)', looks:'Start page looks (looks)', find:'Search (find)',
+    read:'Reader (read)', audiobookshelf:'Audiobooks (audiobookshelf)', tribute:'Pee-wee tribute (tribute)',
+    studio:'Tribute studio (studio)', pdf:'PDF tools (pdf)', files:'Files (files)',
+    paperless:'Documents: Paperless (paperless)', money:'Budget (money)', homebox:'Home inventory (homebox)',
+    backlog:'Backlog (backlog)', tickets:'Tickets (tickets)', todo:'To-do list (todo)', projects:'Projects (projects)',
+    portfolio:'Portfolio (portfolio)', status:'Uptime monitor (status)', logs:'Container logs (logs)',
+    git:'Code: Gitea (git)', tools:'IT tools (tools)', portainer:'Docker: Portainer (portainer)',
+    grafana:'Charts: Grafana (grafana)', dashboard:'Dashboard (dashboard)', dl:'Downloads (dl)',
+    grab:'Video grabber (grab)', engine:'Engine (engine)', connect:'Connect (connect)',
+    lgbt:'LGBT shelf (lgbt)', ex:'For each other: /us (ex)'
+  };
+  function nameOf(app){ return NAMES[app] || app; }
+  // Retired 2026-11-04 (routes and cards removed): hidden from the picker unless still held.
+  var RETIRED = ['mama','kb','scratch','study','music','special','ability','photos','gym','garden'];
   var GROUPS = [
-    {label:'Household', apps:['mama','kitchen','kb','casey','home','looks','find','scratch','study']},
-    {label:'Entertainment', apps:['photos','music','read','audiobookshelf','tribute','studio','engine','connect']},
-    {label:'Documents & Finance', apps:['recipe','pdf','files','paperless','money','homebox']},
+    {label:'Household', apps:['kitchen','recipe','casey','home','looks','find','money','files']},
+    {label:'Reading & media', apps:['lgbt','ex','read','audiobookshelf','tribute','studio','engine','connect']},
+    {label:'Documents', apps:['pdf','paperless','homebox']},
     {label:'Work & Planning', apps:['backlog','tickets','todo','projects','portfolio']},
-    {label:'Admin & Ops', apps:['status','logs','git','tools','portainer','grafana','dashboard','ability','dl','special','grab']}
+    {label:'Admin & Ops', apps:['status','logs','git','tools','portainer','grafana','dashboard','dl','grab']}
   ];
   function categoryOf(app){
     for (var i = 0; i < GROUPS.length; i++) {
@@ -415,12 +459,13 @@
   }
 
   var PRESETS = {
-    family:    {label:'Family',    pages:{mama:'full',kitchen:'full',recipe:'full',money:'full',files:'view',photos:'full'}},
-    guest:     {label:'Guest',     pages:{kitchen:'view',recipe:'view',scratch:'view',photos:'view'}}
+    family:    {label:'Family',    pages:{kitchen:'full',recipe:'full',money:'full',files:'view'}},
+    guest:     {label:'Guest',     pages:{recipe:'view'}}
   };
 
   function initScope(root){
     var inputs = Array.prototype.slice.call(root.querySelectorAll('input[type=hidden][data-app]'));
+    inputs = inputs.filter(function(i){ return RETIRED.indexOf(i.dataset.app) === -1 || i.value !== 'none'; });
     var chipsEl = root.querySelector('.page-chips');
     var panelEl = root.querySelector('.add-page-panel');
     var addBtn = root.querySelector('.add-page-btn');
@@ -452,7 +497,7 @@
           input.value = input.value === 'view' ? 'full' : 'view';
           renderChips(); renderPanel();
         });
-        chip.appendChild(document.createTextNode(app + ' '));
+        chip.appendChild(document.createTextNode(nameOf(app) + ' '));
         chip.appendChild(lvl);
         var x = document.createElement('button');
         x.type = 'button'; x.className = 'x'; x.textContent = '×';
@@ -492,7 +537,7 @@
         list.forEach(function(input){
           var chip = document.createElement('span');
           chip.className = 'avail-chip';
-          chip.appendChild(document.createTextNode(input.dataset.app));
+          chip.appendChild(document.createTextNode(nameOf(input.dataset.app)));
           ['view','full'].forEach(function(lvl){
             var b = document.createElement('button');
             b.type = 'button'; b.className = lvl; b.textContent = lvl;

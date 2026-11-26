@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#070a18">
+<meta name="robots" content="noindex, nofollow">
+<title>Signed out</title>
+<link rel="stylesheet" href="static/auth.css">
+</head>
+<body>
+{% include "sky.html" %}
+<main>
+  <div class="brand"><div class="mark" aria-hidden="true"></div><b>ULTRANOVA</b></div>
+  <div class="card">
+    <h1>See you next time</h1>
+    <p class="sub">You're signed out here. Come back whenever you're ready &mdash;
+      your passkey will be waiting.</p>
+    <p class="fine">This closes the session on this device only. If you're signed in
+      somewhere else too, that one's untouched &mdash; use "sign out everywhere" on the
+      account page if you want to close all of them at once.</p>
+    <p class="fine"><a href="./">Sign back in</a></p>
+  </div>
+</main>
+</body>
+</html>

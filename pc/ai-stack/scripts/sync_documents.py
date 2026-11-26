@@ -47,8 +47,20 @@ LOG = r"D:\paperless-feed\sync.log"
 NUC = "server@192.168.1.86"
 # Secret-shaped files never leave the PC, even if one lands in All-Documents again (2026-11-12:
 # two BitLocker recovery keys and a wpa_supplicant.conf had). Word's "~$" lock files are junk.
-NEVER_SEND = re.compile(r"(?i)bitlocker|recovery[ _-]?(key|code)|wpa_supplicant|\.env$|\.pem$|\.key$|^~\$|"
-                        r"backup[ _-]?codes?|master[ _-]?key|communication[ _-]?key|password|^config-.*\.xml$")
+# 2026-11-22 (T0008 step 2, autopilot): added "secrets?|credentials?|passwd", SSH key names
+# (id_rsa, id_ed25519, id_ecdsa), key/vault file types (.kdbx .pfx .p12 .ovpn .ppk) and .env.<x>.
+# WHY: the 11-16 check found All-Documents/Projects/PC-to-Linux-2026-10/secrets.txt matched none
+# of the old words, so it was sent and two copies sit on the NUC. "token" was left OUT on purpose:
+# ordinary document titles use it and the old list never blocked by such a loose word.
+# TRIED FIRST: a bare "secrets?" also blocked 4 book PDFs ("Hacking Exposed ... Secrets & Solutions",
+# "Hacking Secret Ciphers with Python"), which would stop new copies reaching Kavita. So secret(s)
+# and credential(s) only match as a whole dash/dot/underscore-separated part of the name
+# (secrets.txt, my_secrets.env, aws-credentials.json); titles with spaces pass.
+# Old line kept in D:\archive\2026-11-22\ai-stack\scripts\sync_documents.py.before-T0008.
+NEVER_SEND = re.compile(r"(?i)bitlocker|recovery[ _-]?(key|code)|wpa_supplicant|\.env$|\.env\.\w+$|\.pem$|\.key$|^~\$|"
+                        r"backup[ _-]?codes?|master[ _-]?key|communication[ _-]?key|password|passwd|"
+                        r"(^|[_.-])(secrets?|credentials?)([_.-]|$)|^id_(rsa|ed25519|ecdsa)(\.pub)?$|"
+                        r"\.(kdbx|pfx|p12|ovpn|ppk)$|^config-.*\.xml$")
 
 
 def log(msg: str) -> None:

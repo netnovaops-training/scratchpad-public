@@ -1,0 +1,25 @@
+# alloy - Pi 5 log shipper to the NUC's Loki (T0891, 2026-11-21). Own project, apart from ~/stack, so it can be
+# started, stopped or removed without touching the other 11 containers.
+#   cd ~/alloy && docker compose up -d        undo: docker compose down (nothing else changes)
+# Read-only inputs, RAM-only state, no published port, no Docker socket (see config.alloy for why).
+name: alloy
+services:
+  alloy:
+    image: grafana/alloy:v1.22.0
+    container_name: alloy
+    restart: unless-stopped
+    command: ["run", "--storage.path=/alloy-data", "--server.http.listen-addr=127.0.0.1:12345", "/etc/alloy/config.alloy"]
+    volumes:
+      - ./config.alloy:/etc/alloy/config.alloy:ro
+      - /run/log/journal:/run/log/journal:ro
+      - /var/log:/var/log:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /etc/machine-id:/etc/machine-id:ro
+    tmpfs:
+      - /alloy-data:size=64m          # read positions: RAM only, so the SD card is never written
+      - /tmp:size=16m
+    mem_limit: 256m
+    cpus: 0.5
+    read_only: true
+    security_opt:
+      - no-new-privileges:true

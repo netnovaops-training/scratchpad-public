@@ -49,9 +49,21 @@ def open_asks(item):
 
 
 def steps(item):
-    """Numbered steps from the Do line(s): {1: 'text', 2: 'text', ...}."""
+    """Numbered steps from the Do line(s): {1: 'text', 2: 'text', ...}.
+
+    Falls back to the item's 'Steps: a | b | c' line (todo_steps.py, T0069) when the Do line has no
+    numbered '1) ... 2) ...' steps.
+    """
     do = " ".join(lines_of(item, "Do:"))
-    return {int(n): t.strip() for n, t in STEP_RE.findall(do)}
+    st = {int(n): t.strip() for n, t in STEP_RE.findall(do)}
+    # OUTCOME 2026-11-22 autopilot: T0069's Do line is a 'Hint:' with no numbered steps, so st was {}
+    # and plan_for() could never reach 'finish': after its Review said 'step 5 done' (all 5 Steps
+    # ticked, 'Step: done 5/5') first --json still said 'build step 6', a step that does not exist.
+    # Numbered Do steps still win; the Steps line is used only when there are none.
+    if not st:
+        plan = " ".join(lines_of(item, "Steps:"))
+        st = {k: t.strip() for k, t in enumerate(plan.split(" | "), 1) if t.strip()}
+    return st
 
 
 def plan_for(item):

@@ -6,6 +6,11 @@
 #
 # How: a key made only for this job (%USERPROFILE%\.ssh\people_mirror) is pinned on the NUC
 # to one command (cat the list), so it can read that file and do nothing else.
+# OUTCOME 2026-11-24 (T0040): the pin was lost in the 11-15 NUC rebuild, so this job got a login shell and
+# its welcome banner instead of JSON ("Invalid JSON primitive: Welcome." every 2 min, at least 11-23 12:53 to
+# 11-24 08:19). Pin restored in ~/.ssh/authorized_keys: command="cat .../people.json", restrict, no-pty,
+# from="192.168.1.0/24". Verified: LAN gives the JSON (7 accounts) even when a command is sent; over
+# Tailscale this key is refused (Permission denied); 08:20 run "updated the PC copy". Keep the LAN address.
 # Safety: the new copy replaces the old one only if it is valid JSON with at least one
 # account that has an email; otherwise the old copy stays and the reason is logged.
 # It never prints or logs the list's contents.

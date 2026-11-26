@@ -470,7 +470,7 @@ foreach ($host_ in @('1.1.1.1', '8.8.8.8')) {
 # the one place that can see real VRAM, GPU load and GPU temperature.
 $gpu = $null
 try {
-    $q = & nvidia-smi --query-gpu=utilization.gpu,memory.used,memory.total,temperature.gpu,name --format=csv,noheader,nounits 2>$null
+    $q = & nvidia-smi --query-gpu=utilization.gpu,memory.used,memory.total,temperature.gpu,name,power.draw,clocks.sm,fan.speed --format=csv,noheader,nounits 2>$null
     if ($q) {
         $f = ($q | Select-Object -First 1) -split ",\s*"
         $gpu = [pscustomobject]@{
@@ -479,6 +479,12 @@ try {
             vram_used_mb  = [int]$f[1]
             vram_total_mb = [int]$f[2]
             temp_c      = [int]$f[3]
+            # T0056 2026-11-23: power/clock/fan added so n8n's stats can read the
+            # GPU from this file instead of exec-ing into the ollama container.
+            # A laptop-style "[N/A]" reading becomes $null instead of failing the cast.
+            power_w     = $(if ($f[5] -match '^[\d.]+$') { [double]$f[5] } else { $null })
+            clock_mhz   = $(if ($f[6] -match '^\d+$') { [int]$f[6] } else { $null })
+            fan_pct     = $(if ($f[7] -match '^\d+$') { [int]$f[7] } else { $null })
         }
     }
 } catch { $gpu = $null }

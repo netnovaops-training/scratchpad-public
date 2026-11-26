@@ -1,0 +1,17 @@
+{
+  "name": "nobuild",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@noble/post-quantum": "0.7.1",
+    "esbuild": "0.25.10"
+  }
+}

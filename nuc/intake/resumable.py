@@ -62,6 +62,8 @@ STALE_HOURS = 48
 FAILED = pathlib.Path(os.environ.get("INTAKE_FAILED", str(STAGE.parent / ".failed")))
 RESERVE = int(os.environ.get("INTAKE_RESERVE_MB", "1024")) * 1048576
 LOCK_STALE = 3600            # a finish lock older than this is from a crashed/restarted container
+# Review 11-23 #17: total declared bytes of one person's unfinished uploads (default 4 x the file limit: 3 parallel sends fit).
+OPEN_CAP = int(os.environ.get("INTAKE_OPEN_CAP_MB", str(4 * int(os.environ.get("INTAKE_MAX_MB", "2048"))))) * 1048576
 MAX_OPEN = int(os.environ.get("INTAKE_MAX_OPEN", "20"))   # unfinished uploads one person may hold at once
 
 
@@ -114,7 +116,8 @@ def _clear_finish_locks() -> None:
         pass
 
 
-_clear_finish_locks()
+# 2026-11-23: no longer called at import. rescan_held.py imports app (and so this module) every hour inside
+# the running container, which deleted live finish locks. app._lifespan calls it once at server start.
 
 
 async def _flock(fd: int, kind: int, wait: float = 30.0) -> bool:
@@ -292,11 +295,17 @@ async def start(request: Request, x_auth_email: str | None = Header(default=None
                 continue
             if (m.get("key") == key and m.get("email") == email and mp.with_suffix(".part").exists()
                     and not _extra(mp.stem)[1].exists()):
+                try:
+                    os.utime(mp)         # R9: a resumed upload is active again; keep it out of the hourly sweep
+                except OSError:
+                    pass
                 _say(f"start resumed uid={mp.stem} size={size}")
                 return {"id": mp.stem, "offset": 0, "chunk": m["chunk"], "parallel": bool(m.get("parallel")),
                         "resumed": True}
     if _open_count(email) >= MAX_OPEN:   # T0931: one person cannot fill the disk with half-sent uploads
         raise HTTPException(429, "Too many unfinished uploads. Let some finish, then try again.")
+    if _open_bytes(email) + size > OPEN_CAP:   # review 11-23 #17: reserved space, not just the count
+        raise HTTPException(429, "Too much is still waiting to finish. Let some uploads finish, then try again.")
     uid = secrets.token_urlsafe(16)
     part, meta_p = _paths(uid)
     parallel = bool(body.get("parallel"))
@@ -361,6 +370,21 @@ def _open_count(email: str) -> int:
         except (OSError, ValueError):
             pass
     return n
+
+
+def _open_bytes(email: str) -> int:
+    """Declared size of this person's unfinished uploads (review 11-23 #17; fallocate reserves them for real)."""
+    total = 0
+    for p in STAGE.glob("*.json"):
+        if p.name.endswith(".result.json") or not p.with_suffix(".part").exists():
+            continue
+        try:
+            m = json.loads(p.read_text())
+        except (OSError, ValueError):
+            continue
+        if m.get("email") == email:
+            total += int(m.get("size") or 0)
+    return total
 
 
 def _pieces(meta: dict) -> int:
@@ -452,9 +476,25 @@ async def piece_at(uid: str, n: int, request: Request, x_auth_email: str | None 
     return {"piece": n}
 
 
+# Review 11-23 #15: uids with a sequential piece being written right now (one process: this set is the truth).
+_SEQ_BUSY: set[str] = set()
+
+
 @router.put("/up/{uid}")
 async def piece(uid: str, offset: int, request: Request, x_auth_email: str | None = Header(default=None)):
+    """Old sequential route: one piece at an offset. A second request for the same uid while one is still being
+    written gets 409 with the current offset (review 11-23 #15: both used to pass the check and append twice)."""
     meta, part, meta_p = _load(uid, _who(x_auth_email))
+    if uid in _SEQ_BUSY or uid in _FINISHING:     # R4: never append while a finish is filing this upload
+        return JSONResponse({"offset": part.stat().st_size if part.exists() else 0, "busy": True}, status_code=409)
+    _SEQ_BUSY.add(uid)
+    try:
+        return await _piece_seq(uid, offset, request, meta, part, meta_p)
+    finally:
+        _SEQ_BUSY.discard(uid)
+
+
+async def _piece_seq(uid, offset, request, meta, part, meta_p):
     have = part.stat().st_size
     if offset != have:                   # a piece re-sent after a drop, or one that got ahead: say where we are
         return JSONResponse({"offset": have}, status_code=409)
@@ -477,8 +517,30 @@ async def piece(uid: str, offset: int, request: Request, x_auth_email: str | Non
     return {"offset": have + written}
 
 
+# Review 11-23 #9: uids whose finish is running in THIS process. The file lock was taken over by age (1 h), but a
+# finish can run for hours (a big zip while the PC model sleeps); a second filing of the same work folder then
+# raced the first. One uvicorn process serves every finish, so this set is the truth about "still running";
+# the file lock remains for restarts (cleared at start-up, app._lifespan).
+_FINISHING: set[str] = set()
+
+
 @router.post("/up/{uid}/finish")
 async def finish(uid: str, x_auth_email: str | None = Header(default=None)):
+    """Answer 409 "working" while this uid is already being finished here (review 11-23 #9); else _finish."""
+    meta, _, _ = _load(uid, _who(x_auth_email))
+    if uid in _FINISHING or uid in _SEQ_BUSY:      # R4: not while an old-style piece is still being written
+        return JSONResponse({"offset": meta["size"], "working": True}, status_code=409)
+    _FINISHING.add(uid)
+    try:
+        return await _finish(uid, x_auth_email)
+    except BaseException:
+        _extra(uid)[1].unlink(missing_ok=True)     # R3: an unexpected error must not leave the lock for an hour
+        raise
+    finally:
+        _FINISHING.discard(uid)
+
+
+async def _finish(uid: str, x_auth_email: str | None = Header(default=None)):
     """File a complete upload. Safe to call again: a retry gets the stored answer, never a second filing.
 
     T0925 (2026-11-19 audit A4/A5): before, the meta was deleted FIRST and filing ran in /tmp; a phone that
@@ -574,8 +636,12 @@ async def finish(uid: str, x_auth_email: str | None = Header(default=None)):
 
 
 @router.post("/up/{uid}/cancel")
-def cancel(uid: str, x_auth_email: str | None = Header(default=None)):
+async def cancel(uid: str, x_auth_email: str | None = Header(default=None)):
+    """Drop an unfinished upload. R3 (race review 11-23): async now (it ran in the thread pool beside the event
+    loop) and refused with 409 while the upload is being finished or a piece is being written."""
     _, part, meta_p = _load(uid, _who(x_auth_email))
+    if uid in _FINISHING or uid in _SEQ_BUSY or _extra(uid)[1].exists():
+        return JSONResponse({"error": "this upload is being filed right now"}, status_code=409)
     part.unlink(missing_ok=True)
     _got(uid).unlink(missing_ok=True)
     meta_p.unlink(missing_ok=True)

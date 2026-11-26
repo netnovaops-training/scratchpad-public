@@ -3,6 +3,11 @@ WORKDIR /app
 # T0925 part 2 (A14, 2026-11-19): requirements.txt is now the one list (it was copied in but unused, and
 # the versions were typed twice); the app runs as uid 1000 (server on the NUC, who owns every mounted
 # library) instead of root; temp files go on the /srv disk (A8) so filing is a rename.
+# T0958 (2026-11-21): Tesseract reads the text in images before the sorter decides (classify.ocr).
+# Debian packages, English + Korean data (Jason 11-21: Korean for Robin). OCR_LANGS picks what is used:
+# eng (default, Jason's drop) or eng+kor (Robin's Garden Drop instance).
+RUN apt-get update && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-eng tesseract-ocr-kor \
+    && rm -rf /var/lib/apt/lists/*
 COPY requirements.txt /app/
 RUN pip install --no-cache-dir -r /app/requirements.txt
 # portal.py is listed here too. It was missed the first time and the

@@ -17,6 +17,7 @@ use axum::Router;
 
 pub mod people;
 pub mod router;
+pub mod guest_invite;
 pub mod trial;
 
 /// Read an environment variable, falling back to a default.

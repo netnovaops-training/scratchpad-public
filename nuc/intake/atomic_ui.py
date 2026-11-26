@@ -20,6 +20,7 @@ OUTCOME: see the T0884 Review line (sandbox + emulator test).
 """
 from __future__ import annotations
 
+import themes  # T0942: the drop's look
 from fastapi import APIRouter
 from fastapi.responses import HTMLResponse
 
@@ -139,7 +140,7 @@ const Atomic = (() => {
       case 'refused': return 'Not saved: ' + (r.why || 'this kind of link cannot be read');
       case 'error': {
         const c = r.code;
-        if (c === 413) return r.why || 'Too big for Drop.';
+        if (c === 413) return r.why || 'Too big for @@NAME@@.';
         if (c === 507) return 'The server is short of space. Try again later.';
         if (r.why === 'signed out') return 'Signed out before this was sent. Sign in and share it again.';
         return ('Not saved: ' + (r.why || 'something went wrong')).replace(/\.?$/, '.');
@@ -148,7 +149,7 @@ const Atomic = (() => {
         if (r.held) return 'Kept for you: ' + k + '. You can read that library but not add to it, so Jason will file it.';
         if (dest.includes('/pending/') || p.includes('/.pending/'))
           return 'Kept for ' + (cap(r.person) || 'you') + ': ' + k + ' waits to be added to its app.';
-        if (!r.dest) return 'Saved, not sorted: Drop could not tell what this is, so it waits for Jason.';
+        if (!r.dest) return 'Saved, not sorted: @@NAME@@ could not tell what this is, so it waits for Jason.';
         if (r.kind === 'video') return 'Filed: a video in the ' + (p.includes('/private/') ? 'private' : 'general') + ' library.';
         if (r.kind === 'document') return 'Filed: paperwork, sent to Paperless.';
         return 'Filed: ' + k + (r.person ? ' on ' + cap(r.person) + "'s shelf" : '') + '.';
@@ -233,15 +234,17 @@ const Atomic = (() => {
   return {send, req, poke, pause, plain, bad, mb, left, sleep, Signin, Busy};
 })();
 """
+# Review 11-23 #1: the engine's messages use the app's own name (drop.toml [brand]), escaped for a JS '...' string.
+ATOMIC_JS = ATOMIC_JS.replace("@@NAME@@", themes.current()["name"].replace("\\", "\\\\").replace("'", "\\'"))
 
 # --- the sending page -----------------------------------------------------------------------------------
 PAGE = r"""<!doctype html><html lang=en><meta charset=utf-8>
 <meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name=theme-color content="#0b1026"><title>Atomic Share: sending</title>
+<meta name=theme-color content="@@THEME_COLOR@@"><title>@@NAME@@: sending</title>
 <link rel=manifest href="manifest.webmanifest">
 <style>
-:root{--bg:#0b1026;--card:#131a3a;--ink:#e8ecff;--dim:#9aa3c7;--cyan:#5ad1ff;--orange:#ff9b3d;--ok:#4ade80;--bad:#f87171;--spin:7s}
-*{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,sans-serif}
+@@ROOT@@
+[hidden]{display:none!important}*{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,sans-serif}
 main{max-width:560px;margin:0 auto;padding:24px 16px calc(24px + env(safe-area-inset-bottom))}
 .atom{display:block;width:min(56vw,240px);height:auto;margin:8px auto 4px;overflow:visible}
 .atom .nucleus{transform-origin:48px 48px;animation:pulse 1.6s ease-in-out infinite}
@@ -264,24 +267,15 @@ a,button{color:var(--cyan)}button{background:none;border:1px solid var(--cyan);b
 .row a{display:inline-flex;align-items:center;min-height:44px;padding:0 8px}
 :focus-visible{outline:3px solid var(--cyan);outline-offset:3px;border-radius:6px}
 li small a{display:inline-block;padding:10px 0}
+a.done{display:flex;justify-content:center;align-items:center;width:100%;min-height:48px;border-radius:10px;background:var(--cyan);color:var(--bg);font-weight:600;text-decoration:none}
 </style>
 <main>
-<svg class=atom viewBox="0 0 96 96" aria-hidden=true>
- <defs><radialGradient id=g><stop offset="0" stop-color="#ffb46b" stop-opacity=".55"/><stop offset=".45" stop-color="#5ad1ff" stop-opacity=".12"/><stop offset="1" stop-color="#5ad1ff" stop-opacity="0"/></radialGradient>
-  <path id=o0 d="M14,48a34,13 0 1,0 68,0a34,13 0 1,0 -68,0"/></defs>
- <circle class=glow cx=48 cy=48 r=30 fill="url(#g)"/>
- <g class=orbits fill=none stroke="#5ad1ff" stroke-width=3.2 stroke-linecap=round>
-  <g><use href="#o0"/><circle class=proton r=3.6 fill="#fff" stroke=none><animateMotion dur="1.1s" repeatCount=indefinite><mpath href="#o0"/></animateMotion></circle></g>
-  <g transform="rotate(60 48 48)"><use href="#o0"/><circle class=proton r=3.6 fill="#bdeeff" stroke=none><animateMotion dur="1.5s" begin="-.4s" repeatCount=indefinite keyPoints="1;0" keyTimes="0;1" calcMode=linear><mpath href="#o0"/></animateMotion></circle></g>
-  <g transform="rotate(120 48 48)"><use href="#o0"/><circle class=proton r=3.6 fill="#fff" stroke=none><animateMotion dur=".9s" begin="-.2s" repeatCount=indefinite><mpath href="#o0"/></animateMotion></circle></g>
- </g>
- <circle class=nucleus cx=48 cy=48 r=8 fill="#ff9b3d"/>
-</svg>
-<h1 id=title>Atomic Share</h1><p id=state role=status aria-live=polite>Getting ready…</p>
+@@SVG@@
+<h1 id=title>@@NAME@@</h1><p id=state role=status aria-live=polite>Getting ready…</p>
 <div class=bar id=bar role=progressbar aria-label="Sent so far" aria-valuemin=0 aria-valuemax=100 aria-valuenow=0 aria-valuetext="0 percent"><i></i></div>
 <div id=nums aria-hidden=true><span id=pct>0%</span><span id=speed></span><span id=eta></span></div>
 <ul id=list></ul>   <!-- T0931 item 22: one live region (#state) is enough; a second one read every result twice -->
-<div class=row><a href="./">Back to Drop</a><button id=again hidden>Try again now</button></div>
+<div class=row><button id=again hidden>Try again now</button><a class=done href="./">Done</a></div>   <!-- review 11-23 #12: a clear end action -->
 </main>
 <script src="atomic.js"></script>
 <script>
@@ -333,6 +327,7 @@ function paint() {
   const secs = (performance.now() - t0) / 1000, rate = secs > 1 ? (sent - sent0) / secs : 0;
   $('speed').textContent = rate ? mb(rate) + '/s' : '';
   $('eta').textContent = rate && sent < total ? Atomic.left((total - sent) / rate) : '';   // U13
+  if (working) document.title = p.toFixed(0) + '% · @@NAME@@';                              // review 11-23 #15
 }
 function row(name) { const li = document.createElement('li'), b = document.createElement('b'), s = document.createElement('small'),
   bar = document.createElement('div'); bar.className = 'bar'; bar.setAttribute('aria-hidden', 'true'); bar.appendChild(document.createElement('i'));
@@ -399,7 +394,8 @@ async function main() {
   const k = new URLSearchParams(location.search).get('k');
   let recs = []; try { recs = await getAll(); } catch (_) {}
   recs.sort((a, b) => a.created - b.created);
-  if (!recs.length) { working = false; mode('done'); say(k ? 'Already sent.' : 'Nothing waiting to send.'); return; }
+  if (!recs.length) { working = false; mode('done'); $('bar').hidden = true; $('nums').hidden = true;   // review 11-23 #7
+    say(k ? 'Already sent.' : 'Nothing waiting to send.'); return; }
   total = recs.reduce((n, r) => n + r.files.reduce((m, f) => m + f.blob.size, 0), 0);
   $('bar').classList.toggle('indet', !total); t0 = performance.now(); sent0 = 0;
   $('title').textContent = recs.length > 1 ? 'Sending ' + recs.length + ' shares' : 'Sending';
@@ -421,11 +417,14 @@ async function main() {
   sent = total; paint(); $('speed').textContent = ''; $('eta').textContent = ''; again(false);
   mode(anyBad ? 'bad' : 'done'); say(anyBad ? 'Done, but something needs a look: see below.' : 'All filed.');
   working = false; $('title').textContent = anyBad ? 'Finished' : 'Shared';
+  document.title = (anyBad ? 'Needs a look' : 'Shared') + ' · @@NAME@@';                     // review 11-23 #15
 }
 if (navigator.serviceWorker) navigator.serviceWorker.register('sw.js');
-main().catch(() => { working = false; mode('bad'); say('Something went wrong on this page. Tap Back to Drop and share again: files already sent are safe.'); });
+main().catch(() => { working = false; mode('bad'); say('Something went wrong on this page. Tap Done and share again: files already sent are safe.'); });
 </script>
 """
+# T0942 (2026-11-21): the look (colours, picture, name) comes from themes.py / drop.toml; with theme atomic this is byte-for-byte the old page (test_themes.py).
+PAGE = themes.apply(PAGE)
 
 
 @router.get("/atomic.js")

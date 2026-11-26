@@ -9,14 +9,15 @@ HOW IT WORKS
   installed (Chrome menu -> "Add to Home screen" / "Install app"), "Drop" appears in Android's share sheet.
   The share POST carries the household SSO cookie, so Caddy's forward_auth still decides who this is
   (X-Auth-Email); there is no new login and no new password.
-- Files: each one goes through the EXISTING /upload logic (app.upload), called as a function, so the
+- Files: each one goes through the EXISTING upload logic (app.route_file), called as a function, so the
   classifier, the per-person shelves, the write grants, de-duplication and the unsorted sidecar all apply
   unchanged. This module adds a door, not a second pipeline.
 - Compressed folders: a .zip that is NOT a comic (a zip of images stays one comic, see classify.py) is
   unpacked here and every member is filed on its own. Members are read in memory-safe chunks, path parts
   are dropped (no "../" escapes), and at most ZIP_MAX_FILES members / ZIP_MAX_MB in total are taken.
-- A shared link (a Gemini share link, an article): Gotenberg (container `gotenberg`, already running for
-  Paperless) prints the page to PDF with headless Chromium, then the PDF is filed like any upload.
+- A shared link (a Gemini share link, an article): Gotenberg (its own container `gotenberg-web`, at
+  GOTENBERG_URL, not Paperless's) prints the page to PDF with headless Chromium, then the PDF is filed like
+  any upload.
   Only public http(s) hosts: the address is resolved and private, loopback, link-local and Tailscale
   ranges are refused, so a share cannot make the server fetch the house's own services (SSRF).
 - Shared text with no link: wrapped in a minimal HTML page and printed to PDF the same way.
@@ -32,6 +33,9 @@ and still handles links and text.
 """
 from __future__ import annotations
 
+import themes  # T0942
+import hashlib
+import importlib  # T0942 step 3: icon module per theme
 import html
 import ipaddress
 import json
@@ -43,29 +47,47 @@ import tempfile
 import urllib.parse
 import zipfile
 
+import link_probe  # T0889 step 4: header-only look + IP-pinned download of direct file links
+import link_route  # T0889 step 2: YouTube links -> MeTube (off unless METUBE_URL is set)
+
 import httpx
 from fastapi import APIRouter, Header, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 router = APIRouter()
 
-GOTENBERG = "http://gotenberg-web:3000"  # its own renderer, not Paperless's (see gotenberg_web_patch.py)
+# its own renderer, not Paperless's (see gotenberg_web_patch.py); required (T0927 slice 2), app.py checks it
+GOTENBERG = os.environ.get("GOTENBERG_URL", "").rstrip("/")
+# Renderer for OUR OWN HTML (shared text, readable article pages): convert/html.
+# OUTCOME 2026-11-22 autopilot (T0889 step 5 live test): gotenberg-web answers 403 Forbidden to
+# /forms/chromium/convert/html, because its --chromium-allow-list is ^https?://.* and convert/html renders
+# file:///tmp/index.html. So shared TEXT (no link) has failed on gotenberg-web since it was split off.
+# Paperless's "gotenberg" (file:///tmp only, JavaScript off) is the right one for HTML we built ourselves.
+# Unset = GOTENBERG (old behaviour); set GOTENBERG_HTML_URL=http://gotenberg:3000 in compose at the swap.
+GOTENBERG_HTML = os.environ.get("GOTENBERG_HTML_URL", "").rstrip("/") or GOTENBERG
 ZIP_MAX_FILES = 200
 ZIP_MAX_MB = 2048
 URL_RE = re.compile(r"https?://\S+")
 
+# 2026-11-23: a theme with its own icons tags their addresses, so phones that cached the old picture fetch the new
+# one (Jason saw the old Novashare logo after the swap); atomic gets "" and its manifest stays byte-for-byte the same.
+# 2026-11-23 evening: a hash of the icon BYTES (was the module name, which stayed the same when the picture changed
+# to purple/black, so phones would have kept the cached icon). atomic: still "" (its manifest stays byte-identical).
+ICON_VER = (f"?v={hashlib.sha256(importlib.import_module(themes.current()['icon_module']).ICON_192).hexdigest()[:10]}"
+            if themes.current().get("icon_module") else "")
+
 MANIFEST = {
-    "name": "Atomic Share",
-    "short_name": "Atomic Share",
+    "name": themes.current()["name"],
+    "short_name": themes.current()["short_name"],
     "description": "Share files and links into the household library, Paperless and Kavita.",
     "start_url": "./",
     "scope": "./",
     "display": "standalone",
-    "background_color": "#0b1026",
-    "theme_color": "#0b1026",
-    "icons": [{"src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
-              {"src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"},
-              {"src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any"}],
+    "background_color": themes.current()["theme_color"],
+    "theme_color": themes.current()["theme_color"],
+    "icons": [{"src": "icon-192.png" + ICON_VER, "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
+              {"src": "icon-512.png" + ICON_VER, "sizes": "512x512", "type": "image/png", "purpose": "any maskable"},
+              {"src": "icon.svg" + ICON_VER, "sizes": "any", "type": "image/svg+xml", "purpose": "any"}],
     "share_target": {
         "action": "share",
         "method": "POST",
@@ -91,23 +113,25 @@ from atomic_ui import SW
 
 @router.get("/manifest.webmanifest")
 def manifest():
-    return Response(json.dumps(MANIFEST), media_type="application/manifest+json")
+    # no-cache (2026-11-23): the browser re-checks the manifest every time, so a new name or icon is seen at once
+    return Response(json.dumps(MANIFEST), media_type="application/manifest+json", headers={"Cache-Control": "no-cache"})
 
 
 @router.get("/icon.svg")
 def icon():
-    return Response(ICON, media_type="image/svg+xml")
+    mod = themes.current().get("icon_module")  # T0942 step 3
+    return Response(importlib.import_module(mod).ICON_SVG if mod else ICON, media_type="image/svg+xml")
 
 
 @router.get("/icon-192.png")
 def icon_192():
-    import icons_png
+    icons_png = importlib.import_module(themes.current().get("icon_module", "icons_png"))
     return Response(icons_png.ICON_192, media_type="image/png", headers={"Cache-Control": "public, max-age=86400"})
 
 
 @router.get("/icon-512.png")
 def icon_512():
-    import icons_png
+    icons_png = importlib.import_module(themes.current().get("icon_module", "icons_png"))
     return Response(icons_png.ICON_512, media_type="image/png", headers={"Cache-Control": "public, max-age=86400"})
 
 
@@ -187,7 +211,7 @@ async def _to_pdf(url: str | None, text: str | None, title: str) -> tuple[bytes,
         else:
             body = ("<!doctype html><meta charset=utf-8><title>{t}</title><h1>{t}</h1><pre style='white-space:"
                     "pre-wrap;font:14px/1.5 sans-serif'>{b}</pre>").format(t=html.escape(title), b=html.escape(text or ""))
-            r = await c.post(f"{GOTENBERG}/forms/chromium/convert/html",
+            r = await c.post(f"{GOTENBERG_HTML}/forms/chromium/convert/html",
                              files={"index.html": ("index.html", body.encode(), "text/html")})
     r.raise_for_status()
     return r.content, _slug(title, "shared") + ".pdf"
@@ -255,16 +279,136 @@ async def _unzip_and_file(path: pathlib.Path, email: str, tmp: pathlib.Path,
     return out
 
 
+_KIND = {"book": "a book", "comic": "a comic", "document": "paperwork", "recipe": "a recipe",
+         "workout": "a workout", "video": "a video"}
+
+
+def _plain(r: dict) -> str:
+    """One result in plain words: the same rules as Atomic.plain in atomic.js (review 11-23 #5)."""
+    k, p, dest, st = _KIND.get(r.get("kind"), "a file"), str(r.get("path") or ""), str(r.get("dest") or ""), r.get("status")
+    person = str(r.get("person") or "")
+    if st == "duplicate":
+        return "Already there: this exact file was sent before, so it was not saved twice."
+    if st == "kept":
+        return "Not filed, but kept safe on the server for Jason to sort."
+    if st == "skipped":
+        return "Skipped: " + str(r.get("why") or "too big to unpack")
+    if st == "refused":
+        return "Not saved: " + str(r.get("why") or "this kind of link cannot be read")
+    if st == "error":
+        return ("Not saved: " + str(r.get("why") or "something went wrong")).rstrip(".") + "."
+    if st == "filed":
+        if r.get("held"):
+            return f"Kept for you: {k}. You can read that library but not add to it, so Jason will file it."
+        if "/pending/" in dest or "/.pending/" in p:
+            return f"Kept for {person.capitalize() or 'you'}: {k} waits to be added to its app."
+        if not r.get("dest"):
+            return f"Saved, not sorted: {themes.current()['name']} could not tell what this is, so it waits for Jason."
+        if r.get("kind") == "video":
+            return "Filed: a video in the " + ("private" if "/private/" in p else "general") + " library."
+        if r.get("kind") == "document":
+            return "Filed: paperwork, sent to Paperless."
+        return f"Filed: {k}" + (f" on {person.capitalize()}'s shelf" if person else "") + "."
+    return str(r.get("why") or st or "done")
+
+
 def _page(results: list[dict]) -> str:
-    rows = "".join(
-        "<li><strong>{}</strong>: {} &rarr; {}<br><small>{}</small></li>".format(
-            html.escape(str(r.get("name", ""))), html.escape(str(r.get("status", ""))),
-            html.escape(str(r.get("kind", "") or "-")), html.escape(str(r.get("why", ""))[:300]))
-        for r in results) or "<li>Nothing was shared.</li>"
-    return ("<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'>"
-            "<title>Drop: done</title><style>body{font:16px/1.5 system-ui;margin:16px;max-width:640px}"
-            "li{margin:0 0 12px}small{color:#555}</style><h1>Shared</h1><ul>" + rows +
-            "</ul><p><a href='./'>Back to Drop</a></p>")
+    """The result page when the service worker did not take the share (review 11-23 #5: plain words, theme look).
+
+    Was: raw "book.pdf: filed -> book", no theme, no dark mode, titled "Drop: done"."""
+    t = themes.current()
+    bad = any(r.get("status") in ("error", "refused") for r in results)
+    rows = "".join("<li class='{}'><b>{}</b><small>{}</small></li>".format(
+        "err" if r.get("status") in ("error", "refused") else "ok", html.escape(str(r.get("name", ""))),
+        html.escape(_plain(r)[:300])) for r in results) or "<li><b>Nothing was shared.</b></li>"
+    name = html.escape(t["name"])
+    return ("<!doctype html><html lang=en><meta charset=utf-8>"
+            "<meta name=viewport content='width=device-width,initial-scale=1,viewport-fit=cover'>"
+            f"<meta name=theme-color content='{t['theme_color']}'><title>{'Needs a look' if bad else 'Shared'} · {name}</title>"
+            "<style>" + t["root"] + "*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);"
+            "font:16px/1.5 system-ui,sans-serif}main{max-width:560px;margin:0 auto;padding:24px 16px}"
+            "h1{font-size:1.35rem;margin:8px 0 16px}ul{list-style:none;padding:0;margin:0}"
+            "li{background:var(--card);border-radius:12px;padding:12px 14px;margin:0 0 10px}"
+            "li b{display:block;word-break:break-word}li small{color:var(--dim);display:block}"
+            "li.ok b::before{content:'\\2713  ';color:var(--ok)}li.err b::before{content:'\\2715  ';color:var(--bad)}"
+            "a.done{display:flex;justify-content:center;align-items:center;min-height:48px;margin-top:16px;"
+            "border-radius:10px;background:var(--cyan);color:var(--bg);font-weight:600;text-decoration:none}"
+            ":focus-visible{outline:3px solid var(--cyan);outline-offset:3px}</style>"
+            f"<main><h1>{'Something needs a look' if bad else 'Shared'}</h1><ul>" + rows +
+            "</ul><a class=done href='./'>Done</a></main>")
+
+
+READ_MAX_MB = 5    # an article page bigger than this is not read; Chromium prints it as before
+
+
+async def _readable(url: str, info: dict | None, tmp: pathlib.Path, details: list) -> tuple[str, bytes] | None:
+    """T0889 step 5: (page title, PDF bytes) of the page's readable text, or None to use the Chromium print.
+
+    Only for a probe that said text/html with status 200. The page is fetched once, IP-pinned
+    (link_probe.fetch), so the article text comes from the address that was checked; Gotenberg then
+    prints our own plain HTML (readable.page_html), never the site's page. Any failure here is not an
+    error for the person sharing: it is noted in details and the old print runs.
+    """
+    import readable
+    if not info or info.get("status") != 200 or info.get("content_type") not in ("text/html",
+                                                                                  "application/xhtml+xml"):
+        return None
+    p = _in_tmp(tmp, "page.html")
+    try:
+        await link_probe.fetch(info["url"], p, READ_MAX_MB * 1048576)
+        from starlette.concurrency import run_in_threadpool
+        title, body, n = await run_in_threadpool(readable.extract, p.read_bytes())
+    except (link_probe.Refused, link_probe.TooBig, OSError, ValueError) as e:
+        details.append({"name": url, "detail": f"readable: {type(e).__name__}: {e}"})
+        return None
+    finally:
+        p.unlink(missing_ok=True)
+    if n < readable.MIN_CHARS:
+        return None
+    title = title or urllib.parse.urlsplit(url).hostname or "page"
+    async with httpx.AsyncClient(timeout=120) as c:
+        r = await c.post(f"{GOTENBERG_HTML}/forms/chromium/convert/html",
+                         files={"index.html": ("index.html", readable.page_html(title, body, url).encode(),
+                                               "text/html")})
+    r.raise_for_status()                # httpx.HTTPError -> share()'s "could not be printed" row, as before
+    return title, r.content
+
+
+async def _direct_file(url: str, tmp: pathlib.Path, email: str,
+                       details: list) -> tuple[dict | None, dict | None]:
+    """T0889 step 4: if url is a direct file link (by its headers), download and file it.
+
+    Returns (row, probe info). row None means "not a file we take" (a web page, an unknown type, or the probe got no answer): the caller
+    then prints the page to PDF as before, so an unknown link is never dropped.
+    A link whose name (or a redirect hop) resolves to a PRIVATE address is refused here, even though
+    _public_url passed it: that is the DNS-rebinding case link_probe was built to catch (step 1 finding).
+    A failed download is an "error" row, so share()'s finally keeps the link in .failed with WHY.txt.
+    """
+    try:
+        info = await link_probe.probe(url)
+    except link_probe.Refused as e:
+        if "only public" in str(e):
+            return {"name": url, "status": "refused", "why": "only public http(s) links are fetched"}, None
+        details.append({"name": url, "detail": f"probe: {e}"})
+        return None, None                    # no answer to HEAD: let the PDF printer try, as before step 4
+    ext = link_route.file_kind(info)
+    if not ext or info.get("status") not in (200, 206):
+        return None, info
+    name = link_route.file_name(info, ext)
+    p = _in_tmp(tmp, "link-" + name)
+    try:
+        await link_probe.fetch(info["url"], p, link_route.LINK_MAX_MB * 1048576)
+    except link_probe.TooBig as e:
+        return {"name": url, "status": "refused",
+                "why": f"{e}; download it on the phone and share the file instead (big files resume there)"}, info
+    except link_probe.Refused as e:
+        details.append({"name": url, "detail": f"fetch: {e}"})
+        # the part file is gone, so leave the link itself: keep_failed keeps only folders with a file in them
+        _in_tmp(tmp, "link-failed.url.txt").write_text(url + "\n")
+        return {"name": url, "status": "error", "why": "The file could not be downloaded. Try again later."}, info
+    row = await _file(p, name, email, details=details)
+    row["name"] = f"{name} (from {urllib.parse.urlsplit(url).hostname})"
+    return row, info
 
 
 class _Skip(Exception):
@@ -289,12 +433,14 @@ async def share(request: Request, x_auth_email: str | None = Header(default=None
             # instead of PurePosixPath(...).name; A10's rule stays: "", "." and ".." are filed as "shared".
             raw = pathlib.PurePosixPath(f.filename).name
             name = safe_name("shared" if raw in ("", ".", "..") else raw)
-            p = _in_tmp(tmp, name)
+            sub = tmp / str(len(list(tmp.iterdir())))   # S1: one sub-folder per shared file (no name collisions)
+            sub.mkdir()
+            p = _in_tmp(sub, name)
             with p.open("wb") as out:
                 while chunk := await f.read(1 << 20):
                     out.write(chunk)
             if name.lower().endswith(".zip") and zipfile.is_zipfile(p) and not _is_comic_zip(p):
-                results += await _unzip_and_file(p, email, tmp, details)
+                results += await _unzip_and_file(p, email, sub, details)
             else:
                 results.append(await _file(p, name, email, details=details))
         if not files and (url or text):
@@ -303,10 +449,30 @@ async def share(request: Request, x_auth_email: str | None = Header(default=None
             if link and not safe:
                 results.append({"name": link, "status": "refused",
                                 "why": "only public http(s) links are fetched"})
+            elif safe and link_route.enabled() and link_route.youtube_kind(safe):
+                # T0889 step 2 (2026-11-22): YouTube / YT Music / Shorts -> MeTube as mp3 or mp4 instead of a
+                # PDF of the player page (that PDF was useless). Queued on MeTube and answered at once, so no
+                # download runs on this request. A failure is an "error" row, so the finally below keeps the
+                # link in .failed for Jason: never dropped. Off while METUBE_URL is unset (today's behaviour).
+                row = await link_route.send_to_metube(safe, link_route.pick_format(safe, f"{text} {title}"))
+                if "detail" in row:
+                    details.append({"name": link, "detail": row.pop("detail")})
+                results.append(row)
+            elif safe and (got := await _direct_file(safe, tmp, email, details))[0] is not None:
+                # T0889 step 4 (2026-11-22): a link straight to a PDF / Word file / photo is downloaded and
+                # filed like an upload (Paperless / photos via route_file), not printed. None = not a file.
+                results.append(got[0])
             else:
+                info = got[1] if safe else None
                 try:
-                    pdf, name = await _to_pdf(safe, None if safe else text,
-                                              title or (urllib.parse.urlsplit(safe).hostname if safe else "note"))
+                    # T0889 step 5 (2026-11-22): an article is printed as its readable text (readable.py);
+                    # None = too little text or not HTML -> Chromium prints the whole page, as before.
+                    art = await _readable(safe, info, tmp, details) if safe and not _is_gemini(safe) else None
+                    if art:
+                        title = title or art[0]
+                    pdf, name = (art[1], _slug(title or art[0], "page") + ".pdf") if art else await _to_pdf(
+                        safe, None if safe else text,
+                        title or (urllib.parse.urlsplit(safe).hostname if safe else "note"))
                     from starlette.concurrency import run_in_threadpool
                     flat = await run_in_threadpool(_pdf_text, pdf) if safe else ""  # pypdf is CPU work (A3)
                     if safe and any(w in flat for w in BOT_WALLS) and len(flat) < 4000:

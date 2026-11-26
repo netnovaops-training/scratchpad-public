@@ -158,12 +158,24 @@
       attempt(false).catch(function (e) { showFail(e); armConditional(); });
     });
 
+    // Arm conditional UI (the browser's own autofill-integrated passkey
+    // picker, via mediation: 'conditional' on navigator.credentials.get())
+    // immediately on page load, for EVERY visitor whose browser supports it
+    // -- not just first-time ones. This is what makes the prompt able to
+    // appear with no tap at all, the moment the page is ready, rather than
+    // waiting for the cinematic sequence below (which only runs once this
+    // device is already marked as having used a passkey here). Safe to run
+    // alongside that sequence: starting any new attempt always aborts
+    // whichever one was already in flight (see the `running` guard inside
+    // attempt()), so the two can never actually race each other.
+    armConditional();
+
     // Without a passkey on this device: the plain page. The orb still plays,
     // but nothing opens by itself; the prompt opens when they tap the orb (or
     // pick a passkey from the email box's autofill list).
     var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     var root = document.documentElement;
-    if (!hereGet()) { armConditional(); return; }
+    if (!hereGet()) { return; }
 
     // With one: a short sequence, then the prompt. The page fades in (CSS), the
     // orb video fades and grows in once its first frame is ready, a light sweeps
@@ -206,6 +218,8 @@
   // 2026-11-20: one shared check, applied right before every redirect below
   // (and to the video address), so text read from the page or a reply can
   // never send the browser to another site or run as a javascript: address.
+  // 2026-11-21 (T0965): ported from the Scratchpad copy onto the real source;
+  // the invite flow's redirect (added after the cloud fix) is wrapped too.
   function sameSitePath(n) {
     n = String(n || '/');
     // No backslashes or control characters: browsers read "/\evil.com"
@@ -364,6 +378,127 @@
     });
   }
 
+  // --------------------------------------------------------------- invite
+  // A guest invite: the admin console already made the account (label,
+  // pages, expiry) before this code existed -- this page's only job is to
+  // make the one passkey that account is allowed to hold, then sign the
+  // guest straight in, no separate sign-in step. Unlike the recovery form
+  // above (which only adds a passkey and sends the person to sign in by
+  // hand), this chains register -> login automatically, because a guest who
+  // just tapped a text-message link has no idea there is a second step.
+  function initInvite() {
+    var form = document.getElementById('pk-invite');
+    var msg = document.getElementById('pk-msg');
+    if (!form) { return; }
+    if (!supported) {
+      say(msg, 'This browser cannot make passkeys. Try another device.', true);
+      form.style.display = 'none';
+      return;
+    }
+    // Sign in with ONLY the passkey this page just made (2026-11-08). Before,
+    // allowCredentials was empty, so a phone holding an older passkey for this
+    // site (e.g. from a replaced invite) offered both; picking the old one was
+    // refused, and the page then said "nothing was created" -- so the guest
+    // pressed the now-used invite again. Now: the new key only; and if the
+    // automatic prompt fails, the invite form is hidden and a Sign in button
+    // (a fresh tap, which some phones require) takes its place.
+    function signInWith(rawId) {
+      say(msg, 'Signing you in...', false);
+      return post('passkey/login/start', {}).then(function (s2) {
+        if (!s2.ok) { throw { plain: s2.body.error || 'Could not start signing in.' }; }
+        var pk2 = s2.body.options.publicKey;
+        pk2.challenge = toBuf(pk2.challenge);
+        pk2.allowCredentials = [{ type: 'public-key', id: rawId }];
+        return navigator.credentials.get({ publicKey: pk2 }).then(function (cred2) {
+          if (!cred2) { throw { name: 'NotAllowedError' }; }
+          var r2 = cred2.response;
+          return post('passkey/login/finish', {
+            token: s2.body.token,
+            next: '/',
+            credential: {
+              id: cred2.id,
+              rawId: toB64u(cred2.rawId),
+              type: cred2.type,
+              extensions: cred2.getClientExtensionResults ? cred2.getClientExtensionResults() : {},
+              response: {
+                authenticatorData: toB64u(r2.authenticatorData),
+                clientDataJSON: toB64u(r2.clientDataJSON),
+                signature: toB64u(r2.signature),
+                userHandle: r2.userHandle ? toB64u(r2.userHandle) : null
+              }
+            }
+          });
+        });
+      }).then(function (f2) {
+        if (!f2.ok) { throw { plain: f2.body.error || 'Could not sign you in.' }; }
+        window.location.replace(sameSitePath(f2.body.next));
+      });
+    }
+    function offerSignIn(rawId, why) {
+      form.style.display = 'none';
+      say(msg, 'Your passkey is saved. ' + (why ? why + ' ' : '') +
+               'Tap Sign in below. Do not use the invite link again: it only works once.', false);
+      var btn = document.getElementById('pk-signin-now');
+      if (!btn) {
+        btn = document.createElement('button');
+        btn.id = 'pk-signin-now';
+        btn.type = 'button';
+        btn.className = 'btn main wide';
+        btn.textContent = 'Sign in';
+        msg.parentNode.insertBefore(btn, msg.nextSibling);
+        btn.addEventListener('click', function () {
+          signInWith(rawId).catch(function (e) {
+            offerSignIn(rawId, e && e.plain ? e.plain : (cancelled(e) ? 'That was cancelled.' : 'That did not work.'));
+          });
+        });
+      }
+    }
+    form.addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      var code = form.elements['code'].value;
+      var pkName = form.elements['pk_name'] ? form.elements['pk_name'].value.trim() : '';
+      var made = null;
+      say(msg, 'Follow the prompt on your device...', false);
+      post('passkey/invite/start', { code: code, name: pkName }).then(function (s) {
+        if (!s.ok) { throw { plain: s.body.error || 'Could not start that.' }; }
+        var pk = s.body.options.publicKey;
+        pk.challenge = toBuf(pk.challenge);
+        pk.user.id = toBuf(pk.user.id);
+        (pk.excludeCredentials || []).forEach(function (c) { c.id = toBuf(c.id); });
+        return navigator.credentials.create({ publicKey: pk }).then(function (cred) {
+          if (!cred) { throw { name: 'NotAllowedError' }; }
+          var r = cred.response;
+          made = cred.rawId;
+          return post('passkey/register/finish', {
+            token: s.body.token,
+            credential: {
+              id: cred.id,
+              rawId: toB64u(cred.rawId),
+              type: cred.type,
+              extensions: cred.getClientExtensionResults ? cred.getClientExtensionResults() : {},
+              response: {
+                attestationObject: toB64u(r.attestationObject),
+                clientDataJSON: toB64u(r.clientDataJSON)
+              }
+            }
+          });
+        });
+      }).then(function (f) {
+        if (!f.ok) { made = null; throw { plain: f.body.error || 'That passkey was not accepted.' }; }
+        hereSet();
+        form.style.display = 'none';
+        return signInWith(made).catch(function (e) {
+          offerSignIn(made, e && e.plain ? e.plain : '');
+        });
+      }).catch(function (e) {
+        if (made) { offerSignIn(made, ''); return; }
+        if (e && e.plain) { say(msg, e.plain, true); }
+        else if (cancelled(e)) { say(msg, 'Cancelled. Nothing was created.', false); }
+        else { say(msg, 'That did not work. Nothing was created.', true); }
+      });
+    });
+  }
+
   // ----------------------------------------------------------- owner tools
   // Every action is begun on the server, answered with the owner's OWN
   // passkey (fingerprint/face), then confirmed; a session cookie alone does
@@ -469,6 +604,7 @@
   if (document.getElementById('pk-btn')) { initSignin(); }
   if (document.getElementById('pk-offer')) { initOffer(); }
   if (document.getElementById('pk-owner')) { initOwner(); }
+  if (document.getElementById('pk-invite')) { initInvite(); }
   if (document.getElementById('pk-add') || document.getElementById('pk-recover') ||
       document.querySelector('[data-remove]') || document.getElementById('pk-only-on') ||
       document.getElementById('pk-only-off')) { initAccount(); }
