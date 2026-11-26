@@ -6,9 +6,9 @@
 
 This is a guide to the scripts in this repo: what each one does, how to run it, which machine it runs on, when it last changed, and whether it has its own write-up. Browse by chapter below, or open `catalog/index.html` for the magazine version with a search box.
 
-- **590 scripts** in 9 chapters
-- **322** on the PC, **219** on the NUC, **27** on the Pi, **22** on the NAS
-- **296** have their own doc, **294** have only their header
+- **594 scripts** in 9 chapters
+- **326** on the PC, **219** on the NUC, **27** on the Pi, **22** on the NAS
+- **296** have their own doc, **298** have only their header
 
 How to read an entry: the first line is the script's own header line (the same line as in TOOLS.md). *Run* is the usage line from the header; when the header has none it says so. Regenerate with `py -3.14 -I tools/make_catalog.py`.
 
@@ -19,10 +19,10 @@ How to read an entry: the first line is the script's own header line (the same l
 - [03 Hermes and AI](#03-hermes-and-ai): 47 scripts
 - [05 Documents and Paperless](#05-documents-and-paperless): 7 scripts
 - [06 Website Pages](#06-website-pages): 304 scripts
-- [07 Developer Tools](#07-developer-tools): 31 scripts
+- [07 Developer Tools](#07-developer-tools): 32 scripts
 - [08 PC Care](#08-pc-care): 31 scripts
 - [09 Operations and Backups](#09-operations-and-backups): 89 scripts
-- [10 Workshop](#10-workshop): 68 scripts
+- [10 Workshop](#10-workshop): 71 scripts
 
 ---
 
@@ -3236,6 +3236,14 @@ the scratchpad is the master copy of every script Jason runs his site with.
 - **Where:** PC · **File:** `tools/scratch.py`
 - **Last changed:** 2026-11-19 · **Documented:** no
 
+### `site_repo_build.py`
+
+build the one "homelab-site" repo from every machine's code (T0913, 2026-11-19).
+
+- **Run:** no usage line in the header
+- **Where:** PC · **File:** `tools/site_repo_build.py`
+- **Last changed:** 2026-11-24 · **Documented:** no
+
 ### `start-dev.ps1`
 
 start a work session: fresh pull, then VS Code, reachable from the phone (2026-11-19).
@@ -4740,6 +4748,30 @@ Tag the NAS photo library into a local SQLite DB with stag's model (RAM++) plus 
 
 - **Run:** no usage line in the header
 - **Where:** NAS · **File:** `tools/stag/stag_db.py`
+- **Last changed:** 2026-11-24 · **Documented:** no
+
+### `img_diff.py`
+
+T0917: list code files that differ between two images' work dirs (old running image vs candidate).
+
+- **Run:** `img_diff.py <old_image> <new_image> [path=/app]. Prints paths + counts, never file contents.`
+- **Where:** PC · **File:** `tools/t0917/img_diff.py`
+- **Last changed:** 2026-11-24 · **Documented:** no
+
+### `keep_list.py`
+
+T0917 step 3: one keep list for every :before-* image tag (NUC, PC, Pi). Deletes nothing.
+
+- **Run:** no usage line in the header
+- **Where:** PC · **File:** `tools/t0917/keep_list.py`
+- **Last changed:** 2026-11-24 · **Documented:** no
+
+### `pc_drift.py`
+
+T0917 step 2 (PC): does each running ai-stack/* container run the site-repo code?
+
+- **Run:** no usage line in the header
+- **Where:** PC · **File:** `tools/t0917/pc_drift.py`
 - **Last changed:** 2026-11-24 · **Documented:** no
 
 ### `t1014_spurts.py`

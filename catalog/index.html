@@ -62,10 +62,10 @@ footer{padding:28px 0 40px;color:var(--muted);font-size:.85rem;text-align:center
 <p>Every script in this repo, gathered into chapters like a magazine: what each one does, how to run it, which machine it runs on, when it last changed, and whether it has its own write-up.</p>
 <p>Start with the contents, or type in the search box: it filters by name, folder, machine or any word from the description. Each card's first line is the script's own header line.</p>
 </div><div class="stats">
-<div class="stat"><b>590</b><span>scripts</span></div>
+<div class="stat"><b>594</b><span>scripts</span></div>
 <div class="stat"><b>9</b><span>chapters</span></div>
 <div class="stat"><b>296</b><span>with their own doc</span></div>
-<div class="stat"><b>322</b><span>run on the PC</span></div>
+<div class="stat"><b>326</b><span>run on the PC</span></div>
 <div class="stat"><b>219</b><span>run on the NUC</span></div>
 <div class="stat"><b>27</b><span>run on the Pi</span></div>
 <div class="stat"><b>22</b><span>run on the NAS</span></div>
@@ -79,10 +79,10 @@ footer{padding:28px 0 40px;color:var(--muted);font-size:.85rem;text-align:center
 <li><a href="#ch03"><span class="n">3</span><span>Hermes and AI</span><span class="c">47</span></a></li>
 <li><a href="#ch05"><span class="n">5</span><span>Documents and Paperless</span><span class="c">7</span></a></li>
 <li><a href="#ch06"><span class="n">6</span><span>Website Pages</span><span class="c">304</span></a></li>
-<li><a href="#ch07"><span class="n">7</span><span>Developer Tools</span><span class="c">31</span></a></li>
+<li><a href="#ch07"><span class="n">7</span><span>Developer Tools</span><span class="c">32</span></a></li>
 <li><a href="#ch08"><span class="n">8</span><span>PC Care</span><span class="c">31</span></a></li>
 <li><a href="#ch09"><span class="n">9</span><span>Operations and Backups</span><span class="c">89</span></a></li>
-<li><a href="#ch10"><span class="n">10</span><span>Workshop</span><span class="c">68</span></a></li>
+<li><a href="#ch10"><span class="n">10</span><span>Workshop</span><span class="c">71</span></a></li>
 </ol></nav>
 <section class="ch" id="ch01"><div class="kicker">Chapter 1</div>
 <h2>Sign-in and People</h2>
@@ -2495,6 +2495,12 @@ footer{padding:28px 0 40px;color:var(--muted);font-size:.85rem;text-align:center
 <span class="tag">changed 2026-11-19</span>
 <span class="tag doc-no">no doc yet</span></div>
 <div class="path">tools/scratch.py</div></article>
+<article data-s="tools/site_repo_build.py build the one &quot;homelab-site&quot; repo from every machine&#x27;s code (t0913, 2026-11-19).  pc developer tools undocumented"><h3><code>site_repo_build.py</code></h3>
+<p>build the one &quot;homelab-site&quot; repo from every machine&#x27;s code (T0913, 2026-11-19).</p><span class="none">No usage line in the header.</span><div class="meta">
+<span class="tag m-PC">PC</span>
+<span class="tag">changed 2026-11-24</span>
+<span class="tag doc-no">no doc yet</span></div>
+<div class="path">tools/site_repo_build.py</div></article>
 <article data-s="tools/start-dev.ps1 start a work session: fresh pull, then vs code, reachable from the phone (2026-11-19). powershell -executionpolicy bypass -file [path] pc developer tools undocumented"><h3><code>start-dev.ps1</code></h3>
 <p>start a work session: fresh pull, then VS Code, reachable from the phone (2026-11-19).</p><code class="run">powershell -ExecutionPolicy Bypass -File [path]</code><div class="meta">
 <span class="tag m-PC">PC</span>
@@ -3626,6 +3632,24 @@ footer{padding:28px 0 40px;color:var(--muted);font-size:.85rem;text-align:center
 <span class="tag">changed 2026-11-24</span>
 <span class="tag doc-no">no doc yet</span></div>
 <div class="path">tools/stag/stag_db.py</div></article>
+<article data-s="tools/t0917/img_diff.py t0917: list code files that differ between two images&#x27; work dirs (old running image vs candidate). img_diff.py &lt;old_image&gt; &lt;new_image&gt; [path=/app]. prints paths + counts, never file contents. pc workshop undocumented"><h3><code>img_diff.py</code></h3>
+<p>T0917: list code files that differ between two images&#x27; work dirs (old running image vs candidate).</p><code class="run">img_diff.py &lt;old_image&gt; &lt;new_image&gt; [path=/app]. Prints paths + counts, never file contents.</code><div class="meta">
+<span class="tag m-PC">PC</span>
+<span class="tag">changed 2026-11-24</span>
+<span class="tag doc-no">no doc yet</span></div>
+<div class="path">tools/t0917/img_diff.py</div></article>
+<article data-s="tools/t0917/keep_list.py t0917 step 3: one keep list for every :before-* image tag (nuc, pc, pi). deletes nothing.  pc workshop undocumented"><h3><code>keep_list.py</code></h3>
+<p>T0917 step 3: one keep list for every :before-* image tag (NUC, PC, Pi). Deletes nothing.</p><span class="none">No usage line in the header.</span><div class="meta">
+<span class="tag m-PC">PC</span>
+<span class="tag">changed 2026-11-24</span>
+<span class="tag doc-no">no doc yet</span></div>
+<div class="path">tools/t0917/keep_list.py</div></article>
+<article data-s="tools/t0917/pc_drift.py t0917 step 2 (pc): does each running ai-stack/* container run the site-repo code?  pc workshop undocumented"><h3><code>pc_drift.py</code></h3>
+<p>T0917 step 2 (PC): does each running ai-stack/* container run the site-repo code?</p><span class="none">No usage line in the header.</span><div class="meta">
+<span class="tag m-PC">PC</span>
+<span class="tag">changed 2026-11-24</span>
+<span class="tag doc-no">no doc yet</span></div>
+<div class="path">tools/t0917/pc_drift.py</div></article>
 <article data-s="tools/t1014_spurts.py t1014 phase 2: run nas_move.py on the nas in 15-minute spurts until the list is done, and python [path] ops-2-hold.jsonl journal-2-hold.jsonl nas workshop undocumented"><h3><code>t1014_spurts.py</code></h3>
 <p>T1014 phase 2: run nas_move.py on the NAS in 15-minute spurts until the list is done, and</p><code class="run">python [path] ops-2-hold.jsonl journal-2-hold.jsonl</code><div class="meta">
 <span class="tag m-NAS">NAS</span>
